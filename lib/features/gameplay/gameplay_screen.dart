@@ -1,0 +1,781 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import 'package:arrow_drift/core/theme/app_theme.dart';
+import 'package:arrow_drift/data/models/arrow_model.dart';
+import 'package:arrow_drift/data/models/game_state.dart';
+import 'package:arrow_drift/data/models/level_model.dart';
+import 'package:arrow_drift/data/repositories/level_repository.dart';
+import 'package:arrow_drift/data/repositories/progress_repository.dart';
+import 'package:arrow_drift/features/daily_challenge/daily_challenge_screen.dart';
+import 'package:arrow_drift/features/gameplay/game_controller.dart';
+import 'package:arrow_drift/features/gameplay/widgets/game_board.dart';
+import 'package:arrow_drift/features/gameplay/widgets/level_completed_overlay.dart';
+import 'package:arrow_drift/features/gameplay/widgets/out_of_lives_overlay.dart';
+import 'package:arrow_drift/features/gameplay/widgets/pause_sheet.dart';
+import 'package:arrow_drift/features/gameplay/widgets/rate_game_dialog.dart';
+import 'package:arrow_drift/features/home/home_screen.dart';
+
+class GameplayScreen extends ConsumerStatefulWidget {
+  const GameplayScreen({
+    super.key,
+    this.levelNumber = 1,
+    this.isDaily = false,
+  });
+
+  static const String routePath = '/gameplay';
+
+  final int levelNumber;
+  final bool isDaily;
+
+  @override
+  ConsumerState<GameplayScreen> createState() => _GameplayScreenState();
+}
+
+class _GameplayScreenState extends ConsumerState<GameplayScreen>
+    with SingleTickerProviderStateMixin {
+  String? _highlightedArrowId;
+  final Map<String, int> _shakeTokens = {};
+  Timer? _hintTimer;
+
+  bool _hasSeenTutorial = true;
+  bool _tutorialPrefsLoaded = false;
+
+  bool _boardZoomed = false;
+
+  /// After Level 5: rate dialog once, then the usual Level Completed overlay.
+  bool _ratePromptDone = false;
+  bool _ratePromptChecked = false;
+
+  late final AnimationController _chromeController;
+  late final Animation<double> _chromeOpacity;
+
+  /// Fresh Level 1: guided UI + no heart loss until cleared once.
+  bool get _tutorialSessionActive =>
+      !widget.isDaily &&
+      widget.levelNumber == 1 &&
+      _tutorialPrefsLoaded &&
+      !_hasSeenTutorial;
+
+  @override
+  void initState() {
+    super.initState();
+    _chromeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+    );
+    _chromeOpacity = CurvedAnimation(
+      parent: _chromeController,
+      curve: Curves.easeOut,
+    );
+    _chromeController.forward();
+    _loadTutorialFlag();
+  }
+
+  Future<void> _loadTutorialFlag() async {
+    final repo = await ref.read(progressRepositoryProvider.future);
+    if (!mounted) return;
+    setState(() {
+      _hasSeenTutorial = repo.getHasSeenTutorial();
+      _tutorialPrefsLoaded = true;
+    });
+  }
+
+  Future<void> _markTutorialSeen() async {
+    if (_hasSeenTutorial) return;
+    setState(() => _hasSeenTutorial = true);
+    final repo = await ref.read(progressRepositoryProvider.future);
+    await repo.setHasSeenTutorial(true);
+    ref.invalidate(hasSeenTutorialProvider);
+  }
+
+  @override
+  void dispose() {
+    _hintTimer?.cancel();
+    _chromeController.dispose();
+    super.dispose();
+  }
+
+  LevelModel get _level {
+    if (widget.isDaily) {
+      return ref.read(dailyLevelProvider);
+    }
+    return ref.read(levelByNumberProvider(widget.levelNumber));
+  }
+
+  /// Always point at the current free arrow while tutorial is active.
+  String? _currentTutorialArrowId(GameState gameState) {
+    if (!_tutorialSessionActive || gameState.isWon) return null;
+    return findFreeArrow(gameState)?.id;
+  }
+
+  void _resetLocalPlayState() {
+    _highlightedArrowId = null;
+    _shakeTokens.clear();
+    _boardZoomed = false;
+  }
+
+  void _onArrowTap(String arrowId) {
+    final gameState = ref.read(gameControllerProvider(_level));
+    if (gameState.isLost || gameState.isWon) return;
+
+    final index = gameState.arrows.indexWhere((a) => a.id == arrowId);
+    if (index == -1) return;
+
+    final arrow = gameState.arrows[index];
+    final blocked = isArrowBlocked(
+      arrow: arrow,
+      arrows: gameState.arrows,
+      gridRows: gameState.level.gridRows,
+      gridCols: gameState.level.gridCols,
+      shapeMask: gameState.level.shapeMask,
+    );
+
+    // Tutorial: wrong taps shake/color only — never lose hearts.
+    if (blocked && _tutorialSessionActive) {
+      setState(() {
+        _shakeTokens[arrowId] = (_shakeTokens[arrowId] ?? 0) + 1;
+      });
+      return;
+    }
+
+    final controller = ref.read(gameControllerProvider(_level).notifier);
+    final result = controller.tapArrow(arrowId);
+
+    if (result == TapArrowResult.wrongTap) {
+      setState(() {
+        _shakeTokens[arrowId] = (_shakeTokens[arrowId] ?? 0) + 1;
+      });
+    }
+  }
+
+  void _onHint() {
+    final gameState = ref.read(gameControllerProvider(_level));
+    if (gameState.isLost || gameState.isWon) return;
+    if (gameState.hintsLeft <= 0) return;
+
+    final controller = ref.read(gameControllerProvider(_level).notifier);
+    final id = controller.useHint();
+    if (id == null) return;
+
+    _hintTimer?.cancel();
+    setState(() => _highlightedArrowId = id);
+    _hintTimer = Timer(const Duration(milliseconds: 2000), () {
+      if (!mounted) return;
+      setState(() => _highlightedArrowId = null);
+    });
+  }
+
+  void _onGridBooster() {
+    // Toggle board zoom (visibility aid only — no count / cooldown).
+    setState(() => _boardZoomed = !_boardZoomed);
+  }
+
+  void _openPauseSheet() {
+    final colors = context.appColors;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        return PauseSheet(
+          onResume: () => Navigator.of(sheetContext).pop(),
+          onRestart: () {
+            Navigator.of(sheetContext).pop();
+            ref.read(gameControllerProvider(_level).notifier).resetLevel();
+            setState(_resetLocalPlayState);
+          },
+          onQuit: () {
+            Navigator.of(sheetContext).pop();
+            context.go(HomeScreen.routePath);
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _onNextGame() async {
+    final repo = await ref.read(progressRepositoryProvider.future);
+    final levelCount = ref.read(levelRepositoryProvider).levelCount;
+
+    if (widget.isDaily) {
+      await repo.markDailyCompleted(DateTime.now());
+      ref.invalidate(monthlyDailyStarsProvider);
+      ref.invalidate(completedDailyDatesProvider);
+      ref.invalidate(currentStreakProvider);
+      if (!mounted) return;
+      context.go(DailyChallengeScreen.routePath);
+      return;
+    }
+
+    if (widget.levelNumber == 1) {
+      await _markTutorialSeen();
+    }
+
+    await repo.saveProgress(_level.levelNumber);
+    ref.invalidate(currentLevelProvider);
+    ref.invalidate(lastCompletedLevelProvider);
+
+    if (!mounted) return;
+
+    final nextNumber = _level.levelNumber + 1;
+    if (nextNumber > levelCount) {
+      context.go(HomeScreen.routePath);
+      return;
+    }
+    context.pushReplacement('${GameplayScreen.routePath}?level=$nextNumber');
+  }
+
+  void _onMainFromComplete() {
+    if (widget.levelNumber == 1 && !_hasSeenTutorial) {
+      _markTutorialSeen();
+    }
+    // Persist progress when leaving via Main after a win.
+    ref.read(progressRepositoryProvider.future).then((repo) async {
+      if (!widget.isDaily) {
+        await repo.saveProgress(_level.levelNumber);
+        ref.invalidate(currentLevelProvider);
+        ref.invalidate(lastCompletedLevelProvider);
+      }
+      if (!mounted) return;
+      context.go(HomeScreen.routePath);
+    });
+  }
+
+  /// TODO: WIRE TO ADMOB REWARDED AD
+  void _grantExtraLife() {
+    ref.read(gameControllerProvider(_level).notifier).grantExtraLife();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final level = widget.isDaily
+        ? ref.watch(dailyLevelProvider)
+        : ref.watch(levelByNumberProvider(widget.levelNumber));
+    final gameState = ref.watch(gameControllerProvider(level));
+    final colors = context.appColors;
+    final remainingArrows =
+        gameState.arrows.where((arrow) => !arrow.isRemoved).length;
+    final tutorialArrowId = _currentTutorialArrowId(gameState);
+    final levelCount = ref.watch(levelRepositoryProvider).levelCount;
+    final isCampaignComplete =
+        !widget.isDaily && level.levelNumber >= levelCount;
+    final inTutorial = _tutorialSessionActive && !gameState.isWon;
+    final isNestedPlain = !widget.isDaily &&
+        level.levelNumber >= 2 &&
+        level.levelNumber <= 6 &&
+        !inTutorial;
+
+    if (!_ratePromptChecked &&
+        !widget.isDaily &&
+        widget.levelNumber == 5) {
+      _ratePromptChecked = true;
+      ref.read(progressRepositoryProvider.future).then((repo) {
+        if (!mounted) return;
+        if (repo.getHasShownRatePrompt()) {
+          setState(() => _ratePromptDone = true);
+        }
+      });
+    }
+
+    if (gameState.isWon &&
+        widget.levelNumber == 1 &&
+        !widget.isDaily &&
+        !_hasSeenTutorial) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _markTutorialSeen();
+      });
+    }
+
+    final showRatePrompt = gameState.isWon &&
+        !widget.isDaily &&
+        level.levelNumber == 5 &&
+        !_ratePromptDone;
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Nested/tutorial: white board plane in light, #0A101A in dark.
+    final plainPlane = isDark ? colors.background : Colors.white;
+    final scaffoldBg = (inTutorial || isNestedPlain)
+        ? plainPlane
+        : colors.background;
+
+    return Scaffold(
+      backgroundColor: scaffoldBg,
+      body: Stack(
+        children: [
+          if (inTutorial || isNestedPlain)
+            Positioned.fill(
+              child: ColoredBox(color: plainPlane),
+            ),
+          SafeArea(
+            child: Column(
+              children: [
+                FadeTransition(
+                  opacity: _chromeOpacity,
+                  child: _TopRow(
+                    title: widget.isDaily
+                        ? 'Daily'
+                        : 'Level ${level.levelNumber}',
+                    onBack: () => context.go(HomeScreen.routePath),
+                    onSettings: inTutorial ? null : _openPauseSheet,
+                    minimal: inTutorial,
+                  ),
+                ),
+                if (!inTutorial) ...[
+                  const SizedBox(height: 10),
+                  FadeTransition(
+                    opacity: _chromeOpacity,
+                    child: _StatsRow(
+                      remainingArrows: remainingArrows,
+                      heartsLeft: gameState.heartsLeft,
+                      heartsAllowed: level.heartsAllowed,
+                      difficulty: level.difficulty,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ] else
+                  const Spacer(flex: 2),
+                Expanded(
+                  flex: inTutorial ? 3 : 1,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: GameBoard(
+                      gameState: gameState,
+                      highlightedArrowId: _highlightedArrowId,
+                      tutorialArrowId: tutorialArrowId,
+                      showTutorialTip: tutorialArrowId != null,
+                      plainTutorial: inTutorial,
+                      plainBoard: isNestedPlain,
+                      playEntrance: true,
+                      boardZoomed: _boardZoomed,
+                      shakeTokens: Map<String, int>.from(_shakeTokens),
+                      onArrowTap: _onArrowTap,
+                    ),
+                  ),
+                ),
+                if (inTutorial) const Spacer(flex: 2),
+                if (!inTutorial)
+                  _BottomActions(
+                    hintsLeft: gameState.hintsLeft,
+                    onHint: _onHint,
+                    onGridBooster: _onGridBooster,
+                  ),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+          if (gameState.isLost)
+            OutOfLivesOverlay(
+              onGetMoreLives: _grantExtraLife,
+              onRestart: () {
+                ref.read(gameControllerProvider(level).notifier).resetLevel();
+                setState(_resetLocalPlayState);
+              },
+            ),
+          if (showRatePrompt)
+            RateGameDialog(
+              onDismiss: _finishRatePrompt,
+              onLowStars: _finishRatePrompt,
+              onFiveStars: _finishRatePrompt,
+            )
+          else if (gameState.isWon)
+            LevelCompletedOverlay(
+              completedLevel: level.levelNumber,
+              nextLevelNumber: level.levelNumber + 1,
+              previewArrows: List<ArrowModel>.from(level.arrows),
+              gridRows: level.gridRows,
+              gridCols: level.gridCols,
+              isCampaignComplete: isCampaignComplete,
+              onNextGame: _onNextGame,
+              onMain: _onMainFromComplete,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _finishRatePrompt() async {
+    final repo = await ref.read(progressRepositoryProvider.future);
+    await repo.setHasShownRatePrompt(true);
+    if (!mounted) return;
+    setState(() => _ratePromptDone = true);
+  }
+}
+
+class _TopRow extends StatelessWidget {
+  const _TopRow({
+    required this.title,
+    required this.onBack,
+    required this.onSettings,
+    this.minimal = false,
+  });
+
+  final String title;
+  final VoidCallback onBack;
+  final VoidCallback? onSettings;
+  final bool minimal;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+
+    if (minimal) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(8, 16, 8, 0),
+        child: SizedBox(
+          height: 44,
+          child: Center(
+            child: Text(
+              title,
+              textAlign: TextAlign.center,
+              style: AppTextStyles.body(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: colors.primaryText,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: onBack,
+            icon: Icon(
+              Icons.chevron_left_rounded,
+              size: 32,
+              color: colors.primaryText,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              title,
+              textAlign: TextAlign.center,
+              style: AppTextStyles.heading(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: colors.primaryText,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: onSettings,
+            icon: Icon(
+              Icons.settings_rounded,
+              size: 24,
+              color: colors.primaryText,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatsRow extends StatefulWidget {
+  const _StatsRow({
+    required this.remainingArrows,
+    required this.heartsLeft,
+    required this.heartsAllowed,
+    required this.difficulty,
+  });
+
+  final int remainingArrows;
+  final int heartsLeft;
+  final int heartsAllowed;
+  final LevelDifficulty difficulty;
+
+  @override
+  State<_StatsRow> createState() => _StatsRowState();
+}
+
+class _StatsRowState extends State<_StatsRow>
+    with SingleTickerProviderStateMixin {
+  late int _prevHearts;
+  int? _pulseIndex;
+  late final AnimationController _pulseController;
+  late final Animation<double> _pulseScale;
+
+  @override
+  void initState() {
+    super.initState();
+    _prevHearts = widget.heartsLeft;
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
+    _pulseScale = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.28), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: 1.28, end: 1.0), weight: 1),
+    ]).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeOut),
+    );
+    _pulseController.addStatusListener((status) {
+      if (status == AnimationStatus.completed && mounted) {
+        setState(() => _pulseIndex = null);
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _StatsRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.heartsLeft < _prevHearts) {
+      // Rightmost heart that just emptied (0-based fill from left).
+      setState(() => _pulseIndex = widget.heartsLeft);
+      _pulseController.forward(from: 0);
+    }
+    _prevHearts = widget.heartsLeft;
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final totalHearts = widget.heartsAllowed.clamp(1, 5);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          _Pill(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.near_me_rounded,
+                  size: 16,
+                  color: colors.accentTealDeep,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '${widget.remainingArrows}',
+                  style: AppTextStyles.label(
+                    fontSize: 13,
+                    color: colors.primaryText,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Spacer(),
+          AnimatedBuilder(
+            animation: _pulseController,
+            builder: (context, _) {
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: List.generate(totalHearts, (index) {
+                  final filled = index < widget.heartsLeft;
+                  final pulsing = _pulseIndex == index;
+                  final icon = Icon(
+                    Icons.favorite_rounded,
+                    size: 22,
+                    color: filled
+                        ? colors.heartRed
+                        : colors.border.withValues(alpha: 0.85),
+                  );
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: pulsing
+                        ? Transform.scale(
+                            scale: _pulseScale.value,
+                            child: icon,
+                          )
+                        : icon,
+                  );
+                }),
+              );
+            },
+          ),
+          const Spacer(),
+          _Pill(
+            child: Text(
+              widget.difficulty.label,
+              style: AppTextStyles.label(
+                fontSize: 12,
+                color: colors.accentTealDeep,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Pill extends StatelessWidget {
+  const _Pill({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: colors.border, width: 0.5),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _BottomActions extends StatefulWidget {
+  const _BottomActions({
+    required this.hintsLeft,
+    required this.onHint,
+    required this.onGridBooster,
+  });
+
+  final int hintsLeft;
+  final VoidCallback onHint;
+  final VoidCallback onGridBooster;
+
+  @override
+  State<_BottomActions> createState() => _BottomActionsState();
+}
+
+class _BottomActionsState extends State<_BottomActions>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _hintShakeController;
+  late final Animation<double> _hintShake;
+
+  @override
+  void initState() {
+    super.initState();
+    _hintShakeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 280),
+    );
+    _hintShake = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 0, end: -5), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: -5, end: 5), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: 5, end: -4), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: -4, end: 0), weight: 1),
+    ]).animate(
+      CurvedAnimation(parent: _hintShakeController, curve: Curves.linear),
+    );
+  }
+
+  @override
+  void dispose() {
+    _hintShakeController.dispose();
+    super.dispose();
+  }
+
+  void _onHintTap() {
+    if (widget.hintsLeft > 0) {
+      widget.onHint();
+      return;
+    }
+    _hintShakeController.forward(from: 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final hintsEmpty = widget.hintsLeft <= 0;
+    final dimIcon = colors.border.withValues(alpha: 0.85);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+      child: Row(
+        children: [
+          AnimatedBuilder(
+            animation: _hintShakeController,
+            builder: (context, child) {
+              return Transform.translate(
+                offset: Offset(_hintShake.value, 0),
+                child: child,
+              );
+            },
+            child: _ActionFab(
+              onTap: _onHintTap,
+              child: Badge(
+                isLabelVisible: true,
+                backgroundColor: hintsEmpty
+                    ? colors.border.withValues(alpha: 0.7)
+                    : colors.accentTealDeep,
+                label: Text(
+                  '${widget.hintsLeft}',
+                  style: AppTextStyles.label(
+                    fontSize: 10,
+                    color: hintsEmpty
+                        ? colors.secondaryText
+                        : Colors.white,
+                  ),
+                ),
+                child: Icon(
+                  Icons.lightbulb_outline_rounded,
+                  color: hintsEmpty ? dimIcon : colors.primaryText,
+                ),
+              ),
+            ),
+          ),
+          const Spacer(),
+          _ActionFab(
+            onTap: widget.onGridBooster,
+            child: Icon(
+              Icons.tag_rounded,
+              color: colors.primaryText,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionFab extends StatelessWidget {
+  const _ActionFab({
+    required this.child,
+    required this.onTap,
+  });
+
+  final Widget child;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+
+    return Material(
+      color: colors.surface,
+      shape: const CircleBorder(),
+      elevation: 1,
+      shadowColor: Colors.black12,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: Container(
+          width: 56,
+          height: 56,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: colors.border, width: 0.5),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}

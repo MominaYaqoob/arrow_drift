@@ -1,0 +1,364 @@
+import 'package:flutter/material.dart';
+
+import 'package:arrow_drift/core/theme/app_theme.dart';
+import 'package:arrow_drift/data/models/arrow_model.dart';
+import 'package:arrow_drift/data/models/game_state.dart';
+import 'package:arrow_drift/features/gameplay/widgets/arrow_tile.dart';
+
+/// Zoomable board with cream card / plain white, dotted grid, and arrows.
+class GameBoard extends StatelessWidget {
+  const GameBoard({
+    super.key,
+    required this.gameState,
+    required this.onArrowTap,
+    this.highlightedArrowId,
+    this.tutorialArrowId,
+    this.showTutorialTip = false,
+    this.plainTutorial = false,
+    this.plainBoard = false,
+    this.playEntrance = false,
+    this.boardZoomed = false,
+    this.shakeTokens = const {},
+    this.cellSize = 52,
+  });
+
+  final GameState gameState;
+  final ValueChanged<String> onArrowTap;
+  final String? highlightedArrowId;
+  final String? tutorialArrowId;
+  final bool showTutorialTip;
+
+  /// Level-1 tutorial look: plain white, no cream card / dots (matches reference SS).
+  final bool plainTutorial;
+
+  /// Level-2 reference look: plain white board, no cream card / dots.
+  final bool plainBoard;
+
+  /// Staggered fade+scale entrance for each arrow.
+  final bool playEntrance;
+
+  /// Grid Booster: moderate zoom-in (1.3x) when true.
+  final bool boardZoomed;
+
+  final Map<String, int> shakeTokens;
+  final double cellSize;
+
+  bool get _plain => plainTutorial || plainBoard;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final rows = gameState.level.gridRows;
+    final cols = gameState.level.gridCols;
+    final effectiveCell = plainTutorial
+        ? 108.0
+        : plainBoard
+            ? 54.0
+            : cellSize;
+    final boardWidth = cols * effectiveCell;
+    final boardHeight = rows * effectiveCell;
+
+    ArrowModel? tipArrow;
+    if (showTutorialTip && tutorialArrowId != null) {
+      for (final a in gameState.arrows) {
+        if (a.id == tutorialArrowId && !a.isRemoved) {
+          tipArrow = a;
+          break;
+        }
+      }
+    }
+
+    // Dots stay behind; escaping arrows slide along tip axis (teal) past the
+    // grid edge — no hard clip so the exit line is visible like the reference.
+    final arrowsLayer = SizedBox(
+      width: boardWidth,
+      height: boardHeight,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          if (!plainTutorial)
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _DotGridPainter(
+                  rows: rows,
+                  cols: cols,
+                  color: isDark
+                      ? colors.border
+                      : const Color(0xFFB8B0A0),
+                  shapeMask: gameState.level.shapeMask,
+                ),
+              ),
+            ),
+          for (var i = 0; i < gameState.arrows.length; i++)
+            Positioned(
+              left: 0,
+              top: 0,
+              width: boardWidth,
+              height: boardHeight,
+              child: ArrowTile(
+                key: ValueKey(gameState.arrows[i].id),
+                arrow: gameState.arrows[i],
+                cellSize: effectiveCell,
+                allArrows: gameState.arrows,
+                gridRows: rows,
+                gridCols: cols,
+                highlighted: highlightedArrowId == gameState.arrows[i].id ||
+                    tutorialArrowId == gameState.arrows[i].id,
+                tutorialHand: tutorialArrowId == gameState.arrows[i].id,
+                shakeToken: shakeTokens[gameState.arrows[i].id] ?? 0,
+                entranceIndex: i,
+                playEntrance: playEntrance,
+                onTap: () => onArrowTap(gameState.arrows[i].id),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    final boardStack = SizedBox(
+      width: boardWidth,
+      // Extra height in tutorial so tip bubble below the tile isn't clipped.
+      height: plainTutorial ? boardHeight + 90 : boardHeight,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          arrowsLayer,
+          if (tipArrow != null)
+            _TutorialTipBubble(
+              arrow: tipArrow,
+              cellSize: effectiveCell,
+              boardWidth: boardWidth,
+              boardHeight: boardHeight,
+            ),
+        ],
+      ),
+    );
+
+    final zoomedBoard = AnimatedScale(
+      scale: boardZoomed ? 1.3 : 1.0,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+      child: boardStack,
+    );
+
+    if (_plain) {
+      return Center(child: zoomedBoard);
+    }
+
+    // Card padding: 14 + ~8 = 22 so arrows aren't cramped at the edges.
+    const cardPad = 22.0;
+    return InteractiveViewer(
+      minScale: 0.7,
+      maxScale: 2.5,
+      boundaryMargin: const EdgeInsets.all(160),
+      clipBehavior: Clip.none,
+      child: Center(
+        child: AnimatedScale(
+          scale: boardZoomed ? 1.3 : 1.0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+          child: Container(
+            width: boardWidth + cardPad * 2,
+            height: boardHeight + cardPad * 2,
+            padding: const EdgeInsets.all(cardPad),
+            decoration: BoxDecoration(
+              // Light #FFFFFF · Dark #141C2A
+              color: colors.surface,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                // Light #D8D0C2 · Dark #2A3648
+                color: colors.border,
+                width: 0.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.10),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            clipBehavior: Clip.hardEdge,
+            child: boardStack,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Tap free arrow" bubble — always clear of the target arrow's cell.
+class _TutorialTipBubble extends StatelessWidget {
+  const _TutorialTipBubble({
+    required this.arrow,
+    required this.cellSize,
+    required this.boardWidth,
+    required this.boardHeight,
+  });
+
+  final ArrowModel arrow;
+  final double cellSize;
+  final double boardWidth;
+  final double boardHeight;
+
+  static const double _tipWidth = 130;
+  static const double _tipBodyHeight = 38;
+  static const double _caretHeight = 8;
+  static const double _gap = 14;
+  static const Color _tipTeal = AppColors.accentTeal;
+
+  @override
+  Widget build(BuildContext context) {
+    final totalHeight = _caretHeight + _tipBodyHeight;
+    final cellBottom = (arrow.row + 1) * cellSize;
+    final cellTop = arrow.row * cellSize;
+
+    final spaceBelow = boardHeight - cellBottom;
+    final placeBelow =
+        spaceBelow >= totalHeight + _gap || arrow.row <= 1;
+
+    var top = placeBelow
+        ? cellBottom + _gap
+        : cellTop - _gap - totalHeight;
+    top = top.clamp(0.0, (boardHeight - totalHeight).clamp(0.0, double.infinity));
+
+    var left = arrow.col * cellSize + cellSize / 2 - _tipWidth / 2;
+    left = left.clamp(0.0, (boardWidth - _tipWidth).clamp(0.0, double.infinity));
+
+    return Positioned(
+      left: left,
+      top: top,
+      width: _tipWidth,
+      child: IgnorePointer(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (placeBelow)
+              CustomPaint(
+                size: const Size(12, _caretHeight),
+                painter: _CaretPainter(color: _tipTeal, pointUp: true),
+              ),
+            Container(
+              width: _tipWidth,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: _tipTeal,
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(
+                    color: _tipTeal.withValues(alpha: 0.28),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Text(
+                'Tap free arrow',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.body(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+            if (!placeBelow)
+              CustomPaint(
+                size: const Size(12, _caretHeight),
+                painter: _CaretPainter(color: _tipTeal, pointUp: false),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CaretPainter extends CustomPainter {
+  _CaretPainter({required this.color, required this.pointUp});
+
+  final Color color;
+  final bool pointUp;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = pointUp
+        ? (Path()
+          ..moveTo(0, size.height)
+          ..lineTo(size.width / 2, 0)
+          ..lineTo(size.width, size.height)
+          ..close())
+        : (Path()
+          ..moveTo(0, 0)
+          ..lineTo(size.width / 2, size.height)
+          ..lineTo(size.width, 0)
+          ..close());
+    canvas.drawPath(path, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(covariant _CaretPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.pointUp != pointUp;
+}
+
+class _DotGridPainter extends CustomPainter {
+  _DotGridPainter({
+    required this.rows,
+    required this.cols,
+    required this.color,
+    this.shapeMask,
+  });
+
+  final int rows;
+  final int cols;
+  final Color color;
+  final List<List<bool>>? shapeMask;
+
+  bool _cellInMask(int r, int c) {
+    if (shapeMask == null) return true;
+    if (r < 0 || c < 0 || r >= shapeMask!.length || c >= shapeMask![r].length) {
+      return false;
+    }
+    return shapeMask![r][c];
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (rows <= 0 || cols <= 0 || size.isEmpty) return;
+
+    final paint = Paint()..color = color.withValues(alpha: 0.55);
+    const radius = 1.6;
+    final cellW = size.width / cols;
+    final cellH = size.height / rows;
+
+    if (shapeMask == null) {
+      for (var r = 0; r <= rows; r++) {
+        for (var c = 0; c <= cols; c++) {
+          canvas.drawCircle(Offset(c * cellW, r * cellH), radius, paint);
+        }
+      }
+      return;
+    }
+
+    // Only corners that touch at least one in-mask cell (heart silhouette).
+    for (var r = 0; r <= rows; r++) {
+      for (var c = 0; c <= cols; c++) {
+        final touch = _cellInMask(r - 1, c - 1) ||
+            _cellInMask(r - 1, c) ||
+            _cellInMask(r, c - 1) ||
+            _cellInMask(r, c);
+        if (!touch) continue;
+        canvas.drawCircle(Offset(c * cellW, r * cellH), radius, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DotGridPainter oldDelegate) {
+    return oldDelegate.rows != rows ||
+        oldDelegate.cols != cols ||
+        oldDelegate.color != color ||
+        oldDelegate.shapeMask != shapeMask;
+  }
+}

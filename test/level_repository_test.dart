@@ -1,0 +1,192 @@
+import 'package:flutter_test/flutter_test.dart';
+
+import 'package:arrow_drift/data/models/arrow_model.dart';
+import 'package:arrow_drift/data/models/level_model.dart';
+import 'package:arrow_drift/data/repositories/level_repository.dart';
+import 'package:arrow_drift/data/repositories/shape_masks.dart';
+import 'package:arrow_drift/features/gameplay/game_controller.dart';
+
+void main() {
+  group('generateSolvableLevel', () {
+    final configs = <({
+      int levelNumber,
+      int gridSize,
+      int arrowCount,
+      int hearts,
+      int hints,
+      LevelDifficulty difficulty,
+    })>[
+      (
+        levelNumber: 3,
+        gridSize: 5,
+        arrowCount: 9,
+        hearts: 3,
+        hints: 2,
+        difficulty: LevelDifficulty.medium,
+      ),
+      (
+        levelNumber: 4,
+        gridSize: 6,
+        arrowCount: 13,
+        hearts: 3,
+        hints: 2,
+        difficulty: LevelDifficulty.medium,
+      ),
+      (
+        levelNumber: 5,
+        gridSize: 6,
+        arrowCount: 16,
+        hearts: 3,
+        hints: 1,
+        difficulty: LevelDifficulty.hard,
+      ),
+    ];
+
+    test('every generated level is solvable in reverse placement order', () {
+      for (final config in configs) {
+        final result = generateSolvableLevel(
+          config.levelNumber,
+          config.gridSize,
+          config.arrowCount,
+          config.hearts,
+          config.hints,
+          difficulty: config.difficulty,
+        );
+
+        expect(result.level.arrows, hasLength(config.arrowCount));
+        final arrows = cloneArrows(result.level.arrows);
+
+        for (final id in result.placementOrder.reversed) {
+          final arrow = arrows.firstWhere((item) => item.id == id);
+          expect(
+            isArrowFree(
+              arrow: arrow,
+              arrows: arrows,
+              gridRows: result.level.gridRows,
+              gridCols: result.level.gridCols,
+            ),
+            isTrue,
+            reason: 'Level ${config.levelNumber}: arrow $id blocked',
+          );
+          final index = arrows.indexWhere((item) => item.id == id);
+          arrows[index] = arrows[index].copyWith(isRemoved: true);
+        }
+      }
+    });
+    test('Level 6 heart mask generation is solvable', () {
+      final result = generateSolvableLevel(
+        6,
+        12,
+        40,
+        3,
+        1,
+        difficulty: LevelDifficulty.hard,
+        seed: 6 * 7919 + 12 * 97 + 40,
+        shapeMask: generateHeartShapeMask(12),
+      );
+      expect(result.level.arrows, hasLength(40));
+      expect(result.level.shapeMask, isNotNull);
+
+      final arrows = cloneArrows(result.level.arrows);
+      for (final id in result.placementOrder.reversed) {
+        final arrow = arrows.firstWhere((item) => item.id == id);
+        expect(
+          isArrowFree(
+            arrow: arrow,
+            arrows: arrows,
+            gridRows: 12,
+            gridCols: 12,
+            shapeMask: result.level.shapeMask,
+          ),
+          isTrue,
+          reason: 'Level 6 arrow $id blocked',
+        );
+        final index = arrows.indexWhere((item) => item.id == id);
+        arrows[index] = arrows[index].copyWith(isRemoved: true);
+      }
+    });
+  });
+
+  group('LevelRepository', () {
+    test('exposes exactly 6 solvable campaign levels with expected params', () {
+      final repo = LevelRepository();
+      expect(repo.levels, hasLength(6));
+
+      // Level 1 tutorial
+      expect(repo.levels[0].arrows, hasLength(3));
+      expect(repo.levels[0].gridRows, 3);
+
+      final l1 = repo.levels.first.arrows;
+      final byCol = {for (final a in l1) a.col: a};
+      expect(byCol[0]!.direction, ArrowDirection.up);
+      expect(byCol[1]!.direction, ArrowDirection.up);
+      expect(byCol[2]!.direction, ArrowDirection.down);
+
+      // Level 2 nested paths
+      expect(repo.levels[1].arrows, hasLength(6));
+      expect(repo.levels[1].gridRows, 6);
+      expect(repo.levels[1].heartsAllowed, 3);
+      expect(repo.levels[1].difficulty.label, 'Normal');
+
+      // Level 3 nested paths (like Level 2, denser / different directions)
+      final l3 = repo.levels[2];
+      expect(l3.gridRows, 6);
+      expect(l3.arrows, hasLength(8));
+      expect(l3.heartsAllowed, 3);
+      expect(l3.hintsAllowed, 2);
+      expect(l3.difficulty.label, 'Normal');
+      expect(l3.arrows.every((a) => a.isMultiCell), isTrue);
+
+      // Level 4 nested paths (dense L2-style)
+      final l4 = repo.levels[3];
+      expect(l4.gridRows, 7);
+      expect(l4.arrows, hasLength(10));
+      expect(l4.heartsAllowed, 3);
+      expect(l4.hintsAllowed, 2);
+      expect(l4.difficulty.label, 'Normal');
+                      expect(l4.arrows.every((a) => a.path.length >= 2), isTrue);
+
+      // Level 5 nested dense maze
+      final l5 = repo.levels[4];
+      expect(l5.gridRows, 8);
+      expect(l5.arrows, hasLength(11));
+      expect(l5.heartsAllowed, 3);
+      expect(l5.hintsAllowed, 1);
+      expect(l5.difficulty.label, 'Normal');
+      expect(l5.arrows.every((a) => a.path.isNotEmpty), isTrue);
+
+      // Level 6 heart silhouette (shaped generation)
+      final l6 = repo.levels[5];
+      expect(l6.gridRows, 12);
+      expect(l6.gridCols, 12);
+      expect(l6.arrows, hasLength(40));
+      expect(l6.heartsAllowed, 3);
+      expect(l6.hintsAllowed, 1);
+      expect(l6.difficulty.label, 'Hard');
+      expect(l6.shapeMask, isNotNull);
+      expect(l6.arrows.every((a) => a.path.isNotEmpty), isTrue);
+
+      // All campaign levels solvable via placement reverse order.
+      for (final level in repo.levels) {
+        final order = repo.placementOrderFor(level.levelNumber);
+        final arrows = cloneArrows(level.arrows);
+        for (final id in order.reversed) {
+          final arrow = arrows.firstWhere((item) => item.id == id);
+          expect(
+            isArrowFree(
+              arrow: arrow,
+              arrows: arrows,
+              gridRows: level.gridRows,
+              gridCols: level.gridCols,
+              shapeMask: level.shapeMask,
+            ),
+            isTrue,
+            reason: 'Campaign level ${level.levelNumber}: $id blocked',
+          );
+          final index = arrows.indexWhere((item) => item.id == id);
+          arrows[index] = arrows[index].copyWith(isRemoved: true);
+        }
+      }
+    });
+  });
+}
