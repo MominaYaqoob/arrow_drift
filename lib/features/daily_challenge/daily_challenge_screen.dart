@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,7 +7,7 @@ import 'package:arrow_drift/data/repositories/progress_repository.dart';
 import 'package:arrow_drift/features/gameplay/gameplay_screen.dart';
 import 'package:arrow_drift/features/home/home_screen.dart';
 
-/// Daily Challenges hub — teal header, calendar, Play → seeded daily level.
+/// Daily Challenges hub — HTML board layout (UI only; same daily play route).
 class DailyChallengeScreen extends ConsumerWidget {
   const DailyChallengeScreen({super.key});
 
@@ -21,103 +19,96 @@ class DailyChallengeScreen extends ConsumerWidget {
     final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
     final stars = ref.watch(monthlyDailyStarsProvider).valueOrNull ?? 0;
     final completed = ref.watch(completedDailyDatesProvider).valueOrNull ?? {};
-    final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: colors.background,
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _DailyHeader(
-                    onBack: () => context.go(HomeScreen.routePath),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(22, 22, 22, 8),
-                    child: Row(
-                      children: [
-                        Text(
-                          _monthLabel(now),
-                          style: AppTextStyles.heading(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            color: colors.primaryText,
-                          ),
-                        ),
-                        const Spacer(),
-                        const _StarBadge(),
-                        const SizedBox(width: 8),
-                        Text(
-                          '$stars/$daysInMonth',
-                          style: AppTextStyles.body(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: colors.primaryText,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: _MonthCalendar(
-                      year: now.year,
-                      month: now.month,
-                      today: now.day,
-                      completedKeys: completed,
-                      onDayTap: (day) {
-                        if (day != now.day) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("Only today's challenge is available"),
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
-                        }
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(22, 0, 22, 28),
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: FilledButton(
-                        onPressed: () => context.push(
-                          '${GameplayScreen.routePath}?daily=1',
-                        ),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.accentTeal,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: const StadiumBorder(),
-                        ),
-                        child: Text(
-                          'Play',
-                          style: AppTextStyles.button(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
+      body: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: isDark
+                ? const [
+                    Color(0xFF0A3F38),
+                    Color(0xFF0A3F38),
+                    Color(0xFF121A26),
+                    Color(0xFF0A101A),
+                  ]
+                : const [
+                    Color(0xFF0B5E52),
+                    Color(0xFF0B5E52),
+                    Color(0xFFEAF6F2),
+                    Color(0xFFF6F3EC),
+                  ],
+            stops: const [0.0, 0.22, 0.22, 1.0],
+          ),
+        ),
+        child: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _DailyHero(
+                        onBack: () => context.go(HomeScreen.routePath),
+                      ),
+                      Transform.translate(
+                        offset: const Offset(0, -28),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: _CalendarCard(
+                            year: now.year,
+                            month: now.month,
+                            today: now.day,
+                            stars: stars,
+                            daysInMonth: daysInMonth,
+                            completedKeys: completed,
+                            onDayTap: (day) {
+                              if (day != now.day) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      "Only today's challenge is available",
+                                    ),
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
+                              }
+                            },
                           ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Column(
+                  children: [
+                    _DailyTip(stars: stars, daysInMonth: daysInMonth),
+                    const SizedBox(height: 10),
+                    _PlayTodayButton(
+                      dateLabel: _shortDate(now),
+                      onPressed: () => context.push(
+                        '${GameplayScreen.routePath}?daily=1',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
-  String _monthLabel(DateTime date) {
+  String _shortDate(DateTime date) {
     const months = [
       'January',
       'February',
@@ -132,108 +123,84 @@ class DailyChallengeScreen extends ConsumerWidget {
       'November',
       'December',
     ];
-    return '${months[date.month - 1]} ${date.year}';
+    return '${months[date.month - 1]} ${date.day}';
   }
 }
 
-class _DailyHeader extends StatelessWidget {
-  const _DailyHeader({required this.onBack});
+class _DailyHero extends StatelessWidget {
+  const _DailyHero({required this.onBack});
 
   final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
-    final top = MediaQuery.paddingOf(context).top;
-    final height = MediaQuery.sizeOf(context).height * 0.30;
-
-    return SizedBox(
-      height: height + top,
+    return Container(
       width: double.infinity,
-      child: Stack(
-        clipBehavior: Clip.none,
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 48),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment(-0.4, -1),
+          end: Alignment(0.6, 1),
+          colors: [Color(0xFF14A089), Color(0xFF0B5E52), Color(0xFF08463D)],
+        ),
+      ),
+      child: Column(
         children: [
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: const BoxDecoration(
-                gradient: RadialGradient(
-                  center: Alignment(0, -0.15),
-                  radius: 1.05,
-                  colors: [
-                    Color(0xFF7EEFD8),
-                    Color(0xFF2EC4A6),
-                    Color(0xFF0F8F7A),
-                    Color(0xFF0A6B5C),
-                  ],
-                  stops: [0.0, 0.35, 0.7, 1.0],
-                ),
-              ),
-            ),
-          ),
-          const Positioned.fill(child: CustomPaint(painter: _BokehPainter())),
-          Positioned(
-            top: top + 4,
-            left: 4,
-            right: 4,
-            child: SizedBox(
-              height: 48,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: IconButton(
-                      onPressed: onBack,
-                      icon: const Icon(
-                        Icons.chevron_left_rounded,
-                        color: Colors.white,
-                        size: 34,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    'Daily Challenges',
-                    style: AppTextStyles.heading(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
+          SizedBox(
+            height: 44,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: IconButton(
+                    onPressed: onBack,
+                    icon: const Icon(
+                      Icons.chevron_left_rounded,
                       color: Colors.white,
+                      size: 32,
                     ),
                   ),
-                ],
-              ),
+                ),
+                Text(
+                  'Daily Challenges',
+                  style: AppTextStyles.body(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
             ),
           ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 18,
-            child: Center(
-              child: SizedBox(
-                width: 110,
-                height: 110,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(
-                          colors: [
-                            Colors.white.withValues(alpha: 0.45),
-                            Colors.white.withValues(alpha: 0.08),
-                            Colors.transparent,
-                          ],
-                        ),
-                      ),
-                    ),
-                    const CustomPaint(
-                      size: Size(88, 96),
-                      painter: _TrophyPainter(),
-                    ),
-                  ],
+          Text(
+            'Collect stars · unlock monthly trophy',
+            style: AppTextStyles.label(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: Colors.white.withValues(alpha: 0.8),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withValues(alpha: 0.12),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.12),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8),
                 ),
-              ),
+              ],
+            ),
+            child: const Icon(
+              Icons.emoji_events_rounded,
+              size: 36,
+              color: Color(0xFFE0B13A),
             ),
           ),
         ],
@@ -242,32 +209,13 @@ class _DailyHeader extends StatelessWidget {
   }
 }
 
-class _StarBadge extends StatelessWidget {
-  const _StarBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 26,
-      height: 26,
-      decoration: const BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFFFD56A), Color(0xFFE0B13A)],
-        ),
-      ),
-      child: const Icon(Icons.star_rounded, size: 16, color: Colors.white),
-    );
-  }
-}
-
-class _MonthCalendar extends StatelessWidget {
-  const _MonthCalendar({
+class _CalendarCard extends StatelessWidget {
+  const _CalendarCard({
     required this.year,
     required this.month,
     required this.today,
+    required this.stars,
+    required this.daysInMonth,
     required this.completedKeys,
     required this.onDayTap,
   });
@@ -275,251 +223,315 @@ class _MonthCalendar extends StatelessWidget {
   final int year;
   final int month;
   final int today;
+  final int stars;
+  final int daysInMonth;
   final Set<String> completedKeys;
   final ValueChanged<int> onDayTap;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final first = DateTime(year, month, 1);
-    final daysInMonth = DateTime(year, month + 1, 0).day;
-    final startOffset = first.weekday % 7; // Sunday-first
+    final startOffset = first.weekday % 7;
     final itemCount = startOffset + daysInMonth;
     final rowCount = (itemCount / 7).ceil();
     const weekdays = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
 
-    return Column(
-      children: [
-        Row(
+    return Material(
+      color: isDark ? colors.surface : Colors.white,
+      elevation: 0,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: colors.border),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.1),
+              blurRadius: 28,
+              offset: const Offset(0, 14),
+            ),
+          ],
+        ),
+        child: Column(
           children: [
-            for (final label in weekdays)
-              Expanded(
-                child: Center(
+            Row(
+              children: [
+                Text(
+                  '${months[month - 1]} $year',
+                  style: AppTextStyles.body(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: colors.primaryText,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? AppColors.lightGold.withValues(alpha: 0.12)
+                        : const Color(0xFFFFF6D9),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: isDark
+                          ? AppColors.lightGold.withValues(alpha: 0.28)
+                          : const Color(0xFFF0E0A8),
+                    ),
+                  ),
                   child: Text(
-                    label,
+                    '★ $stars/$daysInMonth',
                     style: AppTextStyles.label(
                       fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: colors.secondaryText,
+                      fontWeight: FontWeight.w700,
+                      color: isDark
+                          ? AppColors.lightGold
+                          : const Color(0xFFB8860B),
                     ),
                   ),
                 ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: rowCount * 7,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 7,
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 4,
-            childAspectRatio: 0.78,
-          ),
-          itemBuilder: (context, index) {
-            if (index < startOffset || index >= startOffset + daysInMonth) {
-              return const SizedBox.shrink();
-            }
-            final day = index - startOffset + 1;
-            final key =
-                '$year-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
-            final filled = completedKeys.contains(key);
-            final isToday = day == today;
-
-            return GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => onDayTap(day),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 34,
-                    height: 34,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isToday ? AppColors.accentTeal : Colors.transparent,
-                    ),
-                    child: Text(
-                      '$day',
-                      style: AppTextStyles.label(
-                        fontSize: 14,
-                        fontWeight: isToday ? FontWeight.w700 : FontWeight.w500,
-                        color: isToday ? Colors.white : colors.secondaryText,
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                for (final label in weekdays)
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        label,
+                        style: AppTextStyles.label(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: colors.secondaryText,
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  if (filled)
-                    const Icon(
-                      Icons.star_rounded,
-                      size: 11,
-                      color: AppColors.lightGold,
-                    )
-                  else
-                    Container(
-                      width: 5,
-                      height: 5,
+              ],
+            ),
+            const SizedBox(height: 8),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: rowCount * 7,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 7,
+                mainAxisSpacing: 4,
+                crossAxisSpacing: 4,
+              ),
+              itemBuilder: (context, index) {
+                if (index < startOffset ||
+                    index >= startOffset + daysInMonth) {
+                  return const SizedBox.shrink();
+                }
+                final day = index - startOffset + 1;
+                final key =
+                    '$year-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
+                final filled = completedKeys.contains(key);
+                final isToday = day == today;
+
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => onDayTap(day),
+                  child: Center(
+                    child: Container(
+                      width: 34,
+                      height: 34,
+                      alignment: Alignment.center,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: colors.border,
+                        color: isToday
+                            ? AppColors.accentTealDeep
+                            : Colors.transparent,
+                        boxShadow: isToday
+                            ? [
+                                BoxShadow(
+                                  color: AppColors.accentTealDeep
+                                      .withValues(alpha: 0.3),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: Text(
+                        '$day',
+                        style: AppTextStyles.label(
+                          fontSize: 13,
+                          fontWeight:
+                              isToday ? FontWeight.w700 : FontWeight.w500,
+                          color: isToday
+                              ? Colors.white
+                              : filled
+                                  ? AppColors.lightGold
+                                  : colors.secondaryText,
+                        ),
                       ),
                     ),
-                ],
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DailyTip extends StatelessWidget {
+  const _DailyTip({required this.stars, required this.daysInMonth});
+
+  final int stars;
+  final int daysInMonth;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+      decoration: BoxDecoration(
+        color: isDark ? colors.surface : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colors.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Today's puzzle is ready",
+                  style: AppTextStyles.body(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: colors.primaryText,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Clear the board to earn 1 star',
+                  style: AppTextStyles.body(
+                    fontSize: 12,
+                    color: colors.secondaryText,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFFFFF6D9), Color(0xFFF8E7A8)],
               ),
-            );
-          },
-        ),
-      ],
-    );
-  }
-}
-
-class _BokehPainter extends CustomPainter {
-  const _BokehPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rng = math.Random(42);
-    for (var i = 0; i < 18; i++) {
-      final r = 6.0 + rng.nextDouble() * 22;
-      final cx = rng.nextDouble() * size.width;
-      final cy = rng.nextDouble() * size.height;
-      canvas.drawCircle(
-        Offset(cx, cy),
-        r,
-        Paint()..color = Colors.white.withValues(alpha: 0.07 + rng.nextDouble() * 0.1),
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-/// Metallic cup trophy (navy / silver) matching the reference silhouette.
-class _TrophyPainter extends CustomPainter {
-  const _TrophyPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-    final cx = w / 2;
-
-    final cup = Path()
-      ..moveTo(w * 0.22, h * 0.12)
-      ..quadraticBezierTo(w * 0.18, h * 0.38, w * 0.30, h * 0.48)
-      ..lineTo(w * 0.70, h * 0.48)
-      ..quadraticBezierTo(w * 0.82, h * 0.38, w * 0.78, h * 0.12)
-      ..close();
-
-    final cupPaint = Paint()
-      ..shader = const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          Color(0xFF5A6B82),
-          Color(0xFF1A2740),
-          Color(0xFF0E1726),
-          Color(0xFF3D4F66),
+              border: Border.all(color: const Color(0xFFF0E0A8)),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('★', style: TextStyle(fontSize: 14, color: Color(0xFFB8860B))),
+                Text(
+                  '$stars/$daysInMonth',
+                  style: AppTextStyles.label(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFFB8860B),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
-        stops: [0.0, 0.35, 0.7, 1.0],
-      ).createShader(Rect.fromLTWH(0, 0, w, h));
-    canvas.drawPath(cup, cupPaint);
-
-    // Handles
-    final handlePaint = Paint()
-      ..color = const Color(0xFF1A2740)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 5
-      ..strokeCap = StrokeCap.round;
-    canvas.drawArc(
-      Rect.fromCenter(
-        center: Offset(w * 0.18, h * 0.28),
-        width: w * 0.28,
-        height: h * 0.32,
       ),
-      math.pi * 0.15,
-      math.pi * 0.9,
-      false,
-      handlePaint,
-    );
-    canvas.drawArc(
-      Rect.fromCenter(
-        center: Offset(w * 0.82, h * 0.28),
-        width: w * 0.28,
-        height: h * 0.32,
-      ),
-      -math.pi * 0.05,
-      -math.pi * 0.9,
-      false,
-      handlePaint,
-    );
-
-    // Rim highlight
-    canvas.drawLine(
-      Offset(w * 0.24, h * 0.14),
-      Offset(w * 0.76, h * 0.14),
-      Paint()
-        ..color = Colors.white.withValues(alpha: 0.35)
-        ..strokeWidth = 2.5
-        ..strokeCap = StrokeCap.round,
-    );
-
-    // Stem + ring
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromCenter(
-          center: Offset(cx, h * 0.56),
-          width: w * 0.22,
-          height: h * 0.06,
-        ),
-        const Radius.circular(4),
-      ),
-      Paint()..color = const Color(0xFF2A3A52),
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromCenter(
-          center: Offset(cx, h * 0.68),
-          width: w * 0.12,
-          height: h * 0.16,
-        ),
-        const Radius.circular(3),
-      ),
-      Paint()..color = const Color(0xFF1A2740),
-    );
-
-    // Base
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromCenter(
-          center: Offset(cx, h * 0.86),
-          width: w * 0.48,
-          height: h * 0.1,
-        ),
-        const Radius.circular(6),
-      ),
-      Paint()
-        ..shader = const LinearGradient(
-          colors: [Color(0xFF3D4F66), Color(0xFF1A2740)],
-        ).createShader(Rect.fromLTWH(0, h * 0.8, w, h * 0.15)),
-    );
-
-    // Soft ground shadow
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: Offset(cx, h * 0.96),
-        width: w * 0.55,
-        height: h * 0.06,
-      ),
-      Paint()..color = Colors.black.withValues(alpha: 0.18),
     );
   }
+}
+
+class _PlayTodayButton extends StatelessWidget {
+  const _PlayTodayButton({
+    required this.dateLabel,
+    required this.onPressed,
+  });
+
+  final String dateLabel;
+  final VoidCallback onPressed;
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 56,
+      child: Material(
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(16),
+          child: Ink(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [AppColors.accentTeal, AppColors.accentTealDeep],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.accentTealDeep.withValues(alpha: 0.28),
+                  blurRadius: 22,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'Play Today',
+                  style: AppTextStyles.button(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+                Text(
+                  '$dateLabel · Daily Challenge',
+                  style: AppTextStyles.label(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white.withValues(alpha: 0.88),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

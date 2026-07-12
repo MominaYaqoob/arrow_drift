@@ -21,11 +21,13 @@ class _AwardsScreenState extends ConsumerState<AwardsScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? const Color(0xFF0E141C) : const Color(0xFFF1EDE4);
 
     return Scaffold(
-      backgroundColor: colors.background,
+      backgroundColor: bg,
       appBar: AppBar(
-        backgroundColor: colors.background,
+        backgroundColor: bg,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         leading: IconButton(
@@ -38,8 +40,8 @@ class _AwardsScreenState extends ConsumerState<AwardsScreen> {
         ),
         title: Text(
           'Awards',
-          style: AppTextStyles.heading(
-            fontSize: 20,
+          style: AppTextStyles.body(
+            fontSize: 17,
             fontWeight: FontWeight.w700,
             color: colors.primaryText,
           ),

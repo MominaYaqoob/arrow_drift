@@ -5,7 +5,7 @@ enum LevelDifficulty { easy, medium, hard, expert }
 extension LevelDifficultyLabel on LevelDifficulty {
   String get label => switch (this) {
         LevelDifficulty.easy => 'Easy',
-        LevelDifficulty.medium => 'Normal',
+        LevelDifficulty.medium => 'Medium',
         LevelDifficulty.hard => 'Hard',
         LevelDifficulty.expert => 'Expert',
       };

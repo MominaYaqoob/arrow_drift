@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:arrow_drift/core/theme/app_theme.dart';
+import 'package:arrow_drift/data/repositories/progress_repository.dart';
 import 'package:arrow_drift/features/about/about_screen.dart';
 import 'package:arrow_drift/features/about/help_center_screen.dart';
 import 'package:arrow_drift/features/about/privacy_policy_screen.dart';
@@ -18,24 +19,33 @@ class MeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // HTML list page: warm paper / near-black navy
+    final bg = isDark ? const Color(0xFF0E141C) : const Color(0xFFF1EDE4);
+    final nicknameAsync = ref.watch(playerNicknameProvider);
+    final title = nicknameAsync.when(
+      data: (name) => name.isEmpty ? 'Me' : name,
+      loading: () => 'Me',
+      error: (_, _) => 'Me',
+    );
 
     return Scaffold(
-      backgroundColor: colors.background,
+      backgroundColor: bg,
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
           children: [
             Center(
               child: Text(
-                'Me',
-                style: AppTextStyles.heading(
-                  fontSize: 22,
+                title,
+                style: AppTextStyles.body(
+                  fontSize: 18,
                   fontWeight: FontWeight.w700,
                   color: colors.primaryText,
                 ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
             _MeCard(
               children: [
                 _MeRow(
@@ -129,9 +139,19 @@ class _MeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
-    return Material(
-      color: colors.surface,
-      borderRadius: BorderRadius.circular(14),
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       clipBehavior: Clip.antiAlias,
       child: Column(children: children),
     );

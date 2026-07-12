@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -39,6 +40,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     with SingleTickerProviderStateMixin {
   String? _highlightedArrowId;
   final Map<String, int> _shakeTokens = {};
+  final Map<String, double> _wrongBumpCells = {};
   Timer? _hintTimer;
 
   bool _hasSeenTutorial = true;
@@ -46,7 +48,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
 
   bool _boardZoomed = false;
 
-  /// After Level 5: rate dialog once, then the usual Level Completed overlay.
+  /// After Level 5 and Level 10: rate dialog once each, then Level Completed.
   bool _ratePromptDone = false;
   bool _ratePromptChecked = false;
 
@@ -115,7 +117,29 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
   void _resetLocalPlayState() {
     _highlightedArrowId = null;
     _shakeTokens.clear();
+    _wrongBumpCells.clear();
     _boardZoomed = false;
+  }
+
+  void _triggerWrongTapFeedback(ArrowModel arrow, GameState gameState) {
+    final hit = findFirstBlockingArrow(
+      arrow: arrow,
+      arrows: gameState.arrows,
+      gridRows: gameState.level.gridRows,
+      gridCols: gameState.level.gridCols,
+      shapeMask: gameState.level.shapeMask,
+    );
+    setState(() {
+      _shakeTokens[arrow.id] = (_shakeTokens[arrow.id] ?? 0) + 1;
+      // Leave a small gap so tip visually "touches" rather than overlapping.
+      _wrongBumpCells[arrow.id] =
+          hit == null ? 0.55 : math.max(0.35, hit.steps - 0.35);
+      if (hit != null) {
+        _shakeTokens[hit.blocker.id] =
+            (_shakeTokens[hit.blocker.id] ?? 0) + 1;
+        _wrongBumpCells.remove(hit.blocker.id);
+      }
+    });
   }
 
   void _onArrowTap(String arrowId) {
@@ -134,11 +158,9 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
       shapeMask: gameState.level.shapeMask,
     );
 
-    // Tutorial: wrong taps shake/color only — never lose hearts.
+    // Tutorial: wrong taps visual only — never lose hearts.
     if (blocked && _tutorialSessionActive) {
-      setState(() {
-        _shakeTokens[arrowId] = (_shakeTokens[arrowId] ?? 0) + 1;
-      });
+      _triggerWrongTapFeedback(arrow, gameState);
       return;
     }
 
@@ -146,9 +168,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     final result = controller.tapArrow(arrowId);
 
     if (result == TapArrowResult.wrongTap) {
-      setState(() {
-        _shakeTokens[arrowId] = (_shakeTokens[arrowId] ?? 0) + 1;
-      });
+      _triggerWrongTapFeedback(arrow, gameState);
     }
   }
 
@@ -268,16 +288,16 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     final inTutorial = _tutorialSessionActive && !gameState.isWon;
     final isNestedPlain = !widget.isDaily &&
         level.levelNumber >= 2 &&
-        level.levelNumber <= 6 &&
+        level.levelNumber <= 11 &&
         !inTutorial;
 
     if (!_ratePromptChecked &&
         !widget.isDaily &&
-        widget.levelNumber == 5) {
+        (widget.levelNumber == 5 || widget.levelNumber == 10)) {
       _ratePromptChecked = true;
       ref.read(progressRepositoryProvider.future).then((repo) {
         if (!mounted) return;
-        if (repo.getHasShownRatePrompt()) {
+        if (repo.hasShownRatePromptForLevel(widget.levelNumber)) {
           setState(() => _ratePromptDone = true);
         }
       });
@@ -294,7 +314,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
 
     final showRatePrompt = gameState.isWon &&
         !widget.isDaily &&
-        level.levelNumber == 5 &&
+        (level.levelNumber == 5 || level.levelNumber == 10) &&
         !_ratePromptDone;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -354,6 +374,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
                       playEntrance: true,
                       boardZoomed: _boardZoomed,
                       shakeTokens: Map<String, int>.from(_shakeTokens),
+                      wrongBumpCells: Map<String, double>.from(_wrongBumpCells),
                       onArrowTap: _onArrowTap,
                     ),
                   ),
@@ -390,6 +411,8 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
               previewArrows: List<ArrowModel>.from(level.arrows),
               gridRows: level.gridRows,
               gridCols: level.gridCols,
+              heartsLeft: gameState.heartsLeft,
+              heartsAllowed: level.heartsAllowed,
               isCampaignComplete: isCampaignComplete,
               onNextGame: _onNextGame,
               onMain: _onMainFromComplete,
@@ -401,7 +424,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
 
   Future<void> _finishRatePrompt() async {
     final repo = await ref.read(progressRepositoryProvider.future);
-    await repo.setHasShownRatePrompt(true);
+    await repo.setHasShownRatePromptForLevel(widget.levelNumber);
     if (!mounted) return;
     setState(() => _ratePromptDone = true);
   }
@@ -556,16 +579,13 @@ class _StatsRowState extends State<_StatsRow>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  Icons.near_me_rounded,
-                  size: 16,
-                  color: colors.accentTealDeep,
-                ),
+                const Text('🚀', style: TextStyle(fontSize: 14)),
                 const SizedBox(width: 6),
                 Text(
                   '${widget.remainingArrows}',
                   style: AppTextStyles.label(
                     fontSize: 13,
+                    fontWeight: FontWeight.w700,
                     color: colors.primaryText,
                   ),
                 ),
@@ -607,7 +627,8 @@ class _StatsRowState extends State<_StatsRow>
               widget.difficulty.label,
               style: AppTextStyles.label(
                 fontSize: 12,
-                color: colors.accentTealDeep,
+                fontWeight: FontWeight.w700,
+                color: colors.primaryText,
               ),
             ),
           ),
@@ -734,7 +755,7 @@ class _BottomActionsState extends State<_BottomActions>
           _ActionFab(
             onTap: widget.onGridBooster,
             child: Icon(
-              Icons.tag_rounded,
+              Icons.grid_view_rounded,
               color: colors.primaryText,
             ),
           ),

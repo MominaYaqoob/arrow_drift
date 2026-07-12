@@ -13,21 +13,28 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? const Color(0xFF0E141C) : const Color(0xFFF1EDE4);
     final settingsAsync = ref.watch(settingsProvider);
 
     return Scaffold(
-      backgroundColor: colors.background,
+      backgroundColor: bg,
       appBar: AppBar(
-        backgroundColor: colors.background,
+        backgroundColor: bg,
         elevation: 0,
+        surfaceTintColor: Colors.transparent,
         leading: IconButton(
           onPressed: () => context.pop(),
-          icon: Icon(Icons.chevron_left_rounded, color: colors.primaryText),
+          icon: Icon(
+            Icons.chevron_left_rounded,
+            color: colors.primaryText,
+            size: 32,
+          ),
         ),
         title: Text(
           'Settings',
-          style: AppTextStyles.heading(
-            fontSize: 20,
+          style: AppTextStyles.body(
+            fontSize: 17,
             fontWeight: FontWeight.w700,
             color: colors.primaryText,
           ),
@@ -39,27 +46,41 @@ class SettingsScreen extends ConsumerWidget {
         data: (settings) {
           final notifier = ref.read(settingsProvider.notifier);
           return ListView(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
             children: [
-              _ToggleRow(
-                label: 'Sounds',
-                value: settings.sounds,
-                onChanged: notifier.setSounds,
-              ),
-              _ToggleRow(
-                label: 'Vibration',
-                value: settings.vibration,
-                onChanged: notifier.setVibration,
-              ),
-              _ToggleRow(
-                label: 'Dark Theme',
-                value: settings.darkTheme,
-                onChanged: notifier.setDarkTheme,
-              ),
-              _ToggleRow(
-                label: 'Auto-Lock',
-                value: settings.autoLock,
-                onChanged: notifier.setAutoLock,
+              Container(
+                decoration: BoxDecoration(
+                  color: colors.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: colors.border),
+                ),
+                child: Column(
+                  children: [
+                    _ToggleRow(
+                      label: 'Sounds',
+                      value: settings.sounds,
+                      onChanged: notifier.setSounds,
+                      showDivider: true,
+                    ),
+                    _ToggleRow(
+                      label: 'Vibration',
+                      value: settings.vibration,
+                      onChanged: notifier.setVibration,
+                      showDivider: true,
+                    ),
+                    _ToggleRow(
+                      label: 'Dark Theme',
+                      value: settings.darkTheme,
+                      onChanged: notifier.setDarkTheme,
+                      showDivider: true,
+                    ),
+                    _ToggleRow(
+                      label: 'Auto-Lock',
+                      value: settings.autoLock,
+                      onChanged: notifier.setAutoLock,
+                    ),
+                  ],
+                ),
               ),
             ],
           );
@@ -74,44 +95,46 @@ class _ToggleRow extends StatelessWidget {
     required this.label,
     required this.value,
     required this.onChanged,
+    this.showDivider = false,
   });
 
   final String label;
   final bool value;
   final ValueChanged<bool> onChanged;
+  final bool showDivider;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-      decoration: BoxDecoration(
-        color: colors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: colors.border, width: 0.5),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: AppTextStyles.body(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: colors.primaryText,
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: AppTextStyles.body(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: colors.primaryText,
+                  ),
+                ),
               ),
-            ),
+              Switch.adaptive(
+                value: value,
+                activeThumbColor: colors.accentTeal,
+                activeTrackColor: colors.accentTeal.withValues(alpha: 0.45),
+                onChanged: onChanged,
+              ),
+            ],
           ),
-          Switch.adaptive(
-            value: value,
-            activeThumbColor: colors.accentTeal,
-            activeTrackColor: colors.accentTeal.withValues(alpha: 0.45),
-            onChanged: onChanged,
-          ),
-        ],
-      ),
+        ),
+        if (showDivider)
+          Divider(height: 1, thickness: 0.5, color: colors.border),
+      ],
     );
   }
 }

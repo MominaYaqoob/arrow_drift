@@ -92,6 +92,54 @@ bool isArrowBlocked({
   return false;
 }
 
+/// First active arrow that blocks [arrow]'s escape ray, and how many cells
+/// away the first collision is from the tip (1 = adjacent).
+({ArrowModel blocker, int steps})? findFirstBlockingArrow({
+  required ArrowModel arrow,
+  required List<ArrowModel> arrows,
+  int gridRows = 64,
+  int gridCols = 64,
+  List<List<bool>>? shapeMask,
+}) {
+  if (arrow.isRemoved) return null;
+
+  final occupants = <String, ArrowModel>{};
+  for (final other in arrows) {
+    if (identical(other, arrow) || other.id == arrow.id) continue;
+    if (other.isRemoved) continue;
+    for (final cell in other.path) {
+      occupants.putIfAbsent('${cell.row}:${cell.col}', () => other);
+    }
+  }
+
+  final (dRow, dCol) = switch (arrow.direction) {
+    ArrowDirection.up => (-1, 0),
+    ArrowDirection.down => (1, 0),
+    ArrowDirection.left => (0, -1),
+    ArrowDirection.right => (0, 1),
+  };
+
+  var r = arrow.row + dRow;
+  var c = arrow.col + dCol;
+  for (var step = 1; step <= 64; step++) {
+    if (r < 0 || c < 0 || r >= gridRows || c >= gridCols) return null;
+    final outsideMask = shapeMask != null &&
+        (r >= shapeMask.length ||
+            c >= shapeMask[r].length ||
+            !shapeMask[r][c]);
+    if (outsideMask) {
+      r += dRow;
+      c += dCol;
+      continue;
+    }
+    final hit = occupants['$r:$c'];
+    if (hit != null) return (blocker: hit, steps: step);
+    r += dRow;
+    c += dCol;
+  }
+  return null;
+}
+
 /// Inverse of [isArrowBlocked] (kept for hints / solvability helpers).
 bool isArrowFree({
   required ArrowModel arrow,

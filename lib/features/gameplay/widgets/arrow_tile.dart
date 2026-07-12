@@ -21,6 +21,7 @@ class ArrowTile extends StatefulWidget {
     this.highlighted = false,
     this.tutorialHand = false,
     this.shakeToken = 0,
+    this.wrongBumpCells = 0,
     this.onShakeCompleted,
     this.entranceIndex = 0,
     this.playEntrance = false,
@@ -35,6 +36,10 @@ class ArrowTile extends StatefulWidget {
   final bool highlighted;
   final bool tutorialHand;
   final int shakeToken;
+
+  /// When > 0 with a new [shakeToken], slide this many cells toward the tip
+  /// (almost to the blocker), flash red, then return home.
+  final double wrongBumpCells;
   final VoidCallback? onShakeCompleted;
 
   /// Stagger index for entrance (60ms * index).
@@ -56,9 +61,11 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
   late final AnimationController _handController;
   late final AnimationController _exitController;
   late final AnimationController _wrongColorController;
+  late final AnimationController _wrongBumpController;
   late final AnimationController _entranceController;
 
   late final Animation<double> _shakeAnimation;
+  late final Animation<double> _wrongBumpAnimation;
   late final Animation<double> _exitOpacity;
   late final Animation<double> _entranceOpacity;
   late final Animation<double> _entranceScale;
@@ -68,6 +75,7 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
   bool _exitStarted = false;
   bool _exitFinished = false;
   int _lastShakeToken = 0;
+  double _activeWrongBumpCells = 0;
 
   @override
   void initState() {
@@ -117,11 +125,42 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
 
     _wrongColorController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 450),
+      duration: const Duration(milliseconds: 520),
     );
     _wrongColorController.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
-        setState(() => _feedback = ArrowTapFeedback.none);
+        // Keep red until bump finishes when bumping; otherwise clear.
+        if (!_wrongBumpController.isAnimating &&
+            _wrongBumpController.value == 0) {
+          setState(() => _feedback = ArrowTapFeedback.none);
+        }
+      }
+    });
+
+    // 0 → 1 (toward blocker) → 0 (home). Red clears when back home.
+    _wrongBumpController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 560),
+    );
+    _wrongBumpAnimation = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(begin: 0.0, end: 1.0)
+            .chain(CurveTween(curve: Curves.easeOutCubic)),
+        weight: 45,
+      ),
+      TweenSequenceItem(
+        tween: Tween(begin: 1.0, end: 0.0)
+            .chain(CurveTween(curve: Curves.easeInCubic)),
+        weight: 55,
+      ),
+    ]).animate(_wrongBumpController);
+    _wrongBumpController.addStatusListener((status) {
+      if (status == AnimationStatus.completed && mounted) {
+        setState(() {
+          _feedback = ArrowTapFeedback.none;
+          _activeWrongBumpCells = 0;
+        });
+        widget.onShakeCompleted?.call();
       }
     });
 
@@ -280,6 +319,23 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
     return _windowAlong(rail, start, bodyLen);
   }
 
+  /// Wrong-tap: same snake window as escape, but only toward the blocker and back.
+  List<Offset> _wrongBumpPolylinePoints() {
+    final cell = widget.cellSize;
+    final bodyPts = _polylinePoints();
+    if (bodyPts.length < 2) return bodyPts;
+    final bumpDist = _activeWrongBumpCells * cell;
+    if (bumpDist <= 0) return bodyPts;
+
+    final rail = List<Offset>.from(bodyPts);
+    rail.add(rail.last + _tipUnit(widget.arrow.direction) * bumpDist);
+
+    final bodyLen = _polylineLength(bodyPts);
+    final maxStart = bumpDist;
+    final start = _wrongBumpAnimation.value * maxStart;
+    return _windowAlong(rail, start, bodyLen);
+  }
+
   void _syncGuideAnimations() {
     if (widget.highlighted && !widget.tutorialHand) {
       _glowController.repeat(reverse: true);
@@ -333,10 +389,17 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
     if (widget.shakeToken != _lastShakeToken) {
       _lastShakeToken = widget.shakeToken;
       _feedback = ArrowTapFeedback.wrong;
+      _activeWrongBumpCells = widget.wrongBumpCells;
       _wrongColorController.forward(from: 0);
-      _shakeController.forward(from: 0).then((_) {
-        widget.onShakeCompleted?.call();
-      });
+      if (widget.wrongBumpCells > 0) {
+        // Primary: slide to blocker, stay red, return → black.
+        _wrongBumpController.forward(from: 0);
+      } else {
+        // Blocker partner: flash red only, then black.
+        _shakeController.forward(from: 0).then((_) {
+          widget.onShakeCompleted?.call();
+        });
+      }
     }
     if (widget.highlighted != oldWidget.highlighted ||
         widget.tutorialHand != oldWidget.tutorialHand) {
@@ -351,6 +414,7 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
     _handController.dispose();
     _exitController.dispose();
     _wrongColorController.dispose();
+    _wrongBumpController.dispose();
     _entranceController.dispose();
     super.dispose();
   }
@@ -360,6 +424,12 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
       return AppColors.accentTeal;
     }
     if (_feedback == ArrowTapFeedback.wrong) {
+      // Stay fully red while bumping toward/away from blocker.
+      if (_activeWrongBumpCells > 0 &&
+          (_wrongBumpController.isAnimating ||
+              _wrongBumpController.value > 0)) {
+        return AppColors.heartRed;
+      }
       final t = _wrongColorController.value;
       final flash = t < 0.55 ? 1.0 : (1.0 - (t - 0.55) / 0.45);
       return Color.lerp(base, AppColors.heartRed, flash)!;
@@ -439,6 +509,7 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
         _handController,
         _exitController,
         _wrongColorController,
+        _wrongBumpController,
         _entranceController,
       ]),
       builder: (context, _) {
@@ -460,14 +531,22 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
           (widget.arrow.row + 0.5) * cell,
         );
 
+        final bump = _wrongBumpAnimation.value * _activeWrongBumpCells * cell;
+        final bumpOffset = _tipUnit(widget.arrow.direction) * bump;
+        final bumping = _activeWrongBumpCells > 0 &&
+            (_wrongBumpController.isAnimating ||
+                _wrongBumpController.value > 0);
+
         Widget painted;
         final boardW = widget.gridCols * cell;
         final boardH = widget.gridRows * cell;
         if (multi) {
-          // Nested / L paths: snake along the polyline, then straight off tip.
+          // Nested / L: snake along path (escape or wrong-tap bump).
           final pts = _exitStarted
               ? _escapingPolylinePoints()
-              : _polylinePoints();
+              : bumping
+                  ? _wrongBumpPolylinePoints()
+                  : _polylinePoints();
           painted = CustomPaint(
             size: Size(boardW, boardH),
             painter: ArrowPolylinePainter(
@@ -515,18 +594,21 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
           );
         }
 
-        // Multi-cell escape is painted along the path — no rigid translate.
+        // Escape / wrong-bump: multi snakes in paint; single uses tip-axis translate.
         final exitDx =
             (!multi && _exitStarted) ? _exitOffset.value.dx : 0.0;
         final exitDy =
             (!multi && _exitStarted) ? _exitOffset.value.dy : 0.0;
+        final shakeX = _activeWrongBumpCells > 0 ? 0.0 : _shakeAnimation.value;
+        final wrongDx = (!multi && bumping) ? bumpOffset.dx : 0.0;
+        final wrongDy = (!multi && bumping) ? bumpOffset.dy : 0.0;
 
         return Opacity(
           opacity: (_exitStarted ? _exitOpacity.value : 1) * entranceOp,
           child: Transform.translate(
             offset: Offset(
-              exitDx + _shakeAnimation.value,
-              exitDy,
+              exitDx + shakeX + wrongDx,
+              exitDy + wrongDy,
             ),
             child: Transform.scale(
               scale: combinedScale,

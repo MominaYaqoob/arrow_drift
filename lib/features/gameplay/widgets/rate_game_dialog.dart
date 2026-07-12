@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'package:arrow_drift/core/theme/app_theme.dart';
 
-/// Rate-prompt dialog shown once after clearing Level 5 (teal accents).
+/// Rate-prompt dialog shown once after clearing Level 5 and Level 10.
+/// Same layout; colors match the cream / navy / teal app palette.
 class RateGameDialog extends StatelessWidget {
   const RateGameDialog({
     super.key,
@@ -22,19 +23,18 @@ class RateGameDialog extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // Soft teal celebration behind the card (matches win screen family).
+          // Soft cream + teal wash (same family as gameplay UI).
           const DecoratedBox(
             decoration: BoxDecoration(
               gradient: RadialGradient(
-                center: Alignment(0, -0.1),
-                radius: 1.1,
+                center: Alignment(0, -0.15),
+                radius: 1.15,
                 colors: [
-                  Color(0xFF7EEFD8),
-                  Color(0xFF2EC4A6),
-                  Color(0xFF0F8F7A),
-                  Color(0xFF0A6B5C),
+                  Color(0xFFD9F5EE),
+                  Color(0xFFF6F3EC),
+                  Color(0xFFEDE8DC),
                 ],
-                stops: [0.0, 0.35, 0.7, 1.0],
+                stops: [0.0, 0.45, 1.0],
               ),
             ),
           ),
@@ -43,9 +43,9 @@ class RateGameDialog extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 28),
               child: Material(
-                color: Colors.white,
+                color: AppColors.lightSurface,
                 elevation: 10,
-                shadowColor: Colors.black38,
+                shadowColor: Colors.black26,
                 borderRadius: BorderRadius.circular(22),
                 child: Stack(
                   children: [
@@ -72,7 +72,7 @@ class RateGameDialog extends StatelessWidget {
                                 child: Icon(
                                   Icons.star_rounded,
                                   size: 36,
-                                  color: Color(0xFFFFC107),
+                                  color: AppColors.lightGold,
                                 ),
                               ),
                             ),
@@ -85,7 +85,7 @@ class RateGameDialog extends StatelessWidget {
                             style: AppTextStyles.body(
                               fontSize: 14,
                               fontWeight: FontWeight.w500,
-                              color: const Color(0xFF6B7280),
+                              color: AppColors.lightSecondaryText,
                             ),
                           ),
                           const SizedBox(height: 22),
@@ -97,7 +97,7 @@ class RateGameDialog extends StatelessWidget {
                                   child: TextButton(
                                     onPressed: onLowStars,
                                     style: TextButton.styleFrom(
-                                      backgroundColor: const Color(0xFFF3F4F6),
+                                      backgroundColor: AppColors.lightSurface2,
                                       foregroundColor: AppColors.accentTealDeep,
                                       shape: const StadiumBorder(),
                                     ),
@@ -144,7 +144,7 @@ class RateGameDialog extends StatelessWidget {
                       top: 8,
                       right: 8,
                       child: Material(
-                        color: const Color(0xFFE5E7EB),
+                        color: AppColors.lightSurface2,
                         shape: const CircleBorder(),
                         child: InkWell(
                           customBorder: const CircleBorder(),
@@ -155,7 +155,7 @@ class RateGameDialog extends StatelessWidget {
                             child: Icon(
                               Icons.close_rounded,
                               size: 18,
-                              color: Colors.white,
+                              color: AppColors.lightPrimaryText,
                             ),
                           ),
                         ),
@@ -177,7 +177,7 @@ class _RateBurstPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height * 0.42);
     final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.07)
+      ..color = AppColors.accentTeal.withValues(alpha: 0.06)
       ..style = PaintingStyle.fill;
     const rays = 16;
     final radius = size.longestSide;

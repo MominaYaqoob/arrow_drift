@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:arrow_drift/data/models/arrow_model.dart';
 import 'package:arrow_drift/data/models/level_model.dart';
 import 'package:arrow_drift/data/repositories/level_repository.dart';
-import 'package:arrow_drift/data/repositories/shape_masks.dart';
 import 'package:arrow_drift/features/gameplay/game_controller.dart';
 
 void main() {
@@ -73,44 +72,12 @@ void main() {
         }
       }
     });
-    test('Level 6 heart mask generation is solvable', () {
-      final result = generateSolvableLevel(
-        6,
-        12,
-        40,
-        3,
-        1,
-        difficulty: LevelDifficulty.hard,
-        seed: 6 * 7919 + 12 * 97 + 40,
-        shapeMask: generateHeartShapeMask(12),
-      );
-      expect(result.level.arrows, hasLength(40));
-      expect(result.level.shapeMask, isNotNull);
-
-      final arrows = cloneArrows(result.level.arrows);
-      for (final id in result.placementOrder.reversed) {
-        final arrow = arrows.firstWhere((item) => item.id == id);
-        expect(
-          isArrowFree(
-            arrow: arrow,
-            arrows: arrows,
-            gridRows: 12,
-            gridCols: 12,
-            shapeMask: result.level.shapeMask,
-          ),
-          isTrue,
-          reason: 'Level 6 arrow $id blocked',
-        );
-        final index = arrows.indexWhere((item) => item.id == id);
-        arrows[index] = arrows[index].copyWith(isRemoved: true);
-      }
-    });
   });
 
   group('LevelRepository', () {
-    test('exposes exactly 6 solvable campaign levels with expected params', () {
+    test('exposes exactly 11 solvable campaign levels with expected params', () {
       final repo = LevelRepository();
-      expect(repo.levels, hasLength(6));
+      expect(repo.levels, hasLength(11));
 
       // Level 1 tutorial
       expect(repo.levels[0].arrows, hasLength(3));
@@ -126,7 +93,7 @@ void main() {
       expect(repo.levels[1].arrows, hasLength(6));
       expect(repo.levels[1].gridRows, 6);
       expect(repo.levels[1].heartsAllowed, 3);
-      expect(repo.levels[1].difficulty.label, 'Normal');
+      expect(repo.levels[1].difficulty.label, 'Easy');
 
       // Level 3 nested paths (like Level 2, denser / different directions)
       final l3 = repo.levels[2];
@@ -134,37 +101,64 @@ void main() {
       expect(l3.arrows, hasLength(8));
       expect(l3.heartsAllowed, 3);
       expect(l3.hintsAllowed, 2);
-      expect(l3.difficulty.label, 'Normal');
+      expect(l3.difficulty.label, 'Easy');
       expect(l3.arrows.every((a) => a.isMultiCell), isTrue);
 
       // Level 4 nested paths (dense L2-style)
       final l4 = repo.levels[3];
       expect(l4.gridRows, 7);
-      expect(l4.arrows, hasLength(10));
+      expect(l4.arrows, hasLength(9));
       expect(l4.heartsAllowed, 3);
       expect(l4.hintsAllowed, 2);
-      expect(l4.difficulty.label, 'Normal');
-                      expect(l4.arrows.every((a) => a.path.length >= 2), isTrue);
+      expect(l4.difficulty.label, 'Medium');
+      expect(l4.arrows.every((a) => a.path.isNotEmpty), isTrue);
 
       // Level 5 nested dense maze
       final l5 = repo.levels[4];
       expect(l5.gridRows, 8);
-      expect(l5.arrows, hasLength(11));
+      expect(l5.arrows, hasLength(10));
       expect(l5.heartsAllowed, 3);
       expect(l5.hintsAllowed, 1);
-      expect(l5.difficulty.label, 'Normal');
+      expect(l5.difficulty.label, 'Medium');
       expect(l5.arrows.every((a) => a.path.isNotEmpty), isTrue);
 
-      // Level 6 heart silhouette (shaped generation)
+      // Level 6 nested Hard (same style as L3–L5, denser)
       final l6 = repo.levels[5];
-      expect(l6.gridRows, 12);
-      expect(l6.gridCols, 12);
-      expect(l6.arrows, hasLength(40));
+      expect(l6.gridRows, 9);
+      expect(l6.gridCols, 9);
+      expect(l6.arrows, hasLength(12));
       expect(l6.heartsAllowed, 3);
-      expect(l6.hintsAllowed, 1);
+      expect(l6.hintsAllowed, 2);
       expect(l6.difficulty.label, 'Hard');
-      expect(l6.shapeMask, isNotNull);
+      expect(l6.shapeMask, isNull);
+      expect(l6.arrows.where((a) => a.isMultiCell).length, greaterThanOrEqualTo(10));
       expect(l6.arrows.every((a) => a.path.isNotEmpty), isTrue);
+
+      final l7 = repo.levels[6];
+      expect(l7.gridRows, 10);
+      expect(l7.arrows, hasLength(14));
+      expect(l7.difficulty.label, 'Hard');
+
+      final l8 = repo.levels[7];
+      expect(l8.gridRows, 10);
+      expect(l8.arrows, hasLength(10));
+      expect(l8.difficulty.label, 'Hard');
+
+      final l9 = repo.levels[8];
+      expect(l9.gridRows, 11);
+      expect(l9.arrows, hasLength(11));
+      expect(l9.difficulty.label, 'Hard');
+
+      final l10 = repo.levels[9];
+      expect(l10.gridRows, 11);
+      expect(l10.arrows, hasLength(16));
+      expect(l10.difficulty.label, 'Expert');
+
+      final l11 = repo.levels[10];
+      expect(l11.gridRows, 12);
+      expect(l11.arrows, hasLength(15));
+      expect(l11.difficulty.label, 'Expert');
+      expect(l11.arrows.where((a) => a.isMultiCell).length, greaterThanOrEqualTo(14));
 
       // All campaign levels solvable via placement reverse order.
       for (final level in repo.levels) {

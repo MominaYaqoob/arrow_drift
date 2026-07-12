@@ -22,50 +22,63 @@ class HomeScreen extends ConsumerWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: colors.background,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-          child: Column(
-            children: [
-              _TopBar(
-                isDark: isDark,
-                onToggleTheme: () => _toggleTheme(ref, context),
-              ),
-              const SizedBox(height: 28),
-              const _BrandBlock(),
-              const SizedBox(height: 28),
-              _DailyChallengeCard(
-                onPlay: () => context.go(DailyChallengeScreen.routePath),
-              ),
-              const Spacer(),
-              currentLevelAsync.when(
-                data: (level) {
-                  final levelCount =
-                      ref.watch(levelRepositoryProvider).levelCount;
-                  final resumeLevel =
-                      level > levelCount ? levelCount : level;
-                  return _ContinueButton(
-                    level: resumeLevel,
-                    onPressed: () => context.push(
-                      '${GameplayScreen.routePath}?level=$resumeLevel',
-                    ),
-                  );
-                },
-                loading: () => _ContinueButton(
-                  level: 1,
-                  onPressed: () => context.push(
-                    '${GameplayScreen.routePath}?level=1',
-                  ),
-                ),
-                error: (_, _) => _ContinueButton(
-                  level: 1,
-                  onPressed: () => context.push(
-                    '${GameplayScreen.routePath}?level=1',
-                  ),
-                ),
-              ),
+      body: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.background,
+          gradient: RadialGradient(
+            center: const Alignment(0.85, -0.85),
+            radius: 1.1,
+            colors: [
+              colors.accentTeal.withValues(alpha: isDark ? 0.14 : 0.14),
+              colors.background,
             ],
+            stops: const [0.0, 0.45],
+          ),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+            child: Column(
+              children: [
+                _TopBar(
+                  isDark: isDark,
+                  onToggleTheme: () => _toggleTheme(ref, context),
+                ),
+                const SizedBox(height: 36),
+                const _BrandBlock(),
+                const SizedBox(height: 28),
+                _DailyChallengeCard(
+                  onPlay: () => context.go(DailyChallengeScreen.routePath),
+                ),
+                const Spacer(),
+                currentLevelAsync.when(
+                  data: (level) {
+                    final levelCount =
+                        ref.watch(levelRepositoryProvider).levelCount;
+                    final resumeLevel =
+                        level > levelCount ? levelCount : level;
+                    return _ContinueButton(
+                      level: resumeLevel,
+                      onPressed: () => context.push(
+                        '${GameplayScreen.routePath}?level=$resumeLevel',
+                      ),
+                    );
+                  },
+                  loading: () => _ContinueButton(
+                    level: 1,
+                    onPressed: () => context.push(
+                      '${GameplayScreen.routePath}?level=1',
+                    ),
+                  ),
+                  error: (_, _) => _ContinueButton(
+                    level: 1,
+                    onPressed: () => context.push(
+                      '${GameplayScreen.routePath}?level=1',
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -112,7 +125,9 @@ class _TopBar extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: colors.surface,
+                color: isDark
+                    ? colors.surface2
+                    : Colors.white.withValues(alpha: 0.75),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: colors.border, width: 0.5),
               ),
@@ -129,7 +144,7 @@ class _TopBar extends StatelessWidget {
                     isDark ? 'Dark' : 'Light',
                     style: AppTextStyles.label(
                       fontSize: 13,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w700,
                       color: colors.primaryText,
                     ),
                   ),
@@ -158,9 +173,10 @@ class _BrandBlock extends StatelessWidget {
           AppConstants.appName,
           textAlign: TextAlign.center,
           style: AppTextStyles.heading(
-            fontSize: 34,
+            fontSize: 32,
             fontWeight: FontWeight.w700,
             color: colors.primaryText,
+            letterSpacing: -0.5,
           ),
         ),
         const SizedBox(height: 8),
@@ -168,7 +184,7 @@ class _BrandBlock extends StatelessWidget {
           'Tap free arrows. Clear the board.',
           textAlign: TextAlign.center,
           style: AppTextStyles.body(
-            fontSize: 15,
+            fontSize: 14,
             fontWeight: FontWeight.w500,
             color: colors.secondaryText,
           ),
@@ -185,71 +201,65 @@ class _DailyChallengeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.appColors;
     final today = _formatDate(DateTime.now());
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
-      decoration: BoxDecoration(
-        color: colors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: colors.border, width: 0.5),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: colors.accentTealSoft,
-              borderRadius: BorderRadius.circular(12),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPlay,
+        borderRadius: BorderRadius.circular(18),
+        child: Ink(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(16, 16, 14, 16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF128F7A), Color(0xFF0B5E52)],
             ),
-            child: Icon(
-              Icons.calendar_today_rounded,
-              size: 18,
-              color: colors.accentTealDeep,
-            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF0B5E52).withValues(alpha: 0.28),
+                blurRadius: 22,
+                offset: const Offset(0, 12),
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Daily Challenge',
-                  style: AppTextStyles.body(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: colors.primaryText,
-                  ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'DAILY CHALLENGE',
+                      style: AppTextStyles.label(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white.withValues(alpha: 0.85),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      today,
+                      style: AppTextStyles.body(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  today,
-                  style: AppTextStyles.body(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: colors.secondaryText,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: onPlay,
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
+              ),
+              Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 decoration: BoxDecoration(
-                  color: colors.accentTealSoft,
-                  borderRadius: BorderRadius.circular(12),
+                  color: Colors.white.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(999),
                   border: Border.all(
-                    color: colors.accentTeal.withValues(alpha: 0.35),
-                    width: 0.5,
+                    color: Colors.white.withValues(alpha: 0.28),
                   ),
                 ),
                 child: Text(
@@ -257,13 +267,13 @@ class _DailyChallengeCard extends StatelessWidget {
                   style: AppTextStyles.button(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: colors.accentTealDeep,
+                    color: Colors.white,
                   ),
                 ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -283,7 +293,7 @@ class _DailyChallengeCard extends StatelessWidget {
       'November',
       'December',
     ];
-    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+    return '${months[date.month - 1]} ${date.day}';
   }
 }
 
@@ -298,30 +308,49 @@ class _ContinueButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return SizedBox(
       width: double.infinity,
+      height: 56,
       child: Material(
-        color: colors.accentTeal,
-        borderRadius: BorderRadius.circular(40),
-        elevation: 2,
-        shadowColor: colors.accentTeal.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(16),
+        elevation: 0,
+        color: Colors.transparent,
         child: InkWell(
           onTap: onPressed,
-          borderRadius: BorderRadius.circular(40),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+          borderRadius: BorderRadius.circular(16),
+          child: Ink(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              color: isDark ? null : AppColors.lightPrimaryText,
+              gradient: isDark
+                  ? const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [AppColors.accentTeal, AppColors.accentTealDeep],
+                    )
+                  : null,
+              boxShadow: [
+                BoxShadow(
+                  color: (isDark ? AppColors.accentTealDeep : AppColors.lightPrimaryText)
+                      .withValues(alpha: isDark ? 0.28 : 0.18),
+                  blurRadius: 20,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: Center(
               child: Text(
                 'Level $level',
-                textAlign: TextAlign.center,
                 style: AppTextStyles.button(
-                  fontSize: 18,
+                  fontSize: 17,
                   fontWeight: FontWeight.w800,
-                  color: AppColors.lightPrimaryText,
+                  color: Colors.white,
                 ),
               ),
             ),
+          ),
         ),
       ),
     );

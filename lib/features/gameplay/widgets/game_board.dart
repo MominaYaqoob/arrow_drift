@@ -19,6 +19,7 @@ class GameBoard extends StatelessWidget {
     this.playEntrance = false,
     this.boardZoomed = false,
     this.shakeTokens = const {},
+    this.wrongBumpCells = const {},
     this.cellSize = 52,
   });
 
@@ -41,6 +42,9 @@ class GameBoard extends StatelessWidget {
   final bool boardZoomed;
 
   final Map<String, int> shakeTokens;
+
+  /// Primary wrong-tap arrows: how far (in cells) to bump toward the blocker.
+  final Map<String, double> wrongBumpCells;
   final double cellSize;
 
   bool get _plain => plainTutorial || plainBoard;
@@ -54,7 +58,8 @@ class GameBoard extends StatelessWidget {
     final effectiveCell = plainTutorial
         ? 108.0
         : plainBoard
-            ? 54.0
+            // L6 (9×9+): slightly zoomed out so the nest fits like L3–L5.
+            ? (rows >= 12 ? 36.0 : rows >= 9 ? 40.0 : 54.0)
             : cellSize;
     final boardWidth = cols * effectiveCell;
     final boardHeight = rows * effectiveCell;
@@ -107,6 +112,8 @@ class GameBoard extends StatelessWidget {
                     tutorialArrowId == gameState.arrows[i].id,
                 tutorialHand: tutorialArrowId == gameState.arrows[i].id,
                 shakeToken: shakeTokens[gameState.arrows[i].id] ?? 0,
+                wrongBumpCells:
+                    wrongBumpCells[gameState.arrows[i].id] ?? 0,
                 entranceIndex: i,
                 playEntrance: playEntrance,
                 onTap: () => onArrowTap(gameState.arrows[i].id),
