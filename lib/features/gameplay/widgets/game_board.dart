@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'package:arrow_drift/core/theme/app_theme.dart';
@@ -55,114 +57,127 @@ class GameBoard extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final rows = gameState.level.gridRows;
     final cols = gameState.level.gridCols;
-    final effectiveCell = plainTutorial
-        ? 108.0
-        : plainBoard
-            // L6 (9×9+): slightly zoomed out so the nest fits like L3–L5.
-            ? (rows >= 12 ? 36.0 : rows >= 9 ? 40.0 : 54.0)
-            : cellSize;
-    final boardWidth = cols * effectiveCell;
-    final boardHeight = rows * effectiveCell;
 
-    ArrowModel? tipArrow;
-    if (showTutorialTip && tutorialArrowId != null) {
-      for (final a in gameState.arrows) {
-        if (a.id == tutorialArrowId && !a.isRemoved) {
-          tipArrow = a;
-          break;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final zoom = boardZoomed ? 1.3 : 1.0;
+        final effectiveCell = _cellSizeFor(
+          rows: rows,
+          cols: cols,
+          maxWidth: constraints.maxWidth,
+          maxHeight: constraints.maxHeight,
+          zoom: zoom,
+        );
+        final boardWidth = cols * effectiveCell;
+        final boardHeight = rows * effectiveCell;
+
+        ArrowModel? tipArrow;
+        if (showTutorialTip && tutorialArrowId != null) {
+          for (final a in gameState.arrows) {
+            if (a.id == tutorialArrowId && !a.isRemoved) {
+              tipArrow = a;
+              break;
+            }
+          }
         }
-      }
-    }
 
-    // Dots stay behind; escaping arrows slide along tip axis (teal) past the
-    // grid edge — no hard clip so the exit line is visible like the reference.
-    final arrowsLayer = SizedBox(
-      width: boardWidth,
-      height: boardHeight,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          if (!plainTutorial)
-            Positioned.fill(
-              child: CustomPaint(
-                painter: _DotGridPainter(
-                  rows: rows,
-                  cols: cols,
-                  color: isDark
-                      ? colors.border
-                      : const Color(0xFFB8B0A0),
-                  shapeMask: gameState.level.shapeMask,
+        // Dots stay behind; escaping arrows slide along tip axis (teal) past the
+        // grid edge — no hard clip so the exit line is visible like the reference.
+        final arrowsLayer = SizedBox(
+          width: boardWidth,
+          height: boardHeight,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              if (!plainTutorial)
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _DotGridPainter(
+                      rows: rows,
+                      cols: cols,
+                      color: isDark
+                          ? colors.border
+                          : const Color(0xFFB8B0A0),
+                      shapeMask: gameState.level.shapeMask,
+                    ),
+                  ),
                 ),
+              for (var i = 0; i < gameState.arrows.length; i++)
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  width: boardWidth,
+                  height: boardHeight,
+                  child: ArrowTile(
+                    key: ValueKey(gameState.arrows[i].id),
+                    arrow: gameState.arrows[i],
+                    cellSize: effectiveCell,
+                    allArrows: gameState.arrows,
+                    gridRows: rows,
+                    gridCols: cols,
+                    highlighted:
+                        highlightedArrowId == gameState.arrows[i].id ||
+                            tutorialArrowId == gameState.arrows[i].id,
+                    tutorialHand: tutorialArrowId == gameState.arrows[i].id,
+                    shakeToken: shakeTokens[gameState.arrows[i].id] ?? 0,
+                    wrongBumpCells:
+                        wrongBumpCells[gameState.arrows[i].id] ?? 0,
+                    entranceIndex: i,
+                    playEntrance: playEntrance,
+                    onTap: () => onArrowTap(gameState.arrows[i].id),
+                  ),
+                ),
+            ],
+          ),
+        );
+
+        final boardStack = SizedBox(
+          width: boardWidth,
+          // Extra height in tutorial so tip bubble below the tile isn't clipped.
+          height: plainTutorial ? boardHeight + 90 : boardHeight,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              arrowsLayer,
+              if (tipArrow != null)
+                _TutorialTipBubble(
+                  arrow: tipArrow,
+                  cellSize: effectiveCell,
+                  boardWidth: boardWidth,
+                  boardHeight: boardHeight,
+                ),
+            ],
+          ),
+        );
+
+        final zoomedBoard = AnimatedScale(
+          scale: zoom,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+          child: boardStack,
+        );
+
+        if (_plain) {
+          // Extra margin + contain fit = board sits zoomed-out on phones
+          // so full nest (incl. tip heads) stays clear of chrome/edges.
+          return Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: plainBoard ? 10 : 0,
+                vertical: plainBoard ? 8 : 0,
+              ),
+              child: FittedBox(
+                fit: BoxFit.contain,
+                child: zoomedBoard,
               ),
             ),
-          for (var i = 0; i < gameState.arrows.length; i++)
-            Positioned(
-              left: 0,
-              top: 0,
-              width: boardWidth,
-              height: boardHeight,
-              child: ArrowTile(
-                key: ValueKey(gameState.arrows[i].id),
-                arrow: gameState.arrows[i],
-                cellSize: effectiveCell,
-                allArrows: gameState.arrows,
-                gridRows: rows,
-                gridCols: cols,
-                highlighted: highlightedArrowId == gameState.arrows[i].id ||
-                    tutorialArrowId == gameState.arrows[i].id,
-                tutorialHand: tutorialArrowId == gameState.arrows[i].id,
-                shakeToken: shakeTokens[gameState.arrows[i].id] ?? 0,
-                wrongBumpCells:
-                    wrongBumpCells[gameState.arrows[i].id] ?? 0,
-                entranceIndex: i,
-                playEntrance: playEntrance,
-                onTap: () => onArrowTap(gameState.arrows[i].id),
-              ),
-            ),
-        ],
-      ),
-    );
+          );
+        }
 
-    final boardStack = SizedBox(
-      width: boardWidth,
-      // Extra height in tutorial so tip bubble below the tile isn't clipped.
-      height: plainTutorial ? boardHeight + 90 : boardHeight,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          arrowsLayer,
-          if (tipArrow != null)
-            _TutorialTipBubble(
-              arrow: tipArrow,
-              cellSize: effectiveCell,
-              boardWidth: boardWidth,
-              boardHeight: boardHeight,
-            ),
-        ],
-      ),
-    );
-
-    final zoomedBoard = AnimatedScale(
-      scale: boardZoomed ? 1.3 : 1.0,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOutCubic,
-      child: boardStack,
-    );
-
-    if (_plain) {
-      return Center(child: zoomedBoard);
-    }
-
-    // Card padding: 14 + ~8 = 22 so arrows aren't cramped at the edges.
-    const cardPad = 22.0;
-    return InteractiveViewer(
-      minScale: 0.7,
-      maxScale: 2.5,
-      boundaryMargin: const EdgeInsets.all(160),
-      clipBehavior: Clip.none,
-      child: Center(
-        child: AnimatedScale(
-          scale: boardZoomed ? 1.3 : 1.0,
+        // Card padding: 14 + ~8 = 22 so arrows aren't cramped at the edges.
+        const cardPad = 22.0;
+        final cardChild = AnimatedScale(
+          scale: zoom,
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOutCubic,
           child: Container(
@@ -189,9 +204,52 @@ class GameBoard extends StatelessWidget {
             clipBehavior: Clip.hardEdge,
             child: boardStack,
           ),
-        ),
-      ),
+        );
+
+        return InteractiveViewer(
+          minScale: 0.7,
+          maxScale: 2.5,
+          boundaryMargin: const EdgeInsets.all(160),
+          clipBehavior: Clip.none,
+          child: Center(
+            child: FittedBox(
+              fit: BoxFit.contain,
+              child: cardChild,
+            ),
+          ),
+        );
+      },
     );
+  }
+
+  /// Shrinks cells so the full grid (and optional zoom) fits the phone screen.
+  double _cellSizeFor({
+    required int rows,
+    required int cols,
+    required double maxWidth,
+    required double maxHeight,
+    required double zoom,
+  }) {
+    // Plain boards: larger inset so the nest is clearly zoomed out on phones.
+    final inset = plainBoard ? 56.0 : 8.0;
+    final availW = math.max(0.0, maxWidth - inset);
+    final availH = math.max(0.0, maxHeight - inset);
+    if (availW <= 0 || availH <= 0 || cols <= 0 || rows <= 0) {
+      return 32.0;
+    }
+
+    final byW = availW / cols / zoom;
+    final byH = availH / rows / zoom;
+    final fitted = math.min(byW, byH);
+
+    if (plainTutorial) {
+      // Tutorial is a tiny grid — keep cells chunky but still on-screen.
+      return fitted.clamp(48.0, 108.0);
+    }
+
+    // Cap only (no floor) so we never force the board wider than the phone.
+    // Plain campaign: lower max cell = whole board visible with breathing room.
+    return math.min(fitted, plainBoard ? 36.0 : cellSize);
   }
 }
 

@@ -36,49 +36,60 @@ class HomeScreen extends ConsumerWidget {
           ),
         ),
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-            child: Column(
-              children: [
-                _TopBar(
-                  isDark: isDark,
-                  onToggleTheme: () => _toggleTheme(ref, context),
-                ),
-                const SizedBox(height: 36),
-                const _BrandBlock(),
-                const SizedBox(height: 28),
-                _DailyChallengeCard(
-                  onPlay: () => context.go(DailyChallengeScreen.routePath),
-                ),
-                const Spacer(),
-                currentLevelAsync.when(
-                  data: (level) {
-                    final levelCount =
-                        ref.watch(levelRepositoryProvider).levelCount;
-                    final resumeLevel =
-                        level > levelCount ? levelCount : level;
-                    return _ContinueButton(
-                      level: resumeLevel,
-                      onPressed: () => context.push(
-                        '${GameplayScreen.routePath}?level=$resumeLevel',
-                      ),
-                    );
-                  },
-                  loading: () => _ContinueButton(
-                    level: 1,
-                    onPressed: () => context.push(
-                      '${GameplayScreen.routePath}?level=1',
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final tight = constraints.maxHeight < 580;
+              return SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight - 24),
+                  child: IntrinsicHeight(
+                    child: Column(
+                      children: [
+                        _TopBar(
+                          isDark: isDark,
+                          onToggleTheme: () => _toggleTheme(ref, context),
+                        ),
+                        SizedBox(height: tight ? 16 : 36),
+                        const _BrandBlock(),
+                        SizedBox(height: tight ? 16 : 28),
+                        _DailyChallengeCard(
+                          onPlay: () =>
+                              context.go(DailyChallengeScreen.routePath),
+                        ),
+                        const Spacer(),
+                        currentLevelAsync.when(
+                          data: (level) {
+                            final levelCount =
+                                ref.watch(levelRepositoryProvider).levelCount;
+                            final resumeLevel =
+                                level > levelCount ? levelCount : level;
+                            return _ContinueButton(
+                              level: resumeLevel,
+                              onPressed: () => context.push(
+                                '${GameplayScreen.routePath}?level=$resumeLevel',
+                              ),
+                            );
+                          },
+                          loading: () => _ContinueButton(
+                            level: 1,
+                            onPressed: () => context.push(
+                              '${GameplayScreen.routePath}?level=1',
+                            ),
+                          ),
+                          error: (_, _) => _ContinueButton(
+                            level: 1,
+                            onPressed: () => context.push(
+                              '${GameplayScreen.routePath}?level=1',
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  error: (_, _) => _ContinueButton(
-                    level: 1,
-                    onPressed: () => context.push(
-                      '${GameplayScreen.routePath}?level=1',
-                    ),
-                  ),
                 ),
-              ],
-            ),
+              );
+            },
           ),
         ),
       ),

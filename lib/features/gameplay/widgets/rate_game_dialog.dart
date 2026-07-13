@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:arrow_drift/core/theme/app_theme.dart';
 
-/// Rate-prompt dialog shown once after clearing Level 5 and Level 10.
+/// Rate-prompt dialog shown once after clearing Level 11.
 /// Same layout; colors match the cream / navy / teal app palette.
 class RateGameDialog extends StatelessWidget {
   const RateGameDialog({

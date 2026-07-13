@@ -85,9 +85,9 @@ void main() {
           isTrue);
     });
 
-    test('levels 1-11 can be fully cleared by always tapping a free arrow', () {
+    test('levels 1-12 can be fully cleared by always tapping a free arrow', () {
       final repo = LevelRepository();
-      for (var n = 1; n <= 11; n++) {
+      for (var n = 1; n <= 12; n++) {
         final level = repo.getLevel(n);
         final controller = GameController(level);
         var safety = 0;

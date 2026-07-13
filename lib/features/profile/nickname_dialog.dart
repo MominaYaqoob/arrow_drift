@@ -91,7 +91,8 @@ class _NicknameDialogState extends State<NicknameDialog> {
           borderRadius: BorderRadius.circular(24),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(22, 26, 22, 22),
-            child: Column(
+            child: SingleChildScrollView(
+              child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
@@ -209,6 +210,7 @@ class _NicknameDialogState extends State<NicknameDialog> {
                   ),
                 ),
               ],
+            ),
             ),
           ),
         ),

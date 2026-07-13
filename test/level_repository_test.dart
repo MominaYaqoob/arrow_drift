@@ -75,9 +75,9 @@ void main() {
   });
 
   group('LevelRepository', () {
-    test('exposes exactly 11 solvable campaign levels with expected params', () {
+    test('exposes exactly 12 solvable campaign levels with expected params', () {
       final repo = LevelRepository();
-      expect(repo.levels, hasLength(11));
+      expect(repo.levels, hasLength(12));
 
       // Level 1 tutorial
       expect(repo.levels[0].arrows, hasLength(3));
@@ -115,8 +115,8 @@ void main() {
 
       // Level 5 nested dense maze
       final l5 = repo.levels[4];
-      expect(l5.gridRows, 8);
-      expect(l5.arrows, hasLength(10));
+      expect(l5.gridRows, 12);
+      expect(l5.arrows, hasLength(11));
       expect(l5.heartsAllowed, 3);
       expect(l5.hintsAllowed, 1);
       expect(l5.difficulty.label, 'Medium');
@@ -140,13 +140,13 @@ void main() {
       expect(l7.difficulty.label, 'Hard');
 
       final l8 = repo.levels[7];
-      expect(l8.gridRows, 10);
-      expect(l8.arrows, hasLength(10));
+      expect(l8.gridRows, 11);
+      expect(l8.arrows, hasLength(14));
       expect(l8.difficulty.label, 'Hard');
 
       final l9 = repo.levels[8];
-      expect(l9.gridRows, 11);
-      expect(l9.arrows, hasLength(11));
+      expect(l9.gridRows, 14);
+      expect(l9.arrows, hasLength(20));
       expect(l9.difficulty.label, 'Hard');
 
       final l10 = repo.levels[9];
@@ -159,6 +159,13 @@ void main() {
       expect(l11.arrows, hasLength(15));
       expect(l11.difficulty.label, 'Expert');
       expect(l11.arrows.where((a) => a.isMultiCell).length, greaterThanOrEqualTo(14));
+
+      final l12 = repo.levels[11];
+      expect(l12.gridRows, 16);
+      expect(l12.gridCols, 15);
+      expect(l12.arrows, hasLength(40));
+      expect(l12.difficulty.label, 'Expert');
+      expect(l12.arrows.every((a) => a.path.isNotEmpty), isTrue);
 
       // All campaign levels solvable via placement reverse order.
       for (final level in repo.levels) {

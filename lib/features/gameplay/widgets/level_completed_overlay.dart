@@ -485,7 +485,7 @@ class _LevelCompletedOverlayState extends State<LevelCompletedOverlay>
                                           child: Text(
                                             widget.isCampaignComplete
                                                 ? 'Main'
-                                                : 'Level ${widget.nextLevelNumber}',
+                                                : 'Continue',
                                             style: AppTextStyles.button(
                                               fontSize: 18,
                                               fontWeight: FontWeight.w800,

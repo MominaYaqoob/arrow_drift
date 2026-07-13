@@ -86,6 +86,7 @@ class ProgressRepository {
   static const String _ratePromptKey = 'has_shown_rate_prompt';
   static const String _ratePromptL5Key = 'has_shown_rate_prompt_l5';
   static const String _ratePromptL10Key = 'has_shown_rate_prompt_l10';
+  static const String _ratePromptL11Key = 'has_shown_rate_prompt_l11';
   static const String _nicknameKey = 'player_nickname';
 
   /// Legacy single flag (older builds); prefer [hasShownRatePromptForLevel].
@@ -95,13 +96,16 @@ class ProgressRepository {
     await _prefs.setBool(_ratePromptKey, value);
   }
 
-  /// Rate dialog after Level 5 and Level 10 (each once).
+  /// Rate dialog after Level 11 (once). Legacy L5/L10 keys kept for old installs.
   bool hasShownRatePromptForLevel(int levelNumber) {
+    if (levelNumber == 11) {
+      return (_prefs.getBool(_ratePromptL11Key) ?? false) ||
+          getHasShownRatePrompt();
+    }
     if (levelNumber == 5) {
       return _prefs.getBool(_ratePromptL5Key) ?? false;
     }
     if (levelNumber == 10) {
-      // Older installs may have used the legacy single key after L10.
       return (_prefs.getBool(_ratePromptL10Key) ?? false) ||
           getHasShownRatePrompt();
     }
@@ -109,7 +113,10 @@ class ProgressRepository {
   }
 
   Future<void> setHasShownRatePromptForLevel(int levelNumber) async {
-    if (levelNumber == 5) {
+    if (levelNumber == 11) {
+      await _prefs.setBool(_ratePromptL11Key, true);
+      await _prefs.setBool(_ratePromptKey, true);
+    } else if (levelNumber == 5) {
       await _prefs.setBool(_ratePromptL5Key, true);
     } else if (levelNumber == 10) {
       await _prefs.setBool(_ratePromptL10Key, true);

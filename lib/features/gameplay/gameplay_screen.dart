@@ -14,6 +14,7 @@ import 'package:arrow_drift/data/repositories/progress_repository.dart';
 import 'package:arrow_drift/features/daily_challenge/daily_challenge_screen.dart';
 import 'package:arrow_drift/features/gameplay/game_controller.dart';
 import 'package:arrow_drift/features/gameplay/widgets/game_board.dart';
+import 'package:arrow_drift/features/gameplay/widgets/halfway_complete_toast.dart';
 import 'package:arrow_drift/features/gameplay/widgets/level_completed_overlay.dart';
 import 'package:arrow_drift/features/gameplay/widgets/out_of_lives_overlay.dart';
 import 'package:arrow_drift/features/gameplay/widgets/pause_sheet.dart';
@@ -48,9 +49,14 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
 
   bool _boardZoomed = false;
 
-  /// After Level 5 and Level 10: rate dialog once each, then Level Completed.
+  /// After Level 11+: rate dialog once, then Level Completed.
   bool _ratePromptDone = false;
   bool _ratePromptChecked = false;
+
+  /// Mid-level "50% complete" toast (once per attempt).
+  bool _halfwayToastShown = false;
+  bool _halfwayToastVisible = false;
+  Timer? _halfwayTimer;
 
   late final AnimationController _chromeController;
   late final Animation<double> _chromeOpacity;
@@ -97,6 +103,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
   @override
   void dispose() {
     _hintTimer?.cancel();
+    _halfwayTimer?.cancel();
     _chromeController.dispose();
     super.dispose();
   }
@@ -119,6 +126,32 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     _shakeTokens.clear();
     _wrongBumpCells.clear();
     _boardZoomed = false;
+    _halfwayToastShown = false;
+    _halfwayToastVisible = false;
+    _halfwayTimer?.cancel();
+    _halfwayTimer = null;
+  }
+
+  void _maybeShowHalfwayToast(GameState gameState) {
+    // Mid-level "50% complete" toast starts from Level 11 only.
+    if (widget.isDaily || widget.levelNumber < 11) return;
+    if (_halfwayToastShown || gameState.isWon || gameState.isLost) return;
+    final total = gameState.arrows.length;
+    if (total < 2) return;
+    final removed = gameState.arrows.where((a) => a.isRemoved).length;
+    final half = (total + 1) ~/ 2;
+    if (removed < half) return;
+
+    _halfwayToastShown = true;
+    _halfwayTimer?.cancel();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() => _halfwayToastVisible = true);
+      _halfwayTimer = Timer(const Duration(seconds: 2), () {
+        if (!mounted) return;
+        setState(() => _halfwayToastVisible = false);
+      });
+    });
   }
 
   void _triggerWrongTapFeedback(ArrowModel arrow, GameState gameState) {
@@ -169,6 +202,9 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
 
     if (result == TapArrowResult.wrongTap) {
       _triggerWrongTapFeedback(arrow, gameState);
+    } else if (result == TapArrowResult.removed) {
+      final next = ref.read(gameControllerProvider(_level));
+      _maybeShowHalfwayToast(next);
     }
   }
 
@@ -288,12 +324,12 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     final inTutorial = _tutorialSessionActive && !gameState.isWon;
     final isNestedPlain = !widget.isDaily &&
         level.levelNumber >= 2 &&
-        level.levelNumber <= 11 &&
+        level.levelNumber <= 12 &&
         !inTutorial;
 
     if (!_ratePromptChecked &&
         !widget.isDaily &&
-        (widget.levelNumber == 5 || widget.levelNumber == 10)) {
+        widget.levelNumber == 11) {
       _ratePromptChecked = true;
       ref.read(progressRepositoryProvider.future).then((repo) {
         if (!mounted) return;
@@ -314,7 +350,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
 
     final showRatePrompt = gameState.isWon &&
         !widget.isDaily &&
-        (level.levelNumber == 5 || level.levelNumber == 10) &&
+        level.levelNumber == 11 &&
         !_ratePromptDone;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -363,7 +399,10 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
                 Expanded(
                   flex: inTutorial ? 3 : 1,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isNestedPlain ? 20 : 12,
+                      vertical: isNestedPlain ? 6 : 0,
+                    ),
                     child: GameBoard(
                       gameState: gameState,
                       highlightedArrowId: _highlightedArrowId,
@@ -390,6 +429,17 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
               ],
             ),
           ),
+          if (_halfwayToastVisible &&
+              !gameState.isWon &&
+              !gameState.isLost &&
+              !showRatePrompt)
+            Positioned(
+              // Sit under Level title / hearts — not mid-screen.
+              top: MediaQuery.paddingOf(context).top + 52,
+              left: 0,
+              right: 0,
+              child: const HalfwayCompleteToast(),
+            ),
           if (gameState.isLost)
             OutOfLivesOverlay(
               onGetMoreLives: _grantExtraLife,
