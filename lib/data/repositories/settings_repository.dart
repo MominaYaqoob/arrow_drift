@@ -38,36 +38,48 @@ class SettingsRepository {
 
   final SharedPreferences _prefs;
 
-  static const _soundsKey = 'settings_sounds';
-  static const _vibrationKey = 'settings_vibration';
-  static const _darkThemeKey = 'settings_dark_theme';
-  static const _autoLockKey = 'settings_auto_lock';
+  static const soundsEnabledKey = 'soundsEnabled';
+  static const vibrationEnabledKey = 'vibrationEnabled';
+  static const darkThemeKey = 'settings_dark_theme';
+  static const autoLockKey = 'autoLock';
 
   AppSettings load() {
     return AppSettings(
-      sounds: _prefs.getBool(_soundsKey) ?? true,
-      vibration: _prefs.getBool(_vibrationKey) ?? true,
-      darkTheme: _prefs.getBool(_darkThemeKey) ?? false,
-      autoLock: _prefs.getBool(_autoLockKey) ?? false,
+      sounds: _prefs.getBool(soundsEnabledKey) ?? true,
+      vibration: _prefs.getBool(vibrationEnabledKey) ?? true,
+      darkTheme: _prefs.getBool(darkThemeKey) ?? false,
+      autoLock: _prefs.getBool(autoLockKey) ?? false,
     );
   }
 
   Future<void> save(AppSettings settings) async {
-    await _prefs.setBool(_soundsKey, settings.sounds);
-    await _prefs.setBool(_vibrationKey, settings.vibration);
-    await _prefs.setBool(_darkThemeKey, settings.darkTheme);
-    await _prefs.setBool(_autoLockKey, settings.autoLock);
+    await _prefs.setBool(soundsEnabledKey, settings.sounds);
+    await _prefs.setBool(vibrationEnabledKey, settings.vibration);
+    await _prefs.setBool(darkThemeKey, settings.darkTheme);
+    await _prefs.setBool(autoLockKey, settings.autoLock);
   }
 }
+
+/// Live flags used by feedback / lock (defaults match fresh-install prefs).
+final soundsEnabledProvider = StateProvider<bool>((ref) => true);
+final vibrationEnabledProvider = StateProvider<bool>((ref) => true);
+final autoLockEnabledProvider = StateProvider<bool>((ref) => false);
 
 class SettingsNotifier extends AsyncNotifier<AppSettings> {
   @override
   Future<AppSettings> build() async {
     final prefs = await ref.watch(sharedPreferencesProvider.future);
     final settings = SettingsRepository(prefs).load();
+    _syncLiveProviders(settings);
     ref.read(themeModeProvider.notifier).state =
         settings.darkTheme ? ThemeMode.dark : ThemeMode.light;
     return settings;
+  }
+
+  void _syncLiveProviders(AppSettings settings) {
+    ref.read(soundsEnabledProvider.notifier).state = settings.sounds;
+    ref.read(vibrationEnabledProvider.notifier).state = settings.vibration;
+    ref.read(autoLockEnabledProvider.notifier).state = settings.autoLock;
   }
 
   Future<void> setSounds(bool value) async {
@@ -85,9 +97,9 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
   Future<void> setDarkTheme(bool value) async {
     final current = state.valueOrNull;
     if (current == null) return;
-    await _update(current.copyWith(darkTheme: value));
     ref.read(themeModeProvider.notifier).state =
         value ? ThemeMode.dark : ThemeMode.light;
+    await _update(current.copyWith(darkTheme: value));
   }
 
   Future<void> setAutoLock(bool value) async {
@@ -98,6 +110,7 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
 
   Future<void> _update(AppSettings next) async {
     state = AsyncData(next);
+    _syncLiveProviders(next);
     final prefs = await ref.read(sharedPreferencesProvider.future);
     await SettingsRepository(prefs).save(next);
   }
@@ -105,3 +118,13 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
 
 final settingsProvider =
     AsyncNotifierProvider<SettingsNotifier, AppSettings>(SettingsNotifier.new);
+
+/// Whether the Settings Dark Theme switch should appear ON.
+bool isDarkThemeToggleOn(BuildContext context, ThemeMode mode) {
+  return switch (mode) {
+    ThemeMode.dark => true,
+    ThemeMode.light => false,
+    ThemeMode.system =>
+      MediaQuery.platformBrightnessOf(context) == Brightness.dark,
+  };
+}

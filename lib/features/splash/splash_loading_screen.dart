@@ -260,9 +260,9 @@ class _Die extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 48,
-      height: 48,
-      padding: const EdgeInsets.all(8),
+      width: 52,
+      height: 52,
+      padding: const EdgeInsets.all(9),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(13),
         border: Border.all(color: const Color(0xFFC9BFAE)),
@@ -279,22 +279,33 @@ class _Die extends StatelessWidget {
           ),
         ],
       ),
-      child: GridView.count(
-        crossAxisCount: 3,
-        physics: const NeverScrollableScrollPhysics(),
-        children: List.generate(9, (index) {
-          if (!pips.contains(index)) return const SizedBox.shrink();
-          return Center(
-            child: Container(
-              width: 6,
-              height: 6,
-              decoration: const BoxDecoration(
-                color: Color(0xFF1A2740),
-                shape: BoxShape.circle,
+      // Avoid GridView here — on some mobile GPUs nested scrollables clip
+      // sub-pixel circles during Transform.rotate and pips vanish.
+      child: Column(
+        children: [
+          for (var row = 0; row < 3; row++)
+            Expanded(
+              child: Row(
+                children: [
+                  for (var col = 0; col < 3; col++)
+                    Expanded(
+                      child: Center(
+                        child: pips.contains(row * 3 + col)
+                            ? Container(
+                                width: 7,
+                                height: 7,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF1A2740),
+                                  shape: BoxShape.circle,
+                                ),
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                    ),
+                ],
               ),
             ),
-          );
-        }),
+        ],
       ),
     );
   }

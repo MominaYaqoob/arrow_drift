@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,7 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:arrow_drift/core/theme/app_theme.dart';
 import 'package:arrow_drift/data/repositories/progress_repository.dart';
 
-/// Awards — Daily monthly trophies + Events empty state (teal accents).
+/// Awards — monthly progress cards + Events empty state (theme-aware).
 class AwardsScreen extends ConsumerStatefulWidget {
   const AwardsScreen({super.key});
 
@@ -21,20 +23,18 @@ class _AwardsScreenState extends ConsumerState<AwardsScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? const Color(0xFF0E141C) : const Color(0xFFF1EDE4);
 
     return Scaffold(
-      backgroundColor: bg,
+      backgroundColor: colors.background,
       appBar: AppBar(
-        backgroundColor: bg,
+        backgroundColor: colors.background,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         leading: IconButton(
           onPressed: () => context.pop(),
-          icon: const Icon(
+          icon: Icon(
             Icons.chevron_left_rounded,
-            color: AppColors.accentTeal,
+            color: colors.primaryText,
             size: 32,
           ),
         ),
@@ -100,9 +100,12 @@ class _Segment extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Expanded(
       child: Material(
-        color: selected ? AppColors.accentTeal : Colors.transparent,
+        color: selected
+            ? (isDark ? colors.accentTealDeep : const Color(0xFF0E1726))
+            : Colors.transparent,
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
           onTap: onTap,
@@ -143,12 +146,12 @@ class _DailyAwardsTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.appColors;
     final now = DateTime.now();
     final year = now.year;
     final completed = ref.watch(completedDailyDatesProvider).valueOrNull ?? {};
-    final colors = context.appColors;
 
-    // Show current month and up to 2 previous months (like the reference).
+    // Current month first, then up to 2 previous months.
     final monthsToShow = <int>[];
     for (var i = 0; i < 3; i++) {
       final m = now.month - i;
@@ -156,243 +159,207 @@ class _DailyAwardsTab extends ConsumerWidget {
     }
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
       children: [
-        Text(
-          '$year',
-          style: AppTextStyles.heading(
-            fontSize: 28,
-            fontWeight: FontWeight.w700,
-            color: colors.primaryText,
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 12),
+          child: Text(
+            '$year',
+            style: AppTextStyles.heading(
+              fontSize: 26,
+              fontWeight: FontWeight.w700,
+              color: colors.primaryText,
+            ),
           ),
         ),
-        const SizedBox(height: 20),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final month in monthsToShow) ...[
-              Expanded(
-                child: _MonthTrophy(
-                  monthName: _months[month - 1],
-                  earned: _starsForMonth(completed, year, month),
-                  total: DateTime(year, month + 1, 0).day,
-                  styleIndex: month,
-                ),
-              ),
-              if (month != monthsToShow.last) const SizedBox(width: 8),
-            ],
-          ],
-        ),
+        for (var i = 0; i < monthsToShow.length; i++) ...[
+          _MonthProgressCard(
+            monthName: _months[monthsToShow[i] - 1],
+            earned: _starsForMonth(completed, year, monthsToShow[i]),
+            total: DateTime(year, monthsToShow[i] + 1, 0).day,
+            isCurrent: i == 0,
+          ),
+          if (i != monthsToShow.length - 1) const SizedBox(height: 12),
+        ],
       ],
     );
   }
 
   int _starsForMonth(Set<String> completed, int year, int month) {
-    final prefix =
-        '$year-${month.toString().padLeft(2, '0')}-';
+    final prefix = '$year-${month.toString().padLeft(2, '0')}-';
     return completed.where((k) => k.startsWith(prefix)).length;
   }
 }
 
-class _MonthTrophy extends StatelessWidget {
-  const _MonthTrophy({
+class _MonthProgressCard extends StatelessWidget {
+  const _MonthProgressCard({
     required this.monthName,
     required this.earned,
     required this.total,
-    required this.styleIndex,
+    required this.isCurrent,
   });
 
   final String monthName;
   final int earned;
   final int total;
-  final int styleIndex;
+  final bool isCurrent;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final progress = total == 0 ? 0.0 : (earned / total).clamp(0.0, 1.0);
-    final earnedAll = earned >= total && total > 0;
+    final dimmed = !isCurrent && earned == 0;
+    final ringColor = dimmed ? colors.border : AppColors.accentTeal;
 
-    return Column(
-      children: [
-        SizedBox(
-          height: 88,
-          child: Center(
-            child: Opacity(
-              opacity: earnedAll ? 1 : 0.35,
-              child: CustomPaint(
-                size: const Size(72, 88),
-                painter: _AwardTrophyPainter(
-                  ornate: styleIndex.isEven,
-                  gold: earnedAll,
-                ),
+    return Opacity(
+      opacity: dimmed ? 0.7 : 1,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: colors.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: isDark ? Border.all(color: colors.border) : null,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(
+                alpha: isDark
+                    ? (isCurrent ? 0.28 : 0.18)
+                    : (isCurrent ? 0.06 : 0.03),
+              ),
+              blurRadius: isCurrent ? 12 : 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            _ProgressRing(
+              progress: progress,
+              ringColor: ringColor,
+              dimmed: dimmed,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    monthName,
+                    style: AppTextStyles.heading(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: colors.primaryText,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '$earned of $total days',
+                    style: AppTextStyles.body(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: colors.secondaryText,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
+          ],
         ),
-        const SizedBox(height: 10),
-        Text(
-          monthName,
-          style: AppTextStyles.body(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: colors.primaryText,
-          ),
-        ),
-        const SizedBox(height: 8),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(2),
-          child: LinearProgressIndicator(
-            value: progress,
-            minHeight: 3,
-            backgroundColor: colors.border,
-            color: earnedAll ? AppColors.lightGold : colors.secondaryText,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          '$earned of $total',
-          style: AppTextStyles.label(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: colors.secondaryText,
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
 
-class _AwardTrophyPainter extends CustomPainter {
-  const _AwardTrophyPainter({required this.ornate, required this.gold});
+class _ProgressRing extends StatelessWidget {
+  const _ProgressRing({
+    required this.progress,
+    required this.ringColor,
+    required this.dimmed,
+  });
 
-  final bool ornate;
-  final bool gold;
+  final double progress;
+  final Color ringColor;
+  final bool dimmed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    return SizedBox(
+      width: 64,
+      height: 64,
+      child: CustomPaint(
+        painter: _RingPainter(
+          progress: progress,
+          ringColor: ringColor,
+          trackColor: colors.surface2,
+        ),
+        child: Center(
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: colors.surface,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.emoji_events_rounded,
+              size: 22,
+              color: dimmed ? colors.secondaryText : AppColors.accentTealDeep,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RingPainter extends CustomPainter {
+  const _RingPainter({
+    required this.progress,
+    required this.ringColor,
+    required this.trackColor,
+  });
+
+  final double progress;
+  final Color ringColor;
+  final Color trackColor;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-    final cx = w / 2;
-    final base = gold
-        ? const [Color(0xFFFFD56A), Color(0xFFE0B13A), Color(0xFFB8860B)]
-        : const [Color(0xFFC5CAD3), Color(0xFF9AA3B0), Color(0xFF7A8494)];
+    final center = Offset(size.width / 2, size.height / 2);
+    final stroke = 5.5;
+    final radius = (math.min(size.width, size.height) - stroke) / 2;
+    final rect = Rect.fromCircle(center: center, radius: radius);
 
-    final cupPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: base,
-      ).createShader(Rect.fromLTWH(0, 0, w, h));
-
-    final cup = Path()
-      ..moveTo(w * 0.28, h * 0.08)
-      ..quadraticBezierTo(w * 0.22, h * 0.36, w * 0.34, h * 0.46)
-      ..lineTo(w * 0.66, h * 0.46)
-      ..quadraticBezierTo(w * 0.78, h * 0.36, w * 0.72, h * 0.08)
-      ..close();
-    canvas.drawPath(cup, cupPaint);
-
-    final handle = Paint()
-      ..color = base[1]
+    final track = Paint()
+      ..color = trackColor
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.5
+      ..strokeWidth = stroke
       ..strokeCap = StrokeCap.round;
+    canvas.drawCircle(center, radius, track);
 
-    if (ornate) {
-      canvas.drawArc(
-        Rect.fromCenter(
-          center: Offset(w * 0.22, h * 0.26),
-          width: w * 0.26,
-          height: h * 0.28,
-        ),
-        0.4,
-        2.2,
-        false,
-        handle,
-      );
-      canvas.drawArc(
-        Rect.fromCenter(
-          center: Offset(w * 0.78, h * 0.26),
-          width: w * 0.26,
-          height: h * 0.28,
-        ),
-        -0.4,
-        -2.2,
-        false,
-        handle,
-      );
-    } else {
-      canvas.drawLine(
-        Offset(w * 0.28, h * 0.14),
-        Offset(w * 0.14, h * 0.14),
-        handle,
-      );
-      canvas.drawLine(
-        Offset(w * 0.14, h * 0.14),
-        Offset(w * 0.14, h * 0.38),
-        handle,
-      );
-      canvas.drawLine(
-        Offset(w * 0.14, h * 0.38),
-        Offset(w * 0.34, h * 0.38),
-        handle,
-      );
-      canvas.drawLine(
-        Offset(w * 0.72, h * 0.14),
-        Offset(w * 0.86, h * 0.14),
-        handle,
-      );
-      canvas.drawLine(
-        Offset(w * 0.86, h * 0.14),
-        Offset(w * 0.86, h * 0.38),
-        handle,
-      );
-      canvas.drawLine(
-        Offset(w * 0.86, h * 0.38),
-        Offset(w * 0.66, h * 0.38),
-        handle,
-      );
-    }
+    if (progress <= 0) return;
 
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromCenter(
-          center: Offset(cx, h * 0.54),
-          width: w * 0.2,
-          height: h * 0.05,
-        ),
-        const Radius.circular(2),
-      ),
-      Paint()..color = base[1],
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromCenter(
-          center: Offset(cx, h * 0.66),
-          width: w * 0.1,
-          height: h * 0.14,
-        ),
-        const Radius.circular(2),
-      ),
-      Paint()..color = base[2],
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromCenter(
-          center: Offset(cx, h * 0.84),
-          width: w * 0.42,
-          height: h * 0.1,
-        ),
-        const Radius.circular(4),
-      ),
-      Paint()..color = base[1],
+    final fill = Paint()
+      ..color = ringColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(
+      rect,
+      -math.pi / 2,
+      2 * math.pi * progress,
+      false,
+      fill,
     );
   }
 
   @override
-  bool shouldRepaint(covariant _AwardTrophyPainter oldDelegate) {
-    return oldDelegate.ornate != ornate || oldDelegate.gold != gold;
+  bool shouldRepaint(covariant _RingPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.ringColor != ringColor ||
+        oldDelegate.trackColor != trackColor;
   }
 }
 

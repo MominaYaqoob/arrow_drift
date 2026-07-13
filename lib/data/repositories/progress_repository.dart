@@ -17,6 +17,8 @@ class ProgressRepository {
   static const String _lastCompletedLevelKey = 'last_completed_level';
   static const String _dailyCompletedKey = 'daily_completed_dates';
   static const String _streakKey = 'current_streak';
+  /// Last calendar day that counted toward the Snapchat-style streak (`yyyy-MM-dd`).
+  static const String _streakLastDateKey = 'daily_streak_last_date';
 
   /// Next level to resume (defaults to 1 on fresh install).
   int getCurrentLevel() {
@@ -36,14 +38,10 @@ class ProgressRepository {
     await _prefs.setBool(hasSeenTutorialKey, value);
   }
 
-  /// Current daily play streak (defaults to 0).
-  int getCurrentStreak() => _prefs.getInt(_streakKey) ?? 0;
-
   /// Marks [completedLevel] done and sets [currentLevel] to the next number.
   Future<void> saveProgress(int completedLevel) async {
     await _prefs.setInt(_lastCompletedLevelKey, completedLevel);
     await _prefs.setInt(currentLevelKey, completedLevel + 1);
-    // Drop legacy key if present so resume always reads currentLevel.
     await _prefs.remove(_legacyCurrentLevelKey);
   }
 
@@ -65,7 +63,28 @@ class ProgressRepository {
     }).length;
   }
 
-  Future<void> markDailyCompleted(DateTime date) async {
+  /// Snapchat-style streak: only consecutive **today** clears count.
+  /// Past-day backfills keep calendar stars but do not save the streak.
+  /// Returns 0 if yesterday was missed and today is not yet cleared.
+  int getCurrentStreak({DateTime? now}) {
+    final today = _dayOnly(now ?? DateTime.now());
+    final yesterday = today.subtract(const Duration(days: 1));
+    final lastKey = _prefs.getString(_streakLastDateKey);
+    if (lastKey == null || lastKey.isEmpty) return 0;
+
+    final last = _parseDateKey(lastKey);
+    if (last == null) return 0;
+
+    // Still alive: cleared today, or cleared yesterday (grace until today ends).
+    if (_sameDay(last, today) || _sameDay(last, yesterday)) {
+      return _prefs.getInt(_streakKey) ?? 0;
+    }
+    // Missed a full day → streak broken.
+    return 0;
+  }
+
+  /// Marks a calendar daily complete. Streak updates **only** for today's puzzle.
+  Future<void> markDailyCompleted(DateTime date, {DateTime? now}) async {
     final key = _dateKey(date);
     final existing = [...getCompletedDailyDates()];
     if (!existing.contains(key)) {
@@ -73,14 +92,45 @@ class ProgressRepository {
       await _prefs.setStringList(_dailyCompletedKey, existing);
     }
 
-    var computed = 0;
-    var cursor = DateTime(date.year, date.month, date.day);
-    final completed = existing.toSet();
-    while (completed.contains(_dateKey(cursor))) {
-      computed++;
-      cursor = cursor.subtract(const Duration(days: 1));
+    final today = _dayOnly(now ?? DateTime.now());
+    final playDay = _dayOnly(date);
+
+    // Past / future puzzles: stars only, no streak change.
+    if (!_sameDay(playDay, today)) return;
+
+    final yesterday = today.subtract(const Duration(days: 1));
+    final lastKey = _prefs.getString(_streakLastDateKey);
+    final last = lastKey == null ? null : _parseDateKey(lastKey);
+    final stored = _prefs.getInt(_streakKey) ?? 0;
+
+    int nextStreak;
+    if (last != null && _sameDay(last, today)) {
+      // Already counted today.
+      nextStreak = stored > 0 ? stored : 1;
+    } else if (last != null && _sameDay(last, yesterday)) {
+      nextStreak = stored + 1;
+    } else {
+      // First play or gap → start fresh.
+      nextStreak = 1;
     }
-    await _prefs.setInt(_streakKey, computed);
+
+    await _prefs.setInt(_streakKey, nextStreak);
+    await _prefs.setString(_streakLastDateKey, _dateKey(today));
+  }
+
+  DateTime _dayOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  bool _sameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  DateTime? _parseDateKey(String key) {
+    final parts = key.split('-');
+    if (parts.length != 3) return null;
+    final y = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    final d = int.tryParse(parts[2]);
+    if (y == null || m == null || d == null) return null;
+    return DateTime(y, m, d);
   }
 
   static const String _ratePromptKey = 'has_shown_rate_prompt';
@@ -88,6 +138,7 @@ class ProgressRepository {
   static const String _ratePromptL10Key = 'has_shown_rate_prompt_l10';
   static const String _ratePromptL11Key = 'has_shown_rate_prompt_l11';
   static const String _nicknameKey = 'player_nickname';
+  static const String _avatarIdKey = 'player_avatar_id';
 
   /// Legacy single flag (older builds); prefer [hasShownRatePromptForLevel].
   bool getHasShownRatePrompt() => _prefs.getBool(_ratePromptKey) ?? false;
@@ -129,6 +180,17 @@ class ProgressRepository {
 
   Future<void> setNickname(String value) async {
     await _prefs.setString(_nicknameKey, value.trim());
+  }
+
+  /// Selected profile avatar id (see PlayerAvatar catalog on Me screen).
+  String getAvatarId() {
+    final raw = _prefs.getString(_avatarIdKey)?.trim();
+    if (raw == null || raw.isEmpty) return 'avatar_1';
+    return raw;
+  }
+
+  Future<void> setAvatarId(String value) async {
+    await _prefs.setString(_avatarIdKey, value.trim());
   }
 
   String _dateKey(DateTime date) {
@@ -179,4 +241,9 @@ final completedDailyDatesProvider = FutureProvider<Set<String>>((ref) async {
 final playerNicknameProvider = FutureProvider<String>((ref) async {
   final repo = await ref.watch(progressRepositoryProvider.future);
   return repo.getNickname();
+});
+
+final playerAvatarIdProvider = FutureProvider<String>((ref) async {
+  final repo = await ref.watch(progressRepositoryProvider.future);
+  return repo.getAvatarId();
 });

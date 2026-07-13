@@ -55,18 +55,26 @@ class GameBoard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.appColors;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Light: white card · Dark: deep navy so #EEF3F8 arrows stay readable.
+    final boardBg = isDark ? colors.background : Colors.white;
+    final boardShadow = isDark
+        ? Colors.black.withValues(alpha: 0.45)
+        : const Color(0xFF0E1726).withValues(alpha: 0.06);
     final rows = gameState.level.gridRows;
     final cols = gameState.level.gridCols;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final zoom = boardZoomed ? 1.3 : 1.0;
+        // Plain boards: keep cell size at the unzoomed fit. Dividing by zoom
+        // then AnimatedScale(zoom) cancels out on large grids (L8/L9), so the
+        // booster would appear broken. Scale alone handles the zoom effect.
         final effectiveCell = _cellSizeFor(
           rows: rows,
           cols: cols,
           maxWidth: constraints.maxWidth,
           maxHeight: constraints.maxHeight,
-          zoom: zoom,
+          zoom: _plain ? 1.0 : zoom,
         );
         final boardWidth = cols * effectiveCell;
         final boardHeight = rows * effectiveCell;
@@ -150,25 +158,57 @@ class GameBoard extends StatelessWidget {
           ),
         );
 
-        final zoomedBoard = AnimatedScale(
-          scale: zoom,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic,
-          child: boardStack,
-        );
-
         if (_plain) {
           // Extra margin + contain fit = board sits zoomed-out on phones
           // so full nest (incl. tip heads) stays clear of chrome/edges.
-          return Center(
-            child: Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: plainBoard ? 10 : 0,
-                vertical: plainBoard ? 8 : 0,
+          final fitted = Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: plainBoard ? 10 : 0,
+              vertical: plainBoard ? 8 : 0,
+            ),
+            child: FittedBox(
+              fit: BoxFit.contain,
+              child: boardStack,
+            ),
+          );
+
+          if (plainTutorial) {
+            return Center(
+              child: AnimatedScale(
+                scale: zoom,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
+                child: fitted,
               ),
-              child: FittedBox(
-                fit: BoxFit.contain,
-                child: zoomedBoard,
+            );
+          }
+
+          // Scale the whole white card (dots stay inside) — no separate
+          // background grid zooming behind the board.
+          return Center(
+            child: AnimatedScale(
+              scale: zoom,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOutCubic,
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                padding: const EdgeInsets.all(14),
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  color: boardBg,
+                  borderRadius: BorderRadius.circular(22),
+                  border: isDark
+                      ? Border.all(color: colors.border.withValues(alpha: 0.6))
+                      : null,
+                  boxShadow: [
+                    BoxShadow(
+                      color: boardShadow,
+                      blurRadius: 24,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: fitted,
               ),
             ),
           );
@@ -185,19 +225,16 @@ class GameBoard extends StatelessWidget {
             height: boardHeight + cardPad * 2,
             padding: const EdgeInsets.all(cardPad),
             decoration: BoxDecoration(
-              // Light #FFFFFF · Dark #141C2A
-              color: colors.surface,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                // Light #D8D0C2 · Dark #2A3648
-                color: colors.border,
-                width: 0.5,
-              ),
+              color: boardBg,
+              borderRadius: BorderRadius.circular(22),
+              border: isDark
+                  ? Border.all(color: colors.border.withValues(alpha: 0.6))
+                  : null,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.10),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
+                  color: boardShadow,
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
                 ),
               ],
             ),

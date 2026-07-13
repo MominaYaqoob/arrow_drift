@@ -5,8 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:arrow_drift/core/theme/app_theme.dart';
 import 'package:arrow_drift/core/widgets/app_logo.dart';
 import 'package:arrow_drift/data/models/arrow_model.dart';
+import 'package:arrow_drift/services/ads_service.dart';
 
-/// Level-complete celebration — dark teal + logo card (HTML / reference UI).
+/// Level-complete celebration — dark teal win screen with logo (no white card).
 /// Callbacks unchanged; [previewArrows] kept for call-site compatibility.
 class LevelCompletedOverlay extends StatefulWidget {
   const LevelCompletedOverlay({
@@ -49,7 +50,6 @@ class _LevelCompletedOverlayState extends State<LevelCompletedOverlay>
   late final AnimationController _mainController;
   late final AnimationController _confettiController;
   late final AnimationController _pressController;
-  // Nullable so hot reload cannot throw LateInitializationError.
   AnimationController? _logoPulseController;
   Animation<double>? _logoPulse;
 
@@ -283,12 +283,6 @@ class _LevelCompletedOverlayState extends State<LevelCompletedOverlay>
   }
 
   @override
-  void reassemble() {
-    super.reassemble();
-    _ensureLogoPulse();
-  }
-
-  @override
   void dispose() {
     _bgController.dispose();
     _titleController.dispose();
@@ -321,7 +315,6 @@ class _LevelCompletedOverlayState extends State<LevelCompletedOverlay>
   @override
   Widget build(BuildContext context) {
     _ensureLogoPulse();
-    final logoPulse = _logoPulse?.value ?? 1.0;
     final logoListenable = _logoPulseController;
 
     return Material(
@@ -442,8 +435,9 @@ class _LevelCompletedOverlayState extends State<LevelCompletedOverlay>
                       builder: (context, _) {
                         return Transform.scale(
                           scale: _cardScale.value,
-                          child: _LogoWinCard(
-                            pulse: _logoPulse?.value ?? logoPulse,
+                          child: Transform.scale(
+                            scale: _logoPulse?.value ?? 1.0,
+                            child: const AppLogoMark(size: 112),
                           ),
                         );
                       },
@@ -524,45 +518,16 @@ class _LevelCompletedOverlayState extends State<LevelCompletedOverlay>
                         );
                       },
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 16),
+                    // Task 3: bottom ad slot on complete screen
+                    AdsService.instance.bannerPlaceholder(height: 60),
+                    const SizedBox(height: 12),
                   ],
                 ),
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _LogoWinCard extends StatelessWidget {
-  const _LogoWinCard({required this.pulse});
-
-  final double pulse;
-
-  @override
-  Widget build(BuildContext context) {
-    final side = (MediaQuery.sizeOf(context).width * 0.62).clamp(200.0, 280.0);
-
-    return Container(
-      width: side,
-      height: side,
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFFDF8),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.28),
-            blurRadius: 28,
-            offset: const Offset(0, 16),
-          ),
-        ],
-      ),
-      alignment: Alignment.center,
-      child: Transform.scale(
-        scale: pulse,
-        child: const AppLogoMark(size: 112),
       ),
     );
   }

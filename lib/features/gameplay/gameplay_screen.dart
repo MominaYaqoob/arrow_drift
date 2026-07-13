@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:arrow_drift/core/services/app_feedback.dart';
 import 'package:arrow_drift/core/theme/app_theme.dart';
 import 'package:arrow_drift/data/models/arrow_model.dart';
 import 'package:arrow_drift/data/models/game_state.dart';
@@ -20,18 +21,23 @@ import 'package:arrow_drift/features/gameplay/widgets/out_of_lives_overlay.dart'
 import 'package:arrow_drift/features/gameplay/widgets/pause_sheet.dart';
 import 'package:arrow_drift/features/gameplay/widgets/rate_game_dialog.dart';
 import 'package:arrow_drift/features/home/home_screen.dart';
+import 'package:arrow_drift/services/ads_service.dart';
 
 class GameplayScreen extends ConsumerStatefulWidget {
   const GameplayScreen({
     super.key,
     this.levelNumber = 1,
     this.isDaily = false,
+    this.dailyDate,
   });
 
   static const String routePath = '/gameplay';
 
   final int levelNumber;
   final bool isDaily;
+
+  /// Calendar day for daily mode (`yyyy-MM-dd` via router). Defaults to today.
+  final DateTime? dailyDate;
 
   @override
   ConsumerState<GameplayScreen> createState() => _GameplayScreenState();
@@ -57,6 +63,10 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
   bool _halfwayToastShown = false;
   bool _halfwayToastVisible = false;
   Timer? _halfwayTimer;
+
+  /// Delay Out of Lives until last heart empty animation is visible.
+  bool _showOutOfLives = false;
+  Timer? _outOfLivesTimer;
 
   late final AnimationController _chromeController;
   late final Animation<double> _chromeOpacity;
@@ -104,16 +114,23 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
   void dispose() {
     _hintTimer?.cancel();
     _halfwayTimer?.cancel();
+    _outOfLivesTimer?.cancel();
     _chromeController.dispose();
     super.dispose();
   }
 
   LevelModel get _level {
     if (widget.isDaily) {
-      return ref.read(dailyLevelProvider);
+      return ref
+          .read(levelRepositoryProvider)
+          .getDailyLevel(widget.dailyDate ?? DateTime.now());
     }
     return ref.read(levelByNumberProvider(widget.levelNumber));
   }
+
+  DateTime get _dailyPlayDate => widget.dailyDate ?? DateTime.now();
+
+  String get _dailyKey => dailyDateKey(_dailyPlayDate);
 
   /// Always point at the current free arrow while tutorial is active.
   String? _currentTutorialArrowId(GameState gameState) {
@@ -130,6 +147,19 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     _halfwayToastVisible = false;
     _halfwayTimer?.cancel();
     _halfwayTimer = null;
+    _outOfLivesTimer?.cancel();
+    _outOfLivesTimer = null;
+    _showOutOfLives = false;
+  }
+
+  void _scheduleOutOfLivesOverlay() {
+    _outOfLivesTimer?.cancel();
+    setState(() => _showOutOfLives = false);
+    // Heart pulse is ~200ms; wait so last red heart empties first.
+    _outOfLivesTimer = Timer(const Duration(milliseconds: 380), () {
+      if (!mounted) return;
+      setState(() => _showOutOfLives = true);
+    });
   }
 
   void _maybeShowHalfwayToast(GameState gameState) {
@@ -193,6 +223,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
 
     // Tutorial: wrong taps visual only — never lose hearts.
     if (blocked && _tutorialSessionActive) {
+      AppFeedback.wrongTap(ref);
       _triggerWrongTapFeedback(arrow, gameState);
       return;
     }
@@ -201,19 +232,32 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     final result = controller.tapArrow(arrowId);
 
     if (result == TapArrowResult.wrongTap) {
+      AppFeedback.wrongTap(ref);
       _triggerWrongTapFeedback(arrow, gameState);
     } else if (result == TapArrowResult.removed) {
+      AppFeedback.arrowTap(ref);
       final next = ref.read(gameControllerProvider(_level));
+      if (next.isWon) {
+        AppFeedback.levelComplete(ref);
+      }
       _maybeShowHalfwayToast(next);
     }
   }
 
-  void _onHint() {
+  Future<void> _onHint() async {
     final gameState = ref.read(gameControllerProvider(_level));
     if (gameState.isLost || gameState.isWon) return;
-    if (gameState.hintsLeft <= 0) return;
 
+    AppFeedback.buttonTap(ref);
     final controller = ref.read(gameControllerProvider(_level).notifier);
+
+    // Hints left: use one. Hints at 0: watch rewarded ad → +1 hint → use it.
+    if (gameState.hintsLeft <= 0) {
+      final earned = await AdsService.instance.showRewardedForHint();
+      if (!earned || !mounted) return;
+      controller.grantExtraHint();
+    }
+
     final id = controller.useHint();
     if (id == null) return;
 
@@ -226,8 +270,22 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
   }
 
   void _onGridBooster() {
+    AppFeedback.buttonTap(ref);
     // Toggle board zoom (visibility aid only — no count / cooldown).
     setState(() => _boardZoomed = !_boardZoomed);
+  }
+
+  /// Campaign → Main. Daily → Daily hub (pop stack when possible).
+  void _leaveToHub() {
+    if (widget.isDaily) {
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go(DailyChallengeScreen.routePath);
+      }
+      return;
+    }
+    context.go(HomeScreen.routePath);
   }
 
   void _openPauseSheet() {
@@ -248,11 +306,21 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
           },
           onQuit: () {
             Navigator.of(sheetContext).pop();
-            context.go(HomeScreen.routePath);
+            AdsService.instance.onReturnToMapAfterFail();
+            _leaveToHub();
           },
         );
       },
     );
+  }
+
+  Future<void> _markDailyIfNeeded() async {
+    if (!widget.isDaily) return;
+    final repo = await ref.read(progressRepositoryProvider.future);
+    await repo.markDailyCompleted(_dailyPlayDate);
+    ref.invalidate(monthlyDailyStarsProvider);
+    ref.invalidate(completedDailyDatesProvider);
+    ref.invalidate(currentStreakProvider);
   }
 
   Future<void> _onNextGame() async {
@@ -260,10 +328,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     final levelCount = ref.read(levelRepositoryProvider).levelCount;
 
     if (widget.isDaily) {
-      await repo.markDailyCompleted(DateTime.now());
-      ref.invalidate(monthlyDailyStarsProvider);
-      ref.invalidate(completedDailyDatesProvider);
-      ref.invalidate(currentStreakProvider);
+      await _markDailyIfNeeded();
       if (!mounted) return;
       context.go(DailyChallengeScreen.routePath);
       return;
@@ -276,6 +341,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     await repo.saveProgress(_level.levelNumber);
     ref.invalidate(currentLevelProvider);
     ref.invalidate(lastCompletedLevelProvider);
+    await AdsService.instance.onLevelCleared();
 
     if (!mounted) return;
 
@@ -291,30 +357,49 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     if (widget.levelNumber == 1 && !_hasSeenTutorial) {
       _markTutorialSeen();
     }
-    // Persist progress when leaving via Main after a win.
     ref.read(progressRepositoryProvider.future).then((repo) async {
-      if (!widget.isDaily) {
-        await repo.saveProgress(_level.levelNumber);
-        ref.invalidate(currentLevelProvider);
-        ref.invalidate(lastCompletedLevelProvider);
+      if (widget.isDaily) {
+        await _markDailyIfNeeded();
+        if (!mounted) return;
+        context.go(DailyChallengeScreen.routePath);
+        return;
       }
+      await repo.saveProgress(_level.levelNumber);
+      ref.invalidate(currentLevelProvider);
+      ref.invalidate(lastCompletedLevelProvider);
+      await AdsService.instance.onLevelCleared();
       if (!mounted) return;
       context.go(HomeScreen.routePath);
     });
   }
 
-  /// TODO: WIRE TO ADMOB REWARDED AD
-  void _grantExtraLife() {
+  Future<void> _grantExtraLife() async {
+    final earned = await AdsService.instance.showRewardedForHint();
+    if (!earned || !mounted) return;
     ref.read(gameControllerProvider(_level).notifier).grantExtraLife();
   }
 
   @override
   Widget build(BuildContext context) {
     final level = widget.isDaily
-        ? ref.watch(dailyLevelProvider)
+        ? ref.watch(dailyLevelForDateProvider(_dailyKey))
         : ref.watch(levelByNumberProvider(widget.levelNumber));
     final gameState = ref.watch(gameControllerProvider(level));
     final colors = context.appColors;
+
+    ref.listen(gameControllerProvider(level), (previous, next) {
+      final wasLost = previous?.isLost ?? false;
+      if (next.isLost && !wasLost) {
+        _scheduleOutOfLivesOverlay();
+      } else if (!next.isLost && wasLost) {
+        _outOfLivesTimer?.cancel();
+        _outOfLivesTimer = null;
+        if (_showOutOfLives) {
+          setState(() => _showOutOfLives = false);
+        }
+      }
+    });
+
     final remainingArrows =
         gameState.arrows.where((arrow) => !arrow.isRemoved).length;
     final tutorialArrowId = _currentTutorialArrowId(gameState);
@@ -322,10 +407,10 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     final isCampaignComplete =
         !widget.isDaily && level.levelNumber >= levelCount;
     final inTutorial = _tutorialSessionActive && !gameState.isWon;
-    final isNestedPlain = !widget.isDaily &&
-        level.levelNumber >= 2 &&
-        level.levelNumber <= 12 &&
-        !inTutorial;
+    final isNestedPlain =
+        !inTutorial &&
+        (widget.isDaily ||
+            (level.levelNumber >= 2 && level.levelNumber <= levelCount));
 
     if (!_ratePromptChecked &&
         !widget.isDaily &&
@@ -377,12 +462,22 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
                     title: widget.isDaily
                         ? 'Daily'
                         : 'Level ${level.levelNumber}',
-                    onBack: () => context.go(HomeScreen.routePath),
+                    onBack: _leaveToHub,
                     onSettings: inTutorial ? null : _openPauseSheet,
                     minimal: inTutorial,
                   ),
                 ),
                 if (!inTutorial) ...[
+                  const SizedBox(height: 8),
+                  FadeTransition(
+                    opacity: _chromeOpacity,
+                    child: _LevelProgressBar(
+                      progress: level.arrows.isEmpty
+                          ? 0
+                          : (level.arrows.length - remainingArrows) /
+                              level.arrows.length,
+                    ),
+                  ),
                   const SizedBox(height: 10),
                   FadeTransition(
                     opacity: _chromeOpacity,
@@ -419,12 +514,19 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
                   ),
                 ),
                 if (inTutorial) const Spacer(flex: 2),
-                if (!inTutorial)
+                if (!inTutorial) ...[
                   _BottomActions(
                     hintsLeft: gameState.hintsLeft,
                     onHint: _onHint,
                     onGridBooster: _onGridBooster,
                   ),
+                  const SizedBox(height: 8),
+                  // Single gameplay ad — below hint / zoom icons
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: AdsService.instance.bannerPlaceholder(height: 50),
+                  ),
+                ],
                 const SizedBox(height: 12),
               ],
             ),
@@ -440,7 +542,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
               right: 0,
               child: const HalfwayCompleteToast(),
             ),
-          if (gameState.isLost)
+          if (_showOutOfLives)
             OutOfLivesOverlay(
               onGetMoreLives: _grantExtraLife,
               onRestart: () {
@@ -549,6 +651,48 @@ class _TopRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _LevelProgressBar extends StatelessWidget {
+  const _LevelProgressBar({required this.progress});
+
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final clamped = progress.clamp(0.0, 1.0);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(2),
+        child: SizedBox(
+          height: 3,
+          width: double.infinity,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return Stack(
+                children: [
+                  ColoredBox(
+                    color: isDark ? colors.border : const Color(0xFFEDE8DC),
+                    child: const SizedBox.expand(),
+                  ),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOutCubic,
+                    width: constraints.maxWidth * clamped,
+                    height: 3,
+                    color: const Color(0xFF2EC4A6),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
       ),
     );
   }
@@ -672,16 +816,7 @@ class _StatsRowState extends State<_StatsRow>
             },
           ),
           const Spacer(),
-          _Pill(
-            child: Text(
-              widget.difficulty.label,
-              style: AppTextStyles.label(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: colors.primaryText,
-              ),
-            ),
-          ),
+          _DifficultyChip(label: widget.difficulty.label),
         ],
       ),
     );
@@ -705,6 +840,32 @@ class _Pill extends StatelessWidget {
         border: Border.all(color: colors.border, width: 0.5),
       ),
       child: child,
+    );
+  }
+}
+
+class _DifficultyChip extends StatelessWidget {
+  const _DifficultyChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF2FBF8),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFD9F5EE), width: 1),
+      ),
+      child: Text(
+        label,
+        style: AppTextStyles.label(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: const Color(0xFF0F8F7A),
+        ),
+      ),
     );
   }
 }
@@ -753,11 +914,8 @@ class _BottomActionsState extends State<_BottomActions>
   }
 
   void _onHintTap() {
-    if (widget.hintsLeft > 0) {
-      widget.onHint();
-      return;
-    }
-    _hintShakeController.forward(from: 0);
+    // Always forward — at 0 hints, gameplay shows rewarded ad for +1 hint.
+    widget.onHint();
   }
 
   @override
@@ -795,7 +953,7 @@ class _BottomActionsState extends State<_BottomActions>
                   ),
                 ),
                 child: Icon(
-                  Icons.lightbulb_outline_rounded,
+                  Icons.lightbulb_rounded,
                   color: hintsEmpty ? dimIcon : colors.primaryText,
                 ),
               ),
@@ -827,24 +985,29 @@ class _ActionFab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
-
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Material(
-      color: colors.surface,
-      shape: const CircleBorder(),
-      elevation: 1,
-      shadowColor: Colors.black12,
+      color: Colors.transparent,
       child: InkWell(
         customBorder: const CircleBorder(),
         onTap: onTap,
-        child: Container(
-          width: 56,
-          height: 56,
-          alignment: Alignment.center,
+        child: Ink(
+          width: 48,
+          height: 48,
           decoration: BoxDecoration(
+            color: isDark ? colors.surface2 : Colors.white,
             shape: BoxShape.circle,
-            border: Border.all(color: colors.border, width: 0.5),
+            border: isDark ? Border.all(color: colors.border) : null,
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF0E1726)
+                    .withValues(alpha: isDark ? 0.35 : 0.08),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-          child: child,
+          child: Center(child: child),
         ),
       ),
     );

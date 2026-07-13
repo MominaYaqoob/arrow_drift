@@ -11,6 +11,7 @@ import 'package:arrow_drift/features/awards/awards_screen.dart';
 import 'package:arrow_drift/features/daily_challenge/daily_challenge_screen.dart';
 import 'package:arrow_drift/features/gameplay/gameplay_screen.dart';
 import 'package:arrow_drift/features/home/home_screen.dart';
+import 'package:arrow_drift/features/lock/lock_screen.dart';
 import 'package:arrow_drift/features/home/main_shell.dart';
 import 'package:arrow_drift/features/profile/me_screen.dart';
 import 'package:arrow_drift/features/settings/settings_screen.dart';
@@ -29,6 +30,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: SplashLoadingScreen.routePath,
         builder: (context, state) => const SplashLoadingScreen(),
+      ),
+      GoRoute(
+        path: LockScreen.routePath,
+        builder: (context, state) => const LockScreen(),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
@@ -70,7 +75,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final isDaily = state.uri.queryParameters['daily'] == '1';
           if (isDaily) {
-            return const GameplayScreen(isDaily: true);
+            final dateParam = state.uri.queryParameters['date'];
+            DateTime? dailyDate;
+            if (dateParam != null && dateParam.isNotEmpty) {
+              final parts = dateParam.split('-');
+              if (parts.length == 3) {
+                dailyDate = DateTime(
+                  int.parse(parts[0]),
+                  int.parse(parts[1]),
+                  int.parse(parts[2]),
+                );
+              }
+            }
+            return GameplayScreen(
+              isDaily: true,
+              dailyDate: dailyDate,
+            );
           }
           final level = int.tryParse(
                 state.uri.queryParameters['level'] ?? '',

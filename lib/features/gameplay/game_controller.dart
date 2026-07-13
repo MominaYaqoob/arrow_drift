@@ -308,12 +308,17 @@ class GameController extends StateNotifier<GameState> {
     return freeArrow.id;
   }
 
+  /// After a rewarded ad (or placeholder), grant one extra hint.
+  void grantExtraHint() {
+    if (state.isWon || state.isLost) return;
+    state = state.copyWith(hintsLeft: state.hintsLeft + 1);
+  }
+
   /// Reloads the level with fresh arrows, hearts, and hints.
   void resetLevel() {
     state = createInitialGameState(_level);
   }
 
-  /// TODO: WIRE TO ADMOB REWARDED AD
   /// Rewarded-ad placeholder: restore one life and clear the lost state.
   void grantExtraLife() {
     if (!state.isLost) return;

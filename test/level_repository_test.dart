@@ -75,9 +75,9 @@ void main() {
   });
 
   group('LevelRepository', () {
-    test('exposes exactly 12 solvable campaign levels with expected params', () {
+    test('exposes exactly 13 solvable campaign levels with expected params', () {
       final repo = LevelRepository();
-      expect(repo.levels, hasLength(12));
+      expect(repo.levels, hasLength(13));
 
       // Level 1 tutorial
       expect(repo.levels[0].arrows, hasLength(3));
@@ -166,6 +166,13 @@ void main() {
       expect(l12.arrows, hasLength(40));
       expect(l12.difficulty.label, 'Expert');
       expect(l12.arrows.every((a) => a.path.isNotEmpty), isTrue);
+
+      final l13 = repo.levels[12];
+      expect(l13.gridRows, 18);
+      expect(l13.gridCols, 17);
+      expect(l13.arrows, hasLength(44));
+      expect(l13.difficulty.label, 'Expert');
+      expect(l13.arrows.every((a) => a.path.isNotEmpty), isTrue);
 
       // All campaign levels solvable via placement reverse order.
       for (final level in repo.levels) {

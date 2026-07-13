@@ -3,23 +3,82 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:arrow_drift/core/theme/app_theme.dart';
+import 'package:arrow_drift/data/repositories/level_repository.dart';
 import 'package:arrow_drift/data/repositories/progress_repository.dart';
 import 'package:arrow_drift/features/gameplay/gameplay_screen.dart';
 import 'package:arrow_drift/features/home/home_screen.dart';
 
-/// Daily Challenges hub — HTML board layout (UI only; same daily play route).
-class DailyChallengeScreen extends ConsumerWidget {
+/// Daily Challenges hub — swipeable calendar + same gameplay as campaign.
+class DailyChallengeScreen extends ConsumerStatefulWidget {
   const DailyChallengeScreen({super.key});
 
   static const String routePath = '/daily-challenge';
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final now = DateTime.now();
-    final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
-    final stars = ref.watch(monthlyDailyStarsProvider).valueOrNull ?? 0;
+  ConsumerState<DailyChallengeScreen> createState() =>
+      _DailyChallengeScreenState();
+}
+
+class _DailyChallengeScreenState extends ConsumerState<DailyChallengeScreen> {
+  static const int _centerPage = 1000;
+
+  late final PageController _pageController;
+  late int _pageIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageIndex = _centerPage;
+    _pageController = PageController(initialPage: _centerPage);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  DateTime get _now => DateTime.now();
+
+  DateTime _monthForPage(int page) {
+    final delta = page - _centerPage;
+    return DateTime(_now.year, _now.month + delta);
+  }
+
+  int _starsForMonth(Set<String> completed, DateTime month) {
+    final prefix =
+        '${month.year}-${month.month.toString().padLeft(2, '0')}-';
+    return completed.where((k) => k.startsWith(prefix)).length;
+  }
+
+  void _openDaily(DateTime selected) {
+    final today = DateTime(_now.year, _now.month, _now.day);
+    final day = DateTime(selected.year, selected.month, selected.day);
+
+    if (day.isAfter(today)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Upcoming days unlock later'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    // Past + today (including already cleared) → open / replay.
+    final key = dailyDateKey(day);
+    context.push('${GameplayScreen.routePath}?daily=1&date=$key');
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final completed = ref.watch(completedDailyDatesProvider).valueOrNull ?? {};
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final todayStars = _starsForMonth(
+      completed,
+      DateTime(_now.year, _now.month),
+    );
+    final daysInThisMonth = DateTime(_now.year, _now.month + 1, 0).day;
 
     return Scaffold(
       body: DecoratedBox(
@@ -60,25 +119,18 @@ class DailyChallengeScreen extends ConsumerWidget {
                         offset: const Offset(0, -28),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: _CalendarCard(
-                            year: now.year,
-                            month: now.month,
-                            today: now.day,
-                            stars: stars,
-                            daysInMonth: daysInMonth,
+                          child: _CalendarPager(
+                            controller: _pageController,
+                            centerPage: _centerPage,
                             completedKeys: completed,
-                            onDayTap: (day) {
-                              if (day != now.day) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      "Only today's challenge is available",
-                                    ),
-                                    duration: Duration(seconds: 2),
-                                  ),
-                                );
-                              }
+                            now: _now,
+                            monthForPage: _monthForPage,
+                            starsForMonth: (month) =>
+                                _starsForMonth(completed, month),
+                            onPageChanged: (page) {
+                              setState(() => _pageIndex = page);
                             },
+                            onDayTap: _openDaily,
                           ),
                         ),
                       ),
@@ -90,13 +142,14 @@ class DailyChallengeScreen extends ConsumerWidget {
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                 child: Column(
                   children: [
-                    _DailyTip(stars: stars, daysInMonth: daysInMonth),
+                    _DailyTip(
+                      stars: todayStars,
+                      daysInMonth: daysInThisMonth,
+                    ),
                     const SizedBox(height: 10),
                     _PlayTodayButton(
-                      dateLabel: _shortDate(now),
-                      onPressed: () => context.push(
-                        '${GameplayScreen.routePath}?daily=1',
-                      ),
+                      dateLabel: _shortDate(_now),
+                      onPressed: () => _openDaily(_now),
                     ),
                   ],
                 ),
@@ -209,11 +262,58 @@ class _DailyHero extends StatelessWidget {
   }
 }
 
+class _CalendarPager extends StatelessWidget {
+  const _CalendarPager({
+    required this.controller,
+    required this.centerPage,
+    required this.completedKeys,
+    required this.now,
+    required this.monthForPage,
+    required this.starsForMonth,
+    required this.onPageChanged,
+    required this.onDayTap,
+  });
+
+  final PageController controller;
+  final int centerPage;
+  final Set<String> completedKeys;
+  final DateTime now;
+  final DateTime Function(int page) monthForPage;
+  final int Function(DateTime month) starsForMonth;
+  final ValueChanged<int> onPageChanged;
+  final ValueChanged<DateTime> onDayTap;
+
+  @override
+  Widget build(BuildContext context) {
+    // Height: header + weekdays + up to 6 rows of day cells.
+    return SizedBox(
+      height: 360,
+      child: PageView.builder(
+        controller: controller,
+        onPageChanged: onPageChanged,
+        itemBuilder: (context, page) {
+          final month = monthForPage(page);
+          final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
+          return _CalendarCard(
+            year: month.year,
+            month: month.month,
+            now: now,
+            stars: starsForMonth(month),
+            daysInMonth: daysInMonth,
+            completedKeys: completedKeys,
+            onDayTap: onDayTap,
+          );
+        },
+      ),
+    );
+  }
+}
+
 class _CalendarCard extends StatelessWidget {
   const _CalendarCard({
     required this.year,
     required this.month,
-    required this.today,
+    required this.now,
     required this.stars,
     required this.daysInMonth,
     required this.completedKeys,
@@ -222,11 +322,11 @@ class _CalendarCard extends StatelessWidget {
 
   final int year;
   final int month;
-  final int today;
+  final DateTime now;
   final int stars;
   final int daysInMonth;
   final Set<String> completedKeys;
-  final ValueChanged<int> onDayTap;
+  final ValueChanged<DateTime> onDayTap;
 
   @override
   Widget build(BuildContext context) {
@@ -251,6 +351,8 @@ class _CalendarCard extends StatelessWidget {
       'November',
       'December',
     ];
+
+    final today = DateTime(now.year, now.month, now.day);
 
     return Material(
       color: isDark ? colors.surface : Colors.white,
@@ -309,7 +411,15 @@ class _CalendarCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 4),
+            Text(
+              'Swipe for other months · tap a day to play',
+              style: AppTextStyles.label(
+                fontSize: 11,
+                color: colors.secondaryText,
+              ),
+            ),
+            const SizedBox(height: 10),
             Row(
               children: [
                 for (final label in weekdays)
@@ -328,67 +438,90 @@ class _CalendarCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: rowCount * 7,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 7,
-                mainAxisSpacing: 4,
-                crossAxisSpacing: 4,
-              ),
-              itemBuilder: (context, index) {
-                if (index < startOffset ||
-                    index >= startOffset + daysInMonth) {
-                  return const SizedBox.shrink();
-                }
-                final day = index - startOffset + 1;
-                final key =
-                    '$year-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
-                final filled = completedKeys.contains(key);
-                final isToday = day == today;
+            Expanded(
+              child: GridView.builder(
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: rowCount * 7,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 7,
+                  mainAxisSpacing: 4,
+                  crossAxisSpacing: 4,
+                ),
+                itemBuilder: (context, index) {
+                  if (index < startOffset ||
+                      index >= startOffset + daysInMonth) {
+                    return const SizedBox.shrink();
+                  }
+                  final day = index - startOffset + 1;
+                  final date = DateTime(year, month, day);
+                  final key = dailyDateKey(date);
+                  final filled = completedKeys.contains(key);
+                  final isToday = date.year == today.year &&
+                      date.month == today.month &&
+                      date.day == today.day;
+                  final isFuture = date.isAfter(today);
+                  final isPlayable = !isFuture;
 
-                return GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => onDayTap(day),
-                  child: Center(
-                    child: Container(
-                      width: 34,
-                      height: 34,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isToday
-                            ? AppColors.accentTealDeep
-                            : Colors.transparent,
-                        boxShadow: isToday
-                            ? [
-                                BoxShadow(
-                                  color: AppColors.accentTealDeep
-                                      .withValues(alpha: 0.3),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ]
-                            : null,
-                      ),
-                      child: Text(
-                        '$day',
-                        style: AppTextStyles.label(
-                          fontSize: 13,
-                          fontWeight:
-                              isToday ? FontWeight.w700 : FontWeight.w500,
-                          color: isToday
-                              ? Colors.white
-                              : filled
-                                  ? AppColors.lightGold
-                                  : colors.secondaryText,
+                  return Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: () => onDayTap(date),
+                      child: Center(
+                        child: Opacity(
+                          opacity: isFuture ? 0.35 : 1,
+                          child: Container(
+                            width: 34,
+                            height: 34,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: isToday
+                                  ? AppColors.accentTealDeep
+                                  : filled
+                                      ? AppColors.lightGold
+                                          .withValues(alpha: 0.18)
+                                      : Colors.transparent,
+                              border: filled && !isToday
+                                  ? Border.all(
+                                      color: AppColors.lightGold
+                                          .withValues(alpha: 0.55),
+                                    )
+                                  : null,
+                              boxShadow: isToday
+                                  ? [
+                                      BoxShadow(
+                                        color: AppColors.accentTealDeep
+                                            .withValues(alpha: 0.3),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: Text(
+                              '$day',
+                              style: AppTextStyles.label(
+                                fontSize: 13,
+                                fontWeight: isToday || filled
+                                    ? FontWeight.w700
+                                    : FontWeight.w600,
+                                color: isToday
+                                    ? Colors.white
+                                    : filled
+                                        ? AppColors.lightGold
+                                        : isPlayable
+                                            ? colors.primaryText
+                                            : colors.secondaryText,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ],
         ),
@@ -431,7 +564,7 @@ class _DailyTip extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Clear the board to earn 1 star',
+                  'Play today to keep your streak. Miss a day = reset.',
                   style: AppTextStyles.body(
                     fontSize: 12,
                     color: colors.secondaryText,
@@ -455,7 +588,8 @@ class _DailyTip extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text('★', style: TextStyle(fontSize: 14, color: Color(0xFFB8860B))),
+                const Text('★',
+                    style: TextStyle(fontSize: 14, color: Color(0xFFB8860B))),
                 Text(
                   '$stars/$daysInMonth',
                   style: AppTextStyles.label(

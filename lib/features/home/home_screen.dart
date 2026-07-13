@@ -7,6 +7,7 @@ import 'package:arrow_drift/core/theme/app_theme.dart';
 import 'package:arrow_drift/core/widgets/app_logo.dart';
 import 'package:arrow_drift/data/repositories/level_repository.dart';
 import 'package:arrow_drift/data/repositories/progress_repository.dart';
+import 'package:arrow_drift/data/repositories/settings_repository.dart';
 import 'package:arrow_drift/features/daily_challenge/daily_challenge_screen.dart';
 import 'package:arrow_drift/features/gameplay/gameplay_screen.dart';
 
@@ -100,14 +101,19 @@ class HomeScreen extends ConsumerWidget {
     final mode = ref.read(themeModeProvider);
     final brightness = Theme.of(context).brightness;
 
+    late final ThemeMode next;
     if (mode == ThemeMode.system) {
-      ref.read(themeModeProvider.notifier).state =
-          brightness == Brightness.dark ? ThemeMode.light : ThemeMode.dark;
-      return;
+      next = brightness == Brightness.dark ? ThemeMode.light : ThemeMode.dark;
+    } else {
+      next = mode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
     }
 
-    ref.read(themeModeProvider.notifier).state =
-        mode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
+    ref.read(themeModeProvider.notifier).state = next;
+    // Keep Settings Dark Theme toggle / prefs in sync.
+    final settings = ref.read(settingsProvider).valueOrNull;
+    if (settings != null) {
+      ref.read(settingsProvider.notifier).setDarkTheme(next == ThemeMode.dark);
+    }
   }
 }
 

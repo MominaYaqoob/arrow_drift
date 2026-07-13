@@ -70,4 +70,36 @@ void main() {
     expect(stars(3, 5), 1);
     expect(stars(1, 5), 1);
   });
+
+  test('Snapchat streak: only today counts; past backfill does not save', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final repo = ProgressRepository(prefs);
+    final day13 = DateTime(2026, 7, 13);
+    final day12 = DateTime(2026, 7, 12);
+    final day11 = DateTime(2026, 7, 11);
+
+    // Clear today → streak 1
+    await repo.markDailyCompleted(day13, now: day13);
+    expect(repo.getCurrentStreak(now: day13), 1);
+
+    // Past day backfill does not change streak
+    await repo.markDailyCompleted(day12, now: day13);
+    expect(repo.getCurrentStreak(now: day13), 1);
+    expect(repo.isDailyCompleted(day12), isTrue);
+
+    // Next real day today-clear → streak 2
+    final day14 = DateTime(2026, 7, 14);
+    await repo.markDailyCompleted(day14, now: day14);
+    expect(repo.getCurrentStreak(now: day14), 2);
+
+    // Skip a day → streak dead until today is cleared again
+    final day16 = DateTime(2026, 7, 16);
+    expect(repo.getCurrentStreak(now: day16), 0);
+    await repo.markDailyCompleted(day16, now: day16);
+    expect(repo.getCurrentStreak(now: day16), 1);
+
+    // Completing day11 later still no streak bump
+    await repo.markDailyCompleted(day11, now: day16);
+    expect(repo.getCurrentStreak(now: day16), 1);
+  });
 }

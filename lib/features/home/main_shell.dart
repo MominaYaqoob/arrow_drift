@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:arrow_drift/core/theme/app_theme.dart';
 import 'package:arrow_drift/data/repositories/progress_repository.dart';
 import 'package:arrow_drift/features/profile/nickname_dialog.dart';
+import 'package:arrow_drift/services/ads_service.dart';
 
 /// Shell that hosts Main / Daily / Me tabs via [StatefulNavigationShell].
 /// Floating pill tab bar matches the HTML design board.
@@ -53,7 +54,16 @@ class _MainShellState extends ConsumerState<MainShell> {
 
     return Scaffold(
       backgroundColor: colors.background,
-      body: navigationShell,
+      body: Column(
+        children: [
+          Expanded(child: navigationShell),
+          // Task 6: home/daily shell ad strip above tab bar
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: AdsService.instance.bannerPlaceholder(height: 50),
+          ),
+        ],
+      ),
       bottomNavigationBar: SafeArea(
         top: false,
         child: Padding(

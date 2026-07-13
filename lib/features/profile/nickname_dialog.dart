@@ -4,23 +4,46 @@ import 'package:flutter/services.dart';
 import 'package:arrow_drift/core/theme/app_theme.dart';
 
 /// First-run welcome dialog — enter a nickname for the Me tab.
+/// Also reused from Me to edit an existing nickname.
 class NicknameDialog extends StatefulWidget {
-  const NicknameDialog({super.key, required this.onSaved});
+  const NicknameDialog({
+    super.key,
+    required this.onSaved,
+    this.initialNickname = '',
+    this.title = 'Welcome!',
+    this.subtitle = 'Enter your nickname to get started',
+    this.confirmLabel = 'Continue',
+  });
 
   final Future<void> Function(String nickname) onSaved;
+  final String initialNickname;
+  final String title;
+  final String subtitle;
+  final String confirmLabel;
 
   static Future<void> show(
     BuildContext context, {
     required Future<void> Function(String nickname) onSaved,
+    String initialNickname = '',
+    String title = 'Welcome!',
+    String subtitle = 'Enter your nickname to get started',
+    String confirmLabel = 'Continue',
+    bool barrierDismissible = false,
   }) {
     return showGeneralDialog<void>(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: barrierDismissible,
       barrierLabel: 'Nickname',
-      barrierColor: Colors.black.withValues(alpha: 0.45),
+      barrierColor: Colors.black.withValues(alpha: 0.55),
       transitionDuration: const Duration(milliseconds: 320),
       pageBuilder: (context, animation, secondaryAnimation) {
-        return NicknameDialog(onSaved: onSaved);
+        return NicknameDialog(
+          onSaved: onSaved,
+          initialNickname: initialNickname,
+          title: title,
+          subtitle: subtitle,
+          confirmLabel: confirmLabel,
+        );
       },
       transitionBuilder: (context, animation, secondaryAnimation, child) {
         final curved = CurvedAnimation(
@@ -40,7 +63,7 @@ class NicknameDialog extends StatefulWidget {
 }
 
 class _NicknameDialogState extends State<NicknameDialog> {
-  final _controller = TextEditingController();
+  late final TextEditingController _controller;
   final _focus = FocusNode();
   bool _saving = false;
   String? _error;
@@ -48,8 +71,15 @@ class _NicknameDialogState extends State<NicknameDialog> {
   @override
   void initState() {
     super.initState();
+    _controller = TextEditingController(text: widget.initialNickname);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _focus.requestFocus();
+      if (mounted) {
+        _focus.requestFocus();
+        _controller.selection = TextSelection(
+          baseOffset: 0,
+          extentOffset: _controller.text.length,
+        );
+      }
     });
   }
 
@@ -81,136 +111,218 @@ class _NicknameDialogState extends State<NicknameDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isEdit = widget.initialNickname.trim().isNotEmpty;
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 28),
         child: Material(
-          color: Colors.white,
-          elevation: 12,
-          shadowColor: Colors.black38,
-          borderRadius: BorderRadius.circular(24),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(22, 26, 22, 22),
+          color: colors.surface,
+          elevation: 16,
+          shadowColor: Colors.black.withValues(alpha: 0.35),
+          borderRadius: BorderRadius.circular(22),
+          clipBehavior: Clip.antiAlias,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
             child: SingleChildScrollView(
               child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        AppColors.accentTeal.withValues(alpha: 0.25),
-                        AppColors.accentTeal,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Navy header — matches Me profile look
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Color(0xFF0E1726), Color(0xFF1C2A42)],
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 68,
+                          height: 68,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFF3DDCB8), Color(0xFF0F8F7A)],
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.accentTeal
+                                    .withValues(alpha: 0.35),
+                                blurRadius: 16,
+                                offset: const Offset(0, 6),
+                              ),
+                            ],
+                          ),
+                          child: Icon(
+                            isEdit
+                                ? Icons.edit_rounded
+                                : Icons.waving_hand_rounded,
+                            size: 30,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          widget.title,
+                          textAlign: TextAlign.center,
+                          style: AppTextStyles.heading(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          widget.subtitle,
+                          textAlign: TextAlign.center,
+                          style: AppTextStyles.body(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: const Color(0xFFB8C0CC),
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  child: const Icon(
-                    Icons.waving_hand_rounded,
-                    size: 32,
-                    color: Color(0xFF0E1726),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Welcome!',
-                  style: AppTextStyles.heading(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.lightPrimaryText,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Enter your nickname to get started',
-                  textAlign: TextAlign.center,
-                  style: AppTextStyles.body(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: const Color(0xFF6B7280),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                TextField(
-                  controller: _controller,
-                  focusNode: _focus,
-                  textInputAction: TextInputAction.done,
-                  textCapitalization: TextCapitalization.words,
-                  maxLength: 16,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.deny(RegExp(r'[\n\r]')),
-                  ],
-                  onChanged: (_) {
-                    if (_error != null) setState(() => _error = null);
-                  },
-                  onSubmitted: (_) => _submit(),
-                  style: AppTextStyles.body(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.lightPrimaryText,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'Your nickname',
-                    counterText: '',
-                    filled: true,
-                    fillColor: const Color(0xFFF5F3EE),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 14,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide.none,
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: const BorderSide(
-                        color: AppColors.accentTeal,
-                        width: 2,
-                      ),
-                    ),
-                    errorText: _error,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: FilledButton(
-                    onPressed: _saving ? null : _submit,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.accentTeal,
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor:
-                          AppColors.accentTeal.withValues(alpha: 0.5),
-                      shape: const StadiumBorder(),
-                      elevation: 0,
-                    ),
-                    child: _saving
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              color: Colors.white,
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 22),
+                    child: Column(
+                      children: [
+                        TextField(
+                          controller: _controller,
+                          focusNode: _focus,
+                          textInputAction: TextInputAction.done,
+                          textCapitalization: TextCapitalization.words,
+                          maxLength: 16,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.deny(RegExp(r'[\n\r]')),
+                          ],
+                          onChanged: (_) {
+                            if (_error != null) {
+                              setState(() => _error = null);
+                            }
+                          },
+                          onSubmitted: (_) => _submit(),
+                          style: AppTextStyles.body(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: colors.primaryText,
+                          ),
+                          cursorColor: AppColors.accentTealDeep,
+                          decoration: InputDecoration(
+                            hintText: 'Your nickname',
+                            hintStyle: AppTextStyles.body(
+                              fontSize: 15,
+                              color: colors.secondaryText,
                             ),
-                          )
-                        : Text(
-                            'Continue',
-                            style: AppTextStyles.button(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
+                            counterText: '',
+                            filled: true,
+                            fillColor: isDark
+                                ? colors.surface2
+                                : const Color(0xFFF6F3EC),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 15,
+                            ),
+                            prefixIcon: Icon(
+                              Icons.person_outline_rounded,
+                              color: colors.secondaryText,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide(color: colors.border),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide(color: colors.border),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: const BorderSide(
+                                color: AppColors.accentTeal,
+                                width: 2,
+                              ),
+                            ),
+                            errorBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide(color: colors.heartRed),
+                            ),
+                            focusedErrorBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide(
+                                color: colors.heartRed,
+                                width: 2,
+                              ),
+                            ),
+                            errorText: _error,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 52,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(999),
+                              gradient: const LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  Color(0xFF3DDCB8),
+                                  Color(0xFF0F8F7A),
+                                ],
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.accentTealDeep
+                                      .withValues(alpha: 0.28),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ],
+                            ),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: _saving ? null : _submit,
+                                borderRadius: BorderRadius.circular(999),
+                                child: Center(
+                                  child: _saving
+                                      ? const SizedBox(
+                                          width: 22,
+                                          height: 22,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2.5,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                      : Text(
+                                          widget.confirmLabel,
+                                          style: AppTextStyles.button(
+                                            fontSize: 17,
+                                            fontWeight: FontWeight.w800,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                ),
+                              ),
                             ),
                           ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
             ),
           ),
         ),

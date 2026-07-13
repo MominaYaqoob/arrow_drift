@@ -206,7 +206,249 @@ SolvableLevelResult generateSolvableLevelWithBias({
   return last!;
 }
 
-  /// Campaign levels 1–11 built as nested polyline boards.
+(int, int) _dirDelta(ArrowDirection direction) {
+  return switch (direction) {
+    ArrowDirection.up => (-1, 0),
+    ArrowDirection.down => (1, 0),
+    ArrowDirection.left => (0, -1),
+    ArrowDirection.right => (0, 1),
+  };
+}
+
+/// Builds a solvable nested polyline board (bent snakes like campaign Expert).
+///
+/// Places arrows **backward** (each new arrow is free against already-placed
+/// ones), so reverse placement order is always a valid solve.
+///
+/// Tuned for **fast** daily generation on the UI isolate (tight caps + local
+/// occupied-set escape checks — no per-probe full [isArrowFree] scans).
+SolvableLevelResult generateNestedSolvableLevel(
+  int levelNumber,
+  int rows,
+  int cols,
+  int hearts,
+  int hints, {
+  LevelDifficulty difficulty = LevelDifficulty.expert,
+  int? seed,
+  double fillTarget = 0.88,
+  int minPathLen = 3,
+  int maxPathLen = 14,
+  int minArrows = 28,
+}) {
+  final random = Random(
+    seed ?? levelNumber * 9973 + rows * 131 + cols * 17,
+  );
+  final occupied = <String>{};
+  final arrows = <ArrowModel>[];
+  final placementOrder = <String>[];
+  final targetCells = (rows * cols * fillTarget).floor();
+
+  String cellKey(int r, int c) => '$r:$c';
+
+  bool inBounds(int r, int c) =>
+      r >= 0 && c >= 0 && r < rows && c < cols;
+
+  bool isEmpty(int r, int c) =>
+      inBounds(r, c) && !occupied.contains(cellKey(r, c));
+
+  /// Escape ray clear using the live occupied set (O(grid) — not O(all paths)).
+  bool escapeClear(int tipR, int tipC, ArrowDirection direction) {
+    final (dr, dc) = _dirDelta(direction);
+    var r = tipR + dr;
+    var c = tipC + dc;
+    while (inBounds(r, c)) {
+      if (occupied.contains(cellKey(r, c))) return false;
+      r += dr;
+      c += dc;
+    }
+    return true;
+  }
+
+  /// Grow tail←tip so the last step into the tip matches [direction].
+  List<GridCell>? growPath({
+    required int tipR,
+    required int tipC,
+    required ArrowDirection direction,
+    required int targetLen,
+    required int minLen,
+  }) {
+    if (targetLen <= 1) {
+      return [GridCell(tipR, tipC)];
+    }
+
+    final (dr, dc) = _dirDelta(direction);
+    final rev = <GridCell>[GridCell(tipR, tipC)];
+    final used = <String>{cellKey(tipR, tipC)};
+    var r = tipR - dr;
+    var c = tipC - dc;
+    if (!isEmpty(r, c)) return null;
+    rev.add(GridCell(r, c));
+    used.add(cellKey(r, c));
+
+    var growDr = -dr;
+    var growDc = -dc;
+
+    while (rev.length < targetLen) {
+      // Weighted picks without building a big list every step.
+      final candidates = <(int, int, int, int)>[];
+      void consider(int ndr, int ndc) {
+        final nr = r + ndr;
+        final nc = c + ndc;
+        final k = cellKey(nr, nc);
+        if (!inBounds(nr, nc) ||
+            occupied.contains(k) ||
+            used.contains(k)) {
+          return;
+        }
+        candidates.add((nr, nc, ndr, ndc));
+      }
+
+      consider(growDr, growDc);
+      final turnA = (growDc, -growDr);
+      final turnB = (-growDc, growDr);
+      consider(turnA.$1, turnA.$2);
+      consider(turnB.$1, turnB.$2);
+
+      if (candidates.isEmpty) break;
+
+      (int, int, int, int) pick;
+      if (candidates.length == 1) {
+        pick = candidates.first;
+      } else {
+        // ~70% prefer straight if present.
+        final straight = candidates.first;
+        final isStraight =
+            straight.$3 == growDr && straight.$4 == growDc;
+        if (isStraight && random.nextDouble() < 0.7) {
+          pick = straight;
+        } else {
+          pick = candidates[random.nextInt(candidates.length)];
+        }
+      }
+
+      r = pick.$1;
+      c = pick.$2;
+      growDr = pick.$3;
+      growDc = pick.$4;
+      rev.add(GridCell(r, c));
+      used.add(cellKey(r, c));
+    }
+
+    if (rev.length < minLen) return null;
+    return rev.reversed.toList(growable: false);
+  }
+
+  void placeArrow(ArrowModel arrow) {
+    arrows.add(arrow);
+    placementOrder.add(arrow.id);
+    for (final cell in arrow.path) {
+      occupied.add(cellKey(cell.row, cell.col));
+    }
+  }
+
+  bool tryPlaceAt({
+    required int tipR,
+    required int tipC,
+    required int targetLen,
+    required int minLen,
+  }) {
+    if (!isEmpty(tipR, tipC)) return false;
+    final dirs = ArrowDirection.values.toList(growable: false);
+    // Rotate start dir instead of full shuffle alloc each call.
+    final start = random.nextInt(dirs.length);
+    for (var i = 0; i < dirs.length; i++) {
+      final direction = dirs[(start + i) % dirs.length];
+      if (!escapeClear(tipR, tipC, direction)) continue;
+
+      final path = growPath(
+        tipR: tipR,
+        tipC: tipC,
+        direction: direction,
+        targetLen: targetLen,
+        minLen: minLen,
+      );
+      if (path == null) continue;
+
+      placeArrow(
+        ArrowModel(
+          id: '$levelNumber-${arrows.length}',
+          row: tipR,
+          col: tipC,
+          direction: direction,
+          path: path,
+        ),
+      );
+      return true;
+    }
+    return false;
+  }
+
+  // Phase 1: long woven snakes (hard cap keeps UI responsive).
+  var safety = 0;
+  var stall = 0;
+  while (occupied.length < targetCells && safety < 4000) {
+    safety++;
+    final before = occupied.length;
+    final tipR = random.nextInt(rows);
+    final tipC = random.nextInt(cols);
+    final len = minPathLen + random.nextInt(maxPathLen - minPathLen + 1);
+    tryPlaceAt(tipR: tipR, tipC: tipC, targetLen: len, minLen: minPathLen);
+    if (occupied.length == before) {
+      stall++;
+      if (stall > 400) break;
+    } else {
+      stall = 0;
+    }
+  }
+
+  // Phase 2: mop up with short polylines / singles.
+  safety = 0;
+  stall = 0;
+  while (occupied.length < targetCells && safety < 2500) {
+    safety++;
+    final before = occupied.length;
+    final tipR = random.nextInt(rows);
+    final tipC = random.nextInt(cols);
+    final len = 1 + random.nextInt(3);
+    tryPlaceAt(tipR: tipR, tipC: tipC, targetLen: len, minLen: 1);
+    if (occupied.length == before) {
+      stall++;
+      if (stall > 300) break;
+    } else {
+      stall = 0;
+    }
+  }
+
+  // Phase 3: scan leftovers once (no heavy retries).
+  for (var r = 0; r < rows; r++) {
+    for (var c = 0; c < cols; c++) {
+      if (!isEmpty(r, c)) continue;
+      tryPlaceAt(tipR: r, tipC: c, targetLen: 1, minLen: 1);
+    }
+  }
+
+  if (arrows.length < minArrows) {
+    throw StateError(
+      'Nested daily only placed ${arrows.length}/$minArrows arrows '
+      '($rows×$cols, fill ${occupied.length}/${rows * cols})',
+    );
+  }
+
+  return SolvableLevelResult(
+    level: LevelModel(
+      levelNumber: levelNumber,
+      gridRows: rows,
+      gridCols: cols,
+      arrows: arrows,
+      heartsAllowed: hearts,
+      hintsAllowed: hints,
+      difficulty: difficulty,
+    ),
+    placementOrder: List<String>.unmodifiable(placementOrder),
+  );
+}
+
+/// Campaign levels 1–13 built as nested polyline boards.
 class LevelRepository {
   LevelRepository({List<SolvableLevelResult>? prebuilt})
       : _results = prebuilt ?? _buildCampaignLevels();
@@ -257,20 +499,44 @@ class LevelRepository {
         900000000 + day.year * 10000 + day.month * 100 + day.day;
     return _dailyCache.putIfAbsent(
       levelNumber,
-      () => generateSolvableLevel(
-        levelNumber,
-        6,
-        14,
-        4,
-        2,
-        difficulty: LevelDifficulty.medium,
-        seed: levelNumber,
-      ).level,
+      () {
+        // One fast nested pass first (16×15). Fallback only if needed.
+        for (final attempt in const [
+          (rows: 16, cols: 15, minArrows: 30),
+          (rows: 14, cols: 14, minArrows: 24),
+        ]) {
+          try {
+            return generateNestedSolvableLevel(
+              levelNumber,
+              attempt.rows,
+              attempt.cols,
+              3,
+              2,
+              difficulty: LevelDifficulty.expert,
+              seed: levelNumber + attempt.rows * 19 + attempt.cols * 7,
+              minArrows: attempt.minArrows,
+            ).level;
+          } on StateError {
+            continue;
+          }
+        }
+        return generateNestedSolvableLevel(
+          levelNumber,
+          12,
+          12,
+          3,
+          2,
+          difficulty: LevelDifficulty.expert,
+          seed: levelNumber,
+          minArrows: 18,
+          fillTarget: 0.85,
+        ).level;
+      },
     );
   }
 
   static List<SolvableLevelResult> _buildCampaignLevels() {
-    // L1 tutorial, L2–L12 nested / sparse polylines.
+    // L1 tutorial, L2–L13 nested / sparse polylines.
     return [
       _tutorialLevel1(),
       _nestedLevel2(),
@@ -284,6 +550,7 @@ class LevelRepository {
       _nestedLevel10(),
       _nestedLevel11(),
       _nestedLevel12(),
+      _nestedLevel13(),
     ];
   }
 
@@ -1644,7 +1911,7 @@ class LevelRepository {
     );
   }
 
-  /// Level 12 — reference screenshot layout (twin top U, right UP/DOWN, bottom 3×UP).
+  /// Level 12 — Expert nested maze (full board, L11-style outer frame + woven center).
   static SolvableLevelResult _nestedLevel12() {
     ArrowModel pathArrow(
       String id,
@@ -1663,118 +1930,70 @@ class LevelRepository {
     }
 
     final arrows = [
-      pathArrow('12-A', [(1, 1), (1, 0), (0, 0), (0, 1)], ArrowDirection.right),
-      pathArrow('12-B', [(1, 4), (1, 3), (0, 3), (0, 4)], ArrowDirection.right),
-      pathArrow('12-C', [(2, 5), (1, 5), (0, 5)], ArrowDirection.up),
-      pathArrow('12-D', [(1, 6), (1, 7), (0, 7)], ArrowDirection.up),
-      pathArrow('12-E', [(1, 9), (1, 8), (0, 8)], ArrowDirection.up),
-      pathArrow('12-F', [(1, 10), (0, 10), (0, 11)], ArrowDirection.right),
-      pathArrow(
-        '12-G',
-        [for (var r = 15; r >= 0; r--) (r, 14)],
-        ArrowDirection.up,
-      ),
-      pathArrow(
-        '12-H',
-        [for (var r = 0; r <= 15; r++) (r, 13)],
-        ArrowDirection.down,
-      ),
-      pathArrow('12-I', [(2, 0), (3, 0), (4, 0)], ArrowDirection.down),
-      pathArrow('12-J', [(4, 1), (3, 1), (2, 1)], ArrowDirection.up),
-      pathArrow('12-K', [(2, 4), (2, 3), (3, 3), (3, 2)], ArrowDirection.left),
-      pathArrow('12-L', [(2, 6), (2, 7), (3, 7), (3, 8)], ArrowDirection.right),
-      pathArrow(
-        '12-M',
-        [(4, 9), (3, 9), (2, 9), (2, 10), (2, 11)],
-        ArrowDirection.right,
-      ),
-      pathArrow('12-N', [(4, 12), (3, 12), (2, 12)], ArrowDirection.up),
-      pathArrow(
-        '12-O',
-        [for (var r = 5; r <= 12; r++) (r, 0)],
-        ArrowDirection.down,
-      ),
-      pathArrow('12-P', [(5, 1), (6, 1), (6, 2), (6, 3)], ArrowDirection.right),
-      pathArrow(
-        '12-Q',
-        [(6, 4), (7, 4), (8, 4), (8, 3), (7, 3)],
-        ArrowDirection.left,
-      ),
-      pathArrow('12-R', [(5, 5), (5, 6), (6, 6), (6, 7)], ArrowDirection.right),
-      pathArrow(
-        '12-S',
-        [(5, 8), (5, 9), (6, 9), (6, 10), (5, 10)],
-        ArrowDirection.up,
-      ),
-      pathArrow('12-T', [(7, 8), (7, 9), (7, 10), (7, 11)], ArrowDirection.right),
-      pathArrow('12-U', [(8, 12), (7, 12), (6, 12), (5, 12)], ArrowDirection.up),
-      pathArrow(
-        '12-V',
-        [
-          (8, 5),
-          (8, 6),
-          (9, 6),
-          (9, 7),
-          (8, 7),
-          (8, 8),
-          (9, 8),
-          (9, 9),
-        ],
-        ArrowDirection.right,
-      ),
-      pathArrow(
-        '12-W',
-        [
-          (11, 4),
-          (10, 4),
-          (9, 4),
-          (9, 3),
-          (10, 3),
-          (10, 2),
-        ],
-        ArrowDirection.left,
-      ),
-      pathArrow('12-X', [(9, 1), (10, 1), (11, 1)], ArrowDirection.down),
-      pathArrow('12-Y', [(9, 10), (10, 10), (10, 11)], ArrowDirection.right),
-      pathArrow(
-        '12-Z',
-        [(10, 8), (10, 9), (11, 9), (11, 10)],
-        ArrowDirection.right,
-      ),
-      pathArrow('12-AA', [(11, 2), (11, 3), (12, 3)], ArrowDirection.down),
-      pathArrow(
-        '12-AB',
-        [(11, 6), (11, 5), (12, 5), (12, 4)],
-        ArrowDirection.left,
-      ),
-      pathArrow(
-        '12-AC',
-        [(12, 6), (12, 7), (13, 7), (13, 8), (14, 8)],
-        ArrowDirection.down,
-      ),
-      pathArrow('12-AD', [(12, 10), (12, 11), (11, 11)], ArrowDirection.up),
-      pathArrow('12-AE', [(11, 12), (10, 12), (9, 12)], ArrowDirection.up),
-      pathArrow(
-        '12-AF',
-        [(14, 0), (15, 0), (15, 1), (15, 2), (14, 2), (14, 1)],
-        ArrowDirection.left,
-      ),
-      pathArrow(
-        '12-AG',
-        [(15, 7), (15, 6), (15, 5), (15, 4), (15, 3)],
-        ArrowDirection.left,
-      ),
-      pathArrow('12-AH', [(14, 4), (13, 4)], ArrowDirection.up),
-      pathArrow('12-AI', [(14, 5), (13, 5)], ArrowDirection.up),
-      pathArrow('12-AJ', [(14, 6), (13, 6)], ArrowDirection.up),
-      pathArrow('12-AK', [(15, 10), (15, 9)], ArrowDirection.left),
-      pathArrow(
-        '12-AL',
-        [(14, 9), (14, 10), (13, 10), (13, 9)],
-        ArrowDirection.left,
-      ),
-      pathArrow('12-AM', [(14, 11), (13, 11), (13, 12)], ArrowDirection.right),
-      pathArrow('12-AN', [(15, 12), (14, 12)], ArrowDirection.up),
+      // Outer frame (split L for readable Expert density)
+      pathArrow('12-A', [for (var c = 0; c <= 14; c++) (0, c)], ArrowDirection.right),
+      pathArrow('12-B', [for (var r = 1; r <= 15; r++) (r, 14)], ArrowDirection.down),
+      pathArrow('12-C', [for (var c = 13; c >= 0; c--) (15, c)], ArrowDirection.left),
+      pathArrow('12-D', [for (var r = 14; r >= 1; r--) (r, 0)], ArrowDirection.up),
+      // Inner rails
+      pathArrow('12-E', [for (var r = 1; r <= 7; r++) (r, 13)], ArrowDirection.down),
+      pathArrow('12-F', [for (var r = 8; r <= 13; r++) (r, 13)], ArrowDirection.down),
+      pathArrow('12-G', [for (var c = 1; c <= 12; c++) (14, c)], ArrowDirection.right),
+      pathArrow('12-H', [(14, 13)], ArrowDirection.right),
+      pathArrow('12-I', [for (var r = 1; r <= 7; r++) (r, 1)], ArrowDirection.down),
+      pathArrow('12-J', [for (var r = 8; r <= 13; r++) (r, 1)], ArrowDirection.down),
+      // Top serpentine
+      pathArrow('12-K', [
+        (1, 12), (1, 11), (2, 11), (2, 10), (1, 10), (1, 9), (1, 8), (1, 7),
+      ], ArrowDirection.left),
+      pathArrow('12-L', [(1, 6), (1, 5), (1, 4), (1, 3), (1, 2)], ArrowDirection.left),
+      // Right / bottom / left serpentine
+      pathArrow('12-M', [for (var r = 13; r >= 8; r--) (r, 12)], ArrowDirection.up),
+      pathArrow('12-N', [for (var r = 7; r >= 2; r--) (r, 12)], ArrowDirection.up),
+      pathArrow('12-O', [
+        (13, 2), (13, 3), (12, 3), (12, 4), (13, 4), (13, 5), (13, 6),
+      ], ArrowDirection.right),
+      pathArrow('12-P', [(13, 7), (13, 8), (13, 9), (13, 10), (13, 11)], ArrowDirection.right),
+      pathArrow('12-Q', [for (var r = 2; r <= 7; r++) (r, 2)], ArrowDirection.down),
+      pathArrow('12-R', [for (var r = 8; r <= 12; r++) (r, 2)], ArrowDirection.down),
+      // Upper mid weave
+      pathArrow('12-S', [
+        (2, 3), (2, 4), (3, 4), (3, 5), (2, 5), (2, 6),
+      ], ArrowDirection.right),
+      pathArrow('12-T', [(2, 7), (2, 8), (2, 9)], ArrowDirection.right),
+      pathArrow('12-U', [(3, 3), (4, 3), (5, 3), (6, 3), (7, 3)], ArrowDirection.down),
+      pathArrow('12-V', [(8, 3), (9, 3), (10, 3), (11, 3)], ArrowDirection.down),
+      pathArrow('12-W', [
+        (3, 9), (3, 10), (3, 11), (4, 11), (5, 11), (6, 11),
+      ], ArrowDirection.down),
+      pathArrow('12-X', [(7, 11), (8, 11), (9, 11), (10, 11), (11, 11)], ArrowDirection.down),
+      pathArrow('12-Y', [
+        (12, 11), (12, 10), (11, 10), (11, 9), (12, 9), (12, 8),
+      ], ArrowDirection.left),
+      pathArrow('12-Z', [(12, 7), (12, 6), (12, 5)], ArrowDirection.left),
+      pathArrow('12-AA', [
+        (3, 6), (3, 7), (3, 8), (4, 8), (5, 8),
+      ], ArrowDirection.down),
+      pathArrow('12-AB', [(8, 8), (9, 8), (10, 8)], ArrowDirection.down),
+      pathArrow('12-AN', [(6, 8), (7, 8)], ArrowDirection.down),
+      // Nested center C / U / bar
+      pathArrow('12-AC', [
+        (5, 4), (6, 4), (7, 4), (8, 4), (9, 4), (10, 4),
+      ], ArrowDirection.down),
+      pathArrow('12-AD', [(10, 5), (10, 6), (10, 7)], ArrowDirection.right),
+      pathArrow('12-AE', [
+        (9, 7), (8, 7), (7, 7), (6, 7), (5, 7), (5, 6), (5, 5),
+      ], ArrowDirection.left),
+      pathArrow('12-AF', [
+        (6, 5), (7, 5), (8, 5), (9, 5), (9, 6), (8, 6), (7, 6), (6, 6),
+      ], ArrowDirection.up),
+      pathArrow('12-AG', [(4, 4), (4, 5), (4, 6), (4, 7)], ArrowDirection.right),
+      pathArrow('12-AH', [(4, 9), (4, 10), (5, 10), (6, 10)], ArrowDirection.down),
+      pathArrow('12-AI', [(7, 10), (8, 10), (9, 10)], ArrowDirection.down),
+      pathArrow('12-AJ', [(11, 4), (11, 5), (11, 6), (11, 7), (11, 8)], ArrowDirection.right),
+      pathArrow('12-AK', [(5, 9), (6, 9), (7, 9)], ArrowDirection.down),
+      pathArrow('12-AL', [(8, 9), (9, 9), (10, 9)], ArrowDirection.down),
+      pathArrow('12-AM', [(10, 10)], ArrowDirection.down),
     ];
 
     return SolvableLevelResult(
@@ -1788,46 +2007,128 @@ class LevelRepository {
         difficulty: LevelDifficulty.expert,
       ),
       placementOrder: const [
-        '12-AN',
-        '12-AM',
-        '12-AL',
-        '12-AK',
-        '12-AJ',
-        '12-AI',
-        '12-AH',
-        '12-AB',
-        '12-AA',
-        '12-AG',
-        '12-W',
-        '12-X',
-        '12-P',
-        '12-Q',
-        '12-K',
-        '12-I',
-        '12-O',
-        '12-AF',
-        '12-Z',
-        '12-AD',
-        '12-V',
-        '12-Y',
-        '12-AE',
-        '12-AC',
-        '12-T',
-        '12-R',
-        '12-U',
-        '12-S',
-        '12-L',
-        '12-M',
-        '12-N',
-        '12-J',
-        '12-A',
-        '12-B',
-        '12-F',
-        '12-H',
-        '12-G',
-        '12-E',
-        '12-D',
-        '12-C',
+        '12-AF', '12-AG', '12-AH', '12-AI', '12-AD', '12-AM', '12-AK', '12-AL',
+        '12-AE', '12-AC', '12-AA', '12-AN', '12-AB', '12-AJ', '12-W', '12-X',
+        '12-Y', '12-Z', '12-U', '12-V', '12-S', '12-T', '12-Q', '12-R', '12-O',
+        '12-P', '12-M', '12-N', '12-K', '12-L', '12-I', '12-J', '12-G', '12-E',
+        '12-F', '12-H', '12-D', '12-C', '12-B', '12-A',
+      ],
+    );
+  }
+
+  /// Level 13 — Expert nest: L12 core + outermost ring on 18×17.
+  static SolvableLevelResult _nestedLevel13() {
+    ArrowModel pathArrow(
+      String id,
+      List<(int, int)> cells,
+      ArrowDirection direction,
+    ) {
+      final path = [for (final c in cells) GridCell(c.$1, c.$2)];
+      final tip = path.last;
+      return ArrowModel(
+        id: id,
+        row: tip.row,
+        col: tip.col,
+        direction: direction,
+        path: path,
+      );
+    }
+
+    final arrows = [
+      // Outermost ring
+      pathArrow('13-OUTA', [for (var c = 0; c <= 16; c++) (0, c)], ArrowDirection.right),
+      pathArrow('13-OUTB', [for (var r = 1; r <= 17; r++) (r, 16)], ArrowDirection.down),
+      pathArrow('13-OUTC', [for (var c = 15; c >= 0; c--) (17, c)], ArrowDirection.left),
+      pathArrow('13-OUTD', [for (var r = 16; r >= 1; r--) (r, 0)], ArrowDirection.up),
+
+      // Second-layer outer frame
+      pathArrow('13-A', [for (var c = 1; c <= 15; c++) (1, c)], ArrowDirection.right),
+      pathArrow('13-B', [for (var r = 2; r <= 16; r++) (r, 15)], ArrowDirection.down),
+      pathArrow('13-C', [for (var c = 14; c >= 1; c--) (16, c)], ArrowDirection.left),
+      pathArrow('13-D', [for (var r = 15; r >= 2; r--) (r, 1)], ArrowDirection.up),
+
+      // Inner rails
+      pathArrow('13-E', [for (var r = 2; r <= 8; r++) (r, 14)], ArrowDirection.down),
+      pathArrow('13-F', [for (var r = 9; r <= 14; r++) (r, 14)], ArrowDirection.down),
+      pathArrow('13-G', [for (var c = 2; c <= 13; c++) (15, c)], ArrowDirection.right),
+      pathArrow('13-H', [(15, 14)], ArrowDirection.right),
+      pathArrow('13-I', [for (var r = 2; r <= 8; r++) (r, 2)], ArrowDirection.down),
+      pathArrow('13-J', [for (var r = 9; r <= 14; r++) (r, 2)], ArrowDirection.down),
+
+      // Top serpentine
+      pathArrow('13-K', [
+        (2, 13), (2, 12), (3, 12), (3, 11), (2, 11), (2, 10), (2, 9), (2, 8),
+      ], ArrowDirection.left),
+      pathArrow('13-L', [(2, 7), (2, 6), (2, 5), (2, 4), (2, 3)], ArrowDirection.left),
+
+      // Right / bottom / left serpentine
+      pathArrow('13-M', [for (var r = 14; r >= 9; r--) (r, 13)], ArrowDirection.up),
+      pathArrow('13-N', [for (var r = 8; r >= 3; r--) (r, 13)], ArrowDirection.up),
+      pathArrow('13-O', [
+        (14, 3), (14, 4), (13, 4), (13, 5), (14, 5), (14, 6), (14, 7),
+      ], ArrowDirection.right),
+      pathArrow('13-P', [(14, 8), (14, 9), (14, 10), (14, 11), (14, 12)], ArrowDirection.right),
+      pathArrow('13-Q', [for (var r = 3; r <= 8; r++) (r, 3)], ArrowDirection.down),
+      pathArrow('13-R', [for (var r = 9; r <= 13; r++) (r, 3)], ArrowDirection.down),
+
+      // Upper mid weave
+      pathArrow('13-S', [
+        (3, 4), (3, 5), (4, 5), (4, 6), (3, 6), (3, 7),
+      ], ArrowDirection.right),
+      pathArrow('13-T', [(3, 8), (3, 9), (3, 10)], ArrowDirection.right),
+      pathArrow('13-U', [(4, 4), (5, 4), (6, 4), (7, 4), (8, 4)], ArrowDirection.down),
+      pathArrow('13-V', [(9, 4), (10, 4), (11, 4), (12, 4)], ArrowDirection.down),
+      pathArrow('13-W', [
+        (4, 10), (4, 11), (4, 12), (5, 12), (6, 12), (7, 12),
+      ], ArrowDirection.down),
+      pathArrow('13-X', [(8, 12), (9, 12), (10, 12), (11, 12), (12, 12)], ArrowDirection.down),
+      pathArrow('13-Y', [
+        (13, 12), (13, 11), (12, 11), (12, 10), (13, 10), (13, 9),
+      ], ArrowDirection.left),
+      pathArrow('13-Z', [(13, 8), (13, 7), (13, 6)], ArrowDirection.left),
+      pathArrow('13-AA', [
+        (4, 7), (4, 8), (4, 9), (5, 9), (6, 9),
+      ], ArrowDirection.down),
+      pathArrow('13-AB', [(9, 9), (10, 9), (11, 9)], ArrowDirection.down),
+      pathArrow('13-AN', [(7, 9), (8, 9)], ArrowDirection.down),
+
+      // Nested center C / U / bar
+      pathArrow('13-AC', [
+        (6, 5), (7, 5), (8, 5), (9, 5), (10, 5), (11, 5),
+      ], ArrowDirection.down),
+      pathArrow('13-AD', [(11, 6), (11, 7), (11, 8)], ArrowDirection.right),
+      pathArrow('13-AE', [
+        (10, 8), (9, 8), (8, 8), (7, 8), (6, 8), (6, 7), (6, 6),
+      ], ArrowDirection.left),
+      pathArrow('13-AF', [
+        (7, 6), (8, 6), (9, 6), (10, 6), (10, 7), (9, 7), (8, 7), (7, 7),
+      ], ArrowDirection.up),
+      pathArrow('13-AG', [(5, 5), (5, 6), (5, 7), (5, 8)], ArrowDirection.right),
+      pathArrow('13-AH', [(5, 10), (5, 11), (6, 11), (7, 11)], ArrowDirection.down),
+      pathArrow('13-AI', [(8, 11), (9, 11), (10, 11)], ArrowDirection.down),
+      pathArrow('13-AJ', [(12, 5), (12, 6), (12, 7), (12, 8), (12, 9)], ArrowDirection.right),
+      pathArrow('13-AK', [(6, 10), (7, 10), (8, 10)], ArrowDirection.down),
+      pathArrow('13-AL', [(9, 10), (10, 10), (11, 10)], ArrowDirection.down),
+      pathArrow('13-AM', [(11, 11)], ArrowDirection.down),
+    ];
+
+    return SolvableLevelResult(
+      level: LevelModel(
+        levelNumber: 13,
+        gridRows: 18,
+        gridCols: 17,
+        arrows: arrows,
+        heartsAllowed: 3,
+        hintsAllowed: 1,
+        difficulty: LevelDifficulty.expert,
+      ),
+      placementOrder: const [
+        '13-AF', '13-AG', '13-AH', '13-AI', '13-AD', '13-AM', '13-AK', '13-AL',
+        '13-AE', '13-AC', '13-AA', '13-AN', '13-AB', '13-AJ', '13-W', '13-X',
+        '13-Y', '13-Z', '13-U', '13-V', '13-S', '13-T', '13-Q', '13-R', '13-O',
+        '13-P', '13-M', '13-N', '13-K', '13-L', '13-I', '13-J', '13-G', '13-E',
+        '13-F', '13-H', '13-D', '13-C', '13-B', '13-A',
+        '13-OUTD', '13-OUTC', '13-OUTB', '13-OUTA',
       ],
     );
   }
@@ -1847,3 +2148,22 @@ final levelByNumberProvider = Provider.family<LevelModel, int>((ref, levelNumber
 final dailyLevelProvider = Provider<LevelModel>((ref) {
   return ref.watch(levelRepositoryProvider).getDailyLevel();
 });
+
+/// Daily puzzle for a calendar day key `yyyy-MM-dd`.
+final dailyLevelForDateProvider =
+    Provider.family<LevelModel, String>((ref, dateKey) {
+  final parts = dateKey.split('-');
+  final date = DateTime(
+    int.parse(parts[0]),
+    int.parse(parts[1]),
+    int.parse(parts[2]),
+  );
+  return ref.watch(levelRepositoryProvider).getDailyLevel(date);
+});
+
+String dailyDateKey(DateTime date) {
+  final y = date.year.toString().padLeft(4, '0');
+  final m = date.month.toString().padLeft(2, '0');
+  final d = date.day.toString().padLeft(2, '0');
+  return '$y-$m-$d';
+}
