@@ -107,11 +107,11 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
       vsync: this,
       duration: _exitDurationFor(widget.arrow),
     );
-    // Full opacity until the last ~15%, then cut out (slide-off, not dissolve).
+    // Stay fully visible until almost off-board, then cut out.
     _exitOpacity = Tween<double>(begin: 1, end: 0).animate(
       CurvedAnimation(
         parent: _exitController,
-        curve: const Interval(0.85, 1.0, curve: Curves.linear),
+        curve: const Interval(0.92, 1.0, curve: Curves.linear),
       ),
     );
     _exitOffset = _buildExitOffset(widget.arrow.direction);
@@ -197,9 +197,17 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
     if (!arrow.isMultiCell) {
       return const Duration(milliseconds: 280);
     }
-    // Longer paths need more time so L / bent moves read as path-follow.
-    final cells = arrow.path.length.clamp(2, 14);
-    return Duration(milliseconds: 220 + cells * 55);
+    final pathCells = arrow.path.length.clamp(2, 14);
+    final tip = arrow.path.last;
+    final toEdge = switch (arrow.direction) {
+      ArrowDirection.up => tip.row + 1,
+      ArrowDirection.down => widget.gridRows - tip.row,
+      ArrowDirection.left => tip.col + 1,
+      ArrowDirection.right => widget.gridCols - tip.col,
+    };
+    // Longer board exits (short arrow mid-board) get a bit more time.
+    final travel = (pathCells + toEdge).clamp(4, 26);
+    return Duration(milliseconds: 260 + travel * 30);
   }
 
   Animation<Offset> _buildExitOffset(ArrowDirection direction) {
@@ -216,7 +224,7 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
       if (c.col < minC) minC = c.col;
       if (c.col > maxC) maxC = c.col;
     }
-    final pad = cell * 0.6;
+    final pad = cell * 2.5;
     final travel = switch (direction) {
       ArrowDirection.up => (maxR + 1) * cell + pad,
       ArrowDirection.down => (widget.gridRows - minR) * cell + pad,
@@ -246,6 +254,9 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
   }
 
   /// Path centers (tail→tip) + straight exit ray past the board edge.
+  ///
+  /// Short arrows must travel the remaining distance to the edge (plus a
+  /// body-length so the whole snake leaves), not just ~1 cell past the tip.
   List<Offset> _escapeRail() {
     final cell = widget.cellSize;
     final points = _polylinePoints();
@@ -255,10 +266,20 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
     for (var i = 1; i < points.length; i++) {
       bodyLen += (points[i] - points[i - 1]).distance;
     }
-    // Clear the whole body past the tip, then a little further off-board.
-    final exitLen = bodyLen + cell * 1.2;
+
+    final tip = points.last;
     final unit = _tipUnit(widget.arrow.direction);
-    points.add(points.last + unit * exitLen);
+    final boardW = widget.gridCols * cell;
+    final boardH = widget.gridRows * cell;
+    final clearPastEdge = switch (widget.arrow.direction) {
+      ArrowDirection.up => tip.dy + cell * 3.2,
+      ArrowDirection.down => (boardH - tip.dy) + cell * 3.2,
+      ArrowDirection.left => tip.dx + cell * 3.2,
+      ArrowDirection.right => (boardW - tip.dx) + cell * 3.2,
+    };
+    // bodyLen: slide fully onto the exit ray; clearPastEdge: leave the board.
+    final exitLen = bodyLen + clearPastEdge;
+    points.add(tip + unit * exitLen);
     return points;
   }
 
@@ -547,13 +568,30 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
               : bumping
                   ? _wrongBumpPolylinePoints()
                   : _polylinePoints();
-          painted = CustomPaint(
-            size: Size(boardW, boardH),
-            painter: ArrowPolylinePainter(
-              points: pts,
-              color: paintColor,
-              strokeWidth: strokeWidth,
-              direction: widget.arrow.direction,
+          // Expand canvas while escaping so off-board stroke isn't clipped.
+          final escapePad = (_exitStarted || bumping) ? cell * 5.5 : 0.0;
+          final paintW = boardW + escapePad * 2;
+          final paintH = boardH + escapePad * 2;
+          final shifted = escapePad > 0
+              ? [
+                  for (final p in pts)
+                    Offset(p.dx + escapePad, p.dy + escapePad),
+                ]
+              : pts;
+          painted = OverflowBox(
+            minWidth: boardW,
+            maxWidth: paintW,
+            minHeight: boardH,
+            maxHeight: paintH,
+            alignment: Alignment.center,
+            child: CustomPaint(
+              size: Size(paintW, paintH),
+              painter: ArrowPolylinePainter(
+                points: shifted,
+                color: paintColor,
+                strokeWidth: strokeWidth,
+                direction: widget.arrow.direction,
+              ),
             ),
           );
         } else {

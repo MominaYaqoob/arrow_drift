@@ -137,6 +137,7 @@ class ProgressRepository {
   static const String _ratePromptL5Key = 'has_shown_rate_prompt_l5';
   static const String _ratePromptL10Key = 'has_shown_rate_prompt_l10';
   static const String _ratePromptL11Key = 'has_shown_rate_prompt_l11';
+  static const String _ratePromptMilestonesKey = 'rate_prompt_milestones';
   static const String _nicknameKey = 'player_nickname';
   static const String _avatarIdKey = 'player_avatar_id';
 
@@ -147,15 +148,14 @@ class ProgressRepository {
     await _prefs.setBool(_ratePromptKey, value);
   }
 
-  /// Rate dialog after Level 11 (once). Legacy L5/L10 keys kept for old installs.
+  /// Rate dialog on levels 10, 20, 30… Once per milestone.
   bool hasShownRatePromptForLevel(int levelNumber) {
-    if (levelNumber == 11) {
-      return (_prefs.getBool(_ratePromptL11Key) ?? false) ||
-          getHasShownRatePrompt();
-    }
-    if (levelNumber == 5) {
-      return _prefs.getBool(_ratePromptL5Key) ?? false;
-    }
+    if (levelNumber < 10 || levelNumber % 10 != 0) return true;
+
+    final milestones =
+        _prefs.getStringList(_ratePromptMilestonesKey) ?? const [];
+    if (milestones.contains('$levelNumber')) return true;
+
     if (levelNumber == 10) {
       return (_prefs.getBool(_ratePromptL10Key) ?? false) ||
           getHasShownRatePrompt();
@@ -164,13 +164,23 @@ class ProgressRepository {
   }
 
   Future<void> setHasShownRatePromptForLevel(int levelNumber) async {
+    final key = '$levelNumber';
+    final milestones = [
+      ...(_prefs.getStringList(_ratePromptMilestonesKey) ?? const <String>[]),
+    ];
+    if (!milestones.contains(key)) {
+      milestones.add(key);
+      await _prefs.setStringList(_ratePromptMilestonesKey, milestones);
+    }
+    if (levelNumber == 10) {
+      await _prefs.setBool(_ratePromptL10Key, true);
+      await _prefs.setBool(_ratePromptKey, true);
+    }
+    if (levelNumber == 5) {
+      await _prefs.setBool(_ratePromptL5Key, true);
+    }
     if (levelNumber == 11) {
       await _prefs.setBool(_ratePromptL11Key, true);
-      await _prefs.setBool(_ratePromptKey, true);
-    } else if (levelNumber == 5) {
-      await _prefs.setBool(_ratePromptL5Key, true);
-    } else if (levelNumber == 10) {
-      await _prefs.setBool(_ratePromptL10Key, true);
       await _prefs.setBool(_ratePromptKey, true);
     }
   }

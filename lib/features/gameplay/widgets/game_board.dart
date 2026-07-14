@@ -168,6 +168,7 @@ class GameBoard extends StatelessWidget {
             ),
             child: FittedBox(
               fit: BoxFit.contain,
+              clipBehavior: Clip.none,
               child: boardStack,
             ),
           );
@@ -193,7 +194,8 @@ class GameBoard extends StatelessWidget {
               child: Container(
                 margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 padding: const EdgeInsets.all(14),
-                clipBehavior: Clip.antiAlias,
+                // Clip.none so escaping arrows can slide fully off the board.
+                clipBehavior: Clip.none,
                 decoration: BoxDecoration(
                   color: boardBg,
                   borderRadius: BorderRadius.circular(22),
@@ -238,7 +240,7 @@ class GameBoard extends StatelessWidget {
                 ),
               ],
             ),
-            clipBehavior: Clip.hardEdge,
+            clipBehavior: Clip.none,
             child: boardStack,
           ),
         );
@@ -251,6 +253,7 @@ class GameBoard extends StatelessWidget {
           child: Center(
             child: FittedBox(
               fit: BoxFit.contain,
+              clipBehavior: Clip.none,
               child: cardChild,
             ),
           ),

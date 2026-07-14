@@ -2,34 +2,36 @@ import 'package:flutter/material.dart';
 
 import 'package:arrow_drift/services/ads_service_impl.dart';
 
-/// Flip to `true` after plugging in a real ad SDK (AdMob / Unity Ads).
-/// While `false`, placeholders reserve layout space and ad calls stay no-op.
-const bool kAdsEnabled = false;
-
-/// App-wide ads façade. Swap [AdsServiceImpl] internals later — call sites stay.
+/// App-wide ads façade. Dummy timed ads for demo; swap impl for real AdMob later.
 abstract class AdsService {
   static AdsService get instance => AdsServiceImpl.instance;
 
-  /// SDK init. No-op until a real network is wired.
   Future<void> initialize();
 
-  /// Reserved banner slot (fixed [height]) — layout stays stable when ads go live.
+  /// Banner / strip dummy slot (layout reserved).
   Widget bannerPlaceholder({required double height});
 
-  /// Full-screen interstitial. No-op while [kAdsEnabled] is false.
-  Future<void> showInterstitial();
-
-  /// Rewarded ad for an extra hint when the player is out of hints.
-  /// Returns `true` when the player earned the reward.
-  /// While [kAdsEnabled] is false, returns `true` so the UX path can be tested.
-  Future<bool> showRewardedForHint();
-
-  /// In-feed / native slot (fixed [height]) for level-map lists.
+  /// Native / feed dummy slot.
   Widget nativeAdPlaceholder({required double height});
 
-  /// Call after a campaign level clear. Shows interstitial every 2nd clear.
-  Future<void> onLevelCleared();
+  /// Full-screen interstitial (dummy timed).
+  Future<void> showInterstitial(
+    BuildContext context, {
+    Duration duration = const Duration(seconds: 10),
+  });
 
-  /// Call when leaving gameplay for the map after a fail (out of lives).
-  Future<void> onReturnToMapAfterFail();
+  /// Rewarded for extra hint when hints are 0 (15s dummy).
+  Future<bool> showRewardedForHint(BuildContext context);
+
+  /// Rewarded for +1 life (15s dummy).
+  Future<bool> showRewardedForLives(BuildContext context);
+
+  /// After campaign clear — interstitial every 4 clears (10s).
+  Future<void> onLevelCleared(BuildContext context);
+
+  /// After daily challenge clear — interstitial every time (15s).
+  Future<void> onDailyChallengeCleared(BuildContext context);
+
+  /// Leaving gameplay after a fail.
+  Future<void> onReturnToMapAfterFail(BuildContext context);
 }

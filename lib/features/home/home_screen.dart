@@ -211,14 +211,15 @@ class _BrandBlock extends StatelessWidget {
   }
 }
 
-class _DailyChallengeCard extends StatelessWidget {
+class _DailyChallengeCard extends ConsumerWidget {
   const _DailyChallengeCard({required this.onPlay});
 
   final VoidCallback onPlay;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final today = _formatDate(DateTime.now());
+    final streak = ref.watch(currentStreakProvider).valueOrNull ?? 0;
 
     return Material(
       color: Colors.transparent,
@@ -264,6 +265,43 @@ class _DailyChallengeCard extends StatelessWidget {
                         fontSize: 17,
                         fontWeight: FontWeight.w800,
                         color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.22),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.local_fire_department_rounded,
+                            size: 14,
+                            color: streak > 0
+                                ? const Color(0xFFFFC857)
+                                : Colors.white.withValues(alpha: 0.75),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            streak > 0
+                                ? '$streak day streak'
+                                : 'No streak yet',
+                            style: AppTextStyles.label(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white.withValues(alpha: 0.95),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],

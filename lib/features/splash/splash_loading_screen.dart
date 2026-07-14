@@ -147,7 +147,7 @@ class _SplashLoadingScreenState extends State<SplashLoadingScreen>
                               offset: Offset(0, _bounceY(t, phase: 0)),
                               child: Transform.rotate(
                                 angle: _rollAngleA(t) * math.pi / 180,
-                                child: const _Die(pips: [0, 4, 8]),
+                                child: const _Die(teal: false),
                               ),
                             ),
                           ),
@@ -158,7 +158,7 @@ class _SplashLoadingScreenState extends State<SplashLoadingScreen>
                               offset: Offset(0, _bounceY(t, phase: 0.12)),
                               child: Transform.rotate(
                                 angle: _rollAngleB(t) * math.pi / 180,
-                                child: const _Die(pips: [0, 2, 4, 6, 8]),
+                                child: const _Die(teal: true),
                               ),
                             ),
                           ),
@@ -253,58 +253,39 @@ class _SplashLoadingScreenState extends State<SplashLoadingScreen>
 }
 
 class _Die extends StatelessWidget {
-  const _Die({required this.pips});
+  const _Die({this.teal = false});
 
-  final List<int> pips;
+  /// Cream (default) or app teal face — no pips.
+  final bool teal;
 
   @override
   Widget build(BuildContext context) {
+    final border = teal ? AppColors.accentTealDeep : const Color(0xFFC9BFAE);
+    final gradient = teal
+        ? const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [AppColors.accentTeal, AppColors.accentTealDeep],
+          )
+        : const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFFFFF9EF), Color(0xFFE8DFCF)],
+          );
+
     return Container(
       width: 52,
       height: 52,
-      padding: const EdgeInsets.all(9),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(13),
-        border: Border.all(color: const Color(0xFFC9BFAE)),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFFFF9EF), Color(0xFFE8DFCF)],
-        ),
+        border: Border.all(color: border),
+        gradient: gradient,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.35),
             blurRadius: 20,
             offset: const Offset(0, 12),
           ),
-        ],
-      ),
-      // Avoid GridView here — on some mobile GPUs nested scrollables clip
-      // sub-pixel circles during Transform.rotate and pips vanish.
-      child: Column(
-        children: [
-          for (var row = 0; row < 3; row++)
-            Expanded(
-              child: Row(
-                children: [
-                  for (var col = 0; col < 3; col++)
-                    Expanded(
-                      child: Center(
-                        child: pips.contains(row * 3 + col)
-                            ? Container(
-                                width: 7,
-                                height: 7,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFF1A2740),
-                                  shape: BoxShape.circle,
-                                ),
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                    ),
-                ],
-              ),
-            ),
         ],
       ),
     );

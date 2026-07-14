@@ -41,12 +41,56 @@ bool areAllArrowsRemoved(List<ArrowModel> arrows) {
   return arrows.every((arrow) => arrow.isRemoved);
 }
 
+/// Non-playable cells reachable from the grid **border** without crossing
+/// playable cells. Concave edges (heart dent) count as exterior escapes;
+/// closed interior holes (ring/donut) do **not** — rays skip through them.
+Set<String> computeExteriorEscapeKeys({
+  required List<List<bool>> shapeMask,
+  required int rows,
+  required int cols,
+}) {
+  bool playable(int r, int c) {
+    if (r < 0 || c < 0 || r >= rows || c >= cols) return false;
+    if (r >= shapeMask.length || c >= shapeMask[r].length) return false;
+    return shapeMask[r][c];
+  }
+
+  final exterior = <String>{};
+  final queue = <(int, int)>[];
+
+  void tryAdd(int r, int c) {
+    if (r < 0 || c < 0 || r >= rows || c >= cols) return;
+    final key = '$r:$c';
+    if (exterior.contains(key) || playable(r, c)) return;
+    exterior.add(key);
+    queue.add((r, c));
+  }
+
+  for (var r = 0; r < rows; r++) {
+    tryAdd(r, 0);
+    tryAdd(r, cols - 1);
+  }
+  for (var c = 0; c < cols; c++) {
+    tryAdd(0, c);
+    tryAdd(rows - 1, c);
+  }
+
+  var head = 0;
+  while (head < queue.length) {
+    final (r, c) = queue[head++];
+    tryAdd(r - 1, c);
+    tryAdd(r + 1, c);
+    tryAdd(r, c - 1);
+    tryAdd(r, c + 1);
+  }
+  return exterior;
+}
+
 /// Returns true when another active arrow occupies a cell on [arrow]'s escape ray.
 ///
 /// Escape ray starts at the tip and walks in [arrow.direction] until off-board.
-/// When [shapeMask] is set, outside-mask cells are non-existent: the ray skips
-/// them (does not treat them as empty playable space) and only checks occupancy
-/// on in-mask cells.
+/// With [shapeMask]: exterior outside-silhouette = escaped; interior holes
+/// (donut centers) are skipped so tips cannot "escape" into the hole.
 bool isArrowBlocked({
   required ArrowModel arrow,
   required List<ArrowModel> arrows,
@@ -65,6 +109,14 @@ bool isArrowBlocked({
     }
   }
 
+  final exterior = shapeMask == null
+      ? null
+      : computeExteriorEscapeKeys(
+          shapeMask: shapeMask,
+          rows: gridRows,
+          cols: gridCols,
+        );
+
   final (dRow, dCol) = switch (arrow.direction) {
     ArrowDirection.up => (-1, 0),
     ArrowDirection.down => (1, 0),
@@ -81,6 +133,7 @@ bool isArrowBlocked({
             c >= shapeMask[r].length ||
             !shapeMask[r][c]);
     if (outsideMask) {
+      if (exterior == null || exterior.contains('$r:$c')) return false;
       r += dRow;
       c += dCol;
       continue;
@@ -112,6 +165,14 @@ bool isArrowBlocked({
     }
   }
 
+  final exterior = shapeMask == null
+      ? null
+      : computeExteriorEscapeKeys(
+          shapeMask: shapeMask,
+          rows: gridRows,
+          cols: gridCols,
+        );
+
   final (dRow, dCol) = switch (arrow.direction) {
     ArrowDirection.up => (-1, 0),
     ArrowDirection.down => (1, 0),
@@ -128,6 +189,7 @@ bool isArrowBlocked({
             c >= shapeMask[r].length ||
             !shapeMask[r][c]);
     if (outsideMask) {
+      if (exterior == null || exterior.contains('$r:$c')) return null;
       r += dRow;
       c += dCol;
       continue;

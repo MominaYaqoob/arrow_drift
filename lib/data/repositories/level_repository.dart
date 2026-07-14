@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:arrow_drift/data/models/arrow_model.dart';
 import 'package:arrow_drift/data/models/level_model.dart';
+import 'package:arrow_drift/data/repositories/shape_masks.dart';
 import 'package:arrow_drift/features/gameplay/game_controller.dart';
 
 /// Result of [generateSolvableLevel], including placement order for tests.
@@ -215,6 +216,56 @@ SolvableLevelResult generateSolvableLevelWithBias({
   };
 }
 
+/// True when non-consecutive body cells share an edge (tight U-turn / hug).
+bool _polylineSelfHugs(List<GridCell> path) {
+  for (var i = 0; i < path.length; i++) {
+    for (var j = i + 2; j < path.length; j++) {
+      final a = path[i];
+      final b = path[j];
+      if ((a.row - b.row).abs() + (a.col - b.col).abs() == 1) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/// Tips on one row/col aiming at each other (▸ … ◂) confuse escape reading.
+bool _tipsFaceEachOtherOnLine({
+  required int tipR,
+  required int tipC,
+  required ArrowDirection direction,
+  required List<ArrowModel> others,
+}) {
+  for (final other in others) {
+    // Same row: ◂——▸  or  ▸——◂
+    if (tipR == other.row && tipC != other.col) {
+      final newLeft = tipC < other.col;
+      final facing =
+          (newLeft &&
+              direction == ArrowDirection.right &&
+              other.direction == ArrowDirection.left) ||
+          (!newLeft &&
+              direction == ArrowDirection.left &&
+              other.direction == ArrowDirection.right);
+      if (facing) return true;
+    }
+    // Same column: ▲/▼ pair aimed at each other.
+    if (tipC == other.col && tipR != other.row) {
+      final newAbove = tipR < other.row;
+      final facing =
+          (newAbove &&
+              direction == ArrowDirection.down &&
+              other.direction == ArrowDirection.up) ||
+          (!newAbove &&
+              direction == ArrowDirection.up &&
+              other.direction == ArrowDirection.down);
+      if (facing) return true;
+    }
+  }
+  return false;
+}
+
 /// Builds a solvable nested polyline board (bent snakes like campaign Expert).
 ///
 /// Places arrows **backward** (each new arrow is free against already-placed
@@ -234,6 +285,7 @@ SolvableLevelResult generateNestedSolvableLevel(
   int minPathLen = 3,
   int maxPathLen = 14,
   int minArrows = 28,
+  List<List<bool>>? shapeMask,
 }) {
   final random = Random(
     seed ?? levelNumber * 9973 + rows * 131 + cols * 17,
@@ -241,22 +293,59 @@ SolvableLevelResult generateNestedSolvableLevel(
   final occupied = <String>{};
   final arrows = <ArrowModel>[];
   final placementOrder = <String>[];
-  final targetCells = (rows * cols * fillTarget).floor();
 
   String cellKey(int r, int c) => '$r:$c';
 
   bool inBounds(int r, int c) =>
       r >= 0 && c >= 0 && r < rows && c < cols;
 
-  bool isEmpty(int r, int c) =>
-      inBounds(r, c) && !occupied.contains(cellKey(r, c));
+  bool inMask(int r, int c) {
+    if (shapeMask == null) return true;
+    if (r < 0 ||
+        c < 0 ||
+        r >= shapeMask.length ||
+        c >= shapeMask[r].length) {
+      return false;
+    }
+    return shapeMask[r][c];
+  }
 
-  /// Escape ray clear using the live occupied set (O(grid) — not O(all paths)).
+  bool isPlayable(int r, int c) => inBounds(r, c) && inMask(r, c);
+
+  bool isEmpty(int r, int c) =>
+      isPlayable(r, c) && !occupied.contains(cellKey(r, c));
+
+  var playableCount = 0;
+  for (var r = 0; r < rows; r++) {
+    for (var c = 0; c < cols; c++) {
+      if (isPlayable(r, c)) playableCount++;
+    }
+  }
+  final targetCells = (playableCount * fillTarget).floor();
+
+  final exterior = shapeMask == null
+      ? null
+      : computeExteriorEscapeKeys(
+          shapeMask: shapeMask,
+          rows: rows,
+          cols: cols,
+        );
+
+  /// Escape ray: occupied blocks; true exterior / off-grid = free.
+  /// Interior holes (donut) are skipped — tips cannot dump into the hole.
   bool escapeClear(int tipR, int tipC, ArrowDirection direction) {
     final (dr, dc) = _dirDelta(direction);
     var r = tipR + dr;
     var c = tipC + dc;
     while (inBounds(r, c)) {
+      if (!inMask(r, c)) {
+        if (exterior == null || exterior.contains(cellKey(r, c))) {
+          return true;
+        }
+        r += dr;
+        c += dc;
+        continue;
+      }
       if (occupied.contains(cellKey(r, c))) return false;
       r += dr;
       c += dc;
@@ -265,6 +354,8 @@ SolvableLevelResult generateNestedSolvableLevel(
   }
 
   /// Grow tail←tip so the last step into the tip matches [direction].
+  /// Rejects hairpin / self-hugging folds that confuse path reading.
+  /// Always at least tip + one shaft cell (no floating lone triangles).
   List<GridCell>? growPath({
     required int tipR,
     required int tipC,
@@ -272,9 +363,8 @@ SolvableLevelResult generateNestedSolvableLevel(
     required int targetLen,
     required int minLen,
   }) {
-    if (targetLen <= 1) {
-      return [GridCell(tipR, tipC)];
-    }
+    final want = targetLen < 2 ? 2 : targetLen;
+    final need = minLen < 2 ? 2 : minLen;
 
     final (dr, dc) = _dirDelta(direction);
     final rev = <GridCell>[GridCell(tipR, tipC)];
@@ -288,16 +378,28 @@ SolvableLevelResult generateNestedSolvableLevel(
     var growDr = -dr;
     var growDc = -dc;
 
-    while (rev.length < targetLen) {
-      // Weighted picks without building a big list every step.
+    /// New cell may only touch the current head — not earlier body cells.
+    bool hugsOwnBody(int nr, int nc) {
+      for (final cell in rev) {
+        if (cell.row == r && cell.col == c) continue;
+        if ((cell.row - nr).abs() + (cell.col - nc).abs() == 1) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    while (rev.length < want) {
       final candidates = <(int, int, int, int)>[];
       void consider(int ndr, int ndc) {
         final nr = r + ndr;
         final nc = c + ndc;
         final k = cellKey(nr, nc);
         if (!inBounds(nr, nc) ||
+            !inMask(nr, nc) ||
             occupied.contains(k) ||
-            used.contains(k)) {
+            used.contains(k) ||
+            hugsOwnBody(nr, nc)) {
           return;
         }
         candidates.add((nr, nc, ndr, ndc));
@@ -315,11 +417,11 @@ SolvableLevelResult generateNestedSolvableLevel(
       if (candidates.length == 1) {
         pick = candidates.first;
       } else {
-        // ~70% prefer straight if present.
+        // Prefer straight runs — fewer sharp folds.
         final straight = candidates.first;
         final isStraight =
             straight.$3 == growDr && straight.$4 == growDc;
-        if (isStraight && random.nextDouble() < 0.7) {
+        if (isStraight && random.nextDouble() < 0.82) {
           pick = straight;
         } else {
           pick = candidates[random.nextInt(candidates.length)];
@@ -334,8 +436,10 @@ SolvableLevelResult generateNestedSolvableLevel(
       used.add(cellKey(r, c));
     }
 
-    if (rev.length < minLen) return null;
-    return rev.reversed.toList(growable: false);
+    if (rev.length < need) return null;
+    final path = rev.reversed.toList(growable: false);
+    if (_polylineSelfHugs(path)) return null;
+    return path;
   }
 
   void placeArrow(ArrowModel arrow) {
@@ -359,6 +463,14 @@ SolvableLevelResult generateNestedSolvableLevel(
     for (var i = 0; i < dirs.length; i++) {
       final direction = dirs[(start + i) % dirs.length];
       if (!escapeClear(tipR, tipC, direction)) continue;
+      if (_tipsFaceEachOtherOnLine(
+        tipR: tipR,
+        tipC: tipC,
+        direction: direction,
+        others: arrows,
+      )) {
+        continue;
+      }
 
       final path = growPath(
         tipR: tipR,
@@ -391,8 +503,14 @@ SolvableLevelResult generateNestedSolvableLevel(
     final before = occupied.length;
     final tipR = random.nextInt(rows);
     final tipC = random.nextInt(cols);
-    final len = minPathLen + random.nextInt(maxPathLen - minPathLen + 1);
-    tryPlaceAt(tipR: tipR, tipC: tipC, targetLen: len, minLen: minPathLen);
+    final span = (maxPathLen - minPathLen).clamp(0, 99);
+    final len = minPathLen + (span == 0 ? 0 : random.nextInt(span + 1));
+    tryPlaceAt(
+      tipR: tipR,
+      tipC: tipC,
+      targetLen: len < 2 ? 2 : len,
+      minLen: minPathLen < 2 ? 2 : minPathLen,
+    );
     if (occupied.length == before) {
       stall++;
       if (stall > 400) break;
@@ -401,7 +519,7 @@ SolvableLevelResult generateNestedSolvableLevel(
     }
   }
 
-  // Phase 2: mop up with short polylines / singles.
+  // Phase 2: mop up with short shafts (never lone tip triangles).
   safety = 0;
   stall = 0;
   while (occupied.length < targetCells && safety < 2500) {
@@ -409,8 +527,8 @@ SolvableLevelResult generateNestedSolvableLevel(
     final before = occupied.length;
     final tipR = random.nextInt(rows);
     final tipC = random.nextInt(cols);
-    final len = 1 + random.nextInt(3);
-    tryPlaceAt(tipR: tipR, tipC: tipC, targetLen: len, minLen: 1);
+    final len = 2 + random.nextInt(3);
+    tryPlaceAt(tipR: tipR, tipC: tipC, targetLen: len, minLen: 2);
     if (occupied.length == before) {
       stall++;
       if (stall > 300) break;
@@ -419,11 +537,11 @@ SolvableLevelResult generateNestedSolvableLevel(
     }
   }
 
-  // Phase 3: scan leftovers once (no heavy retries).
+  // Phase 3: leftovers as short polylines (tip + shaft); leave gaps if needed.
   for (var r = 0; r < rows; r++) {
     for (var c = 0; c < cols; c++) {
       if (!isEmpty(r, c)) continue;
-      tryPlaceAt(tipR: r, tipC: c, targetLen: 1, minLen: 1);
+      tryPlaceAt(tipR: r, tipC: c, targetLen: 3, minLen: 2);
     }
   }
 
@@ -443,9 +561,90 @@ SolvableLevelResult generateNestedSolvableLevel(
       heartsAllowed: hearts,
       hintsAllowed: hints,
       difficulty: difficulty,
+      shapeMask: shapeMask,
     ),
     placementOrder: List<String>.unmodifiable(placementOrder),
   );
+}
+
+/// Upright triangle silhouette (apex top-center → full base).
+List<List<bool>> uprightTriangleMask(int rows, int cols) {
+  final mid = (cols - 1) / 2.0;
+  return List.generate(rows, (r) {
+    final t = rows <= 1 ? 1.0 : r / (rows - 1);
+    final half = t * mid;
+    return List.generate(cols, (c) => (c - mid).abs() <= half + 1e-6);
+  });
+}
+
+/// Inverted triangle (wide top → apex bottom).
+List<List<bool>> invertedTriangleMask(int rows, int cols) {
+  final mid = (cols - 1) / 2.0;
+  return List.generate(rows, (r) {
+    final t = rows <= 1 ? 1.0 : 1.0 - r / (rows - 1);
+    final half = t * mid;
+    return List.generate(cols, (c) => (c - mid).abs() <= half + 1e-6);
+  });
+}
+
+/// Diamond / rhombus silhouette.
+List<List<bool>> diamondMask(int rows, int cols) {
+  final cy = (rows - 1) / 2.0;
+  final cx = (cols - 1) / 2.0;
+  return List.generate(rows, (r) {
+    return List.generate(cols, (c) {
+      final nr = (r - cy).abs() / (cy == 0 ? 1 : cy);
+      final nc = (c - cx).abs() / (cx == 0 ? 1 : cx);
+      return nr + nc <= 1.02;
+    });
+  });
+}
+
+/// Rounded hexagon-ish blob (good for dense Expert nests).
+List<List<bool>> hexagonMask(int rows, int cols) {
+  final cy = (rows - 1) / 2.0;
+  final cx = (cols - 1) / 2.0;
+  final ry = cy * 0.98;
+  final rx = cx * 0.98;
+  return List.generate(rows, (r) {
+    return List.generate(cols, (c) {
+      final dy = (r - cy).abs() / (ry == 0 ? 1 : ry);
+      final dx = (c - cx).abs() / (rx == 0 ? 1 : rx);
+      // Flat-top hex approximation.
+      return dy <= 1.0 && dx <= 1.0 && (dx * 0.55 + dy) <= 1.08;
+    });
+  });
+}
+
+/// Soft circle / oval board.
+List<List<bool>> circleMask(int rows, int cols) {
+  final cy = (rows - 1) / 2.0;
+  final cx = (cols - 1) / 2.0;
+  final ry = cy * 0.98;
+  final rx = cx * 0.98;
+  return List.generate(rows, (r) {
+    return List.generate(cols, (c) {
+      final ny = (r - cy) / (ry == 0 ? 1 : ry);
+      final nx = (c - cx) / (rx == 0 ? 1 : rx);
+      return nx * nx + ny * ny <= 1.02;
+    });
+  });
+}
+
+/// 4-point star (complex Expert silhouette).
+List<List<bool>> starMask(int rows, int cols) {
+  final cy = (rows - 1) / 2.0;
+  final cx = (cols - 1) / 2.0;
+  return List.generate(rows, (r) {
+    return List.generate(cols, (c) {
+      final dy = (r - cy).abs() / (cy == 0 ? 1 : cy);
+      final dx = (c - cx).abs() / (cx == 0 ? 1 : cx);
+      // Cross arms + diamond center.
+      final inCross = (dx <= 0.38 && dy <= 1.0) || (dy <= 0.38 && dx <= 1.0);
+      final inDiamond = dx + dy <= 0.72;
+      return inCross || inDiamond;
+    });
+  });
 }
 
 /// Campaign levels 1–13 built as nested polyline boards.
@@ -499,44 +698,218 @@ class LevelRepository {
         900000000 + day.year * 10000 + day.month * 100 + day.day;
     return _dailyCache.putIfAbsent(
       levelNumber,
-      () {
-        // One fast nested pass first (16×15). Fallback only if needed.
-        for (final attempt in const [
-          (rows: 16, cols: 15, minArrows: 30),
-          (rows: 14, cols: 14, minArrows: 24),
-        ]) {
-          try {
-            return generateNestedSolvableLevel(
-              levelNumber,
-              attempt.rows,
-              attempt.cols,
-              3,
-              2,
-              difficulty: LevelDifficulty.expert,
-              seed: levelNumber + attempt.rows * 19 + attempt.cols * 7,
-              minArrows: attempt.minArrows,
-            ).level;
-          } on StateError {
-            continue;
-          }
-        }
-        return generateNestedSolvableLevel(
-          levelNumber,
-          12,
-          12,
-          3,
-          2,
-          difficulty: LevelDifficulty.expert,
-          seed: levelNumber,
-          minArrows: 18,
-          fillTarget: 0.85,
-        ).level;
-      },
+      () => _buildDailyChallengeLevel(day, levelNumber),
     );
   }
 
+  /// Daily puzzles are calendar-seeded (one unique board per day, unbounded).
+  /// Always a **shaped** Expert nest, sized above late campaign (L14–L20).
+  /// Rotates through 16 silhouettes so consecutive days feel different.
+  static LevelModel _buildDailyChallengeLevel(DateTime day, int levelNumber) {
+    final dayOfYear = day.difference(DateTime(day.year)).inDays;
+    final shapeIndex = (dayOfYear + day.year * 5 + day.month * 3) % 16;
+
+    // Bigger + denser than campaign shaped Experts (~17–19 grids / ~28 arrows).
+    final config = switch (shapeIndex) {
+      0 => (
+          rows: 22,
+          cols: 22,
+          mask: generateHeartShapeMask(22),
+          fbRows: 18,
+          fbCols: 18,
+          fbMask: generateHeartShapeMask(18),
+        ),
+      1 => (
+          rows: 21,
+          cols: 23,
+          mask: starMask(21, 23),
+          fbRows: 17,
+          fbCols: 19,
+          fbMask: starMask(17, 19),
+        ),
+      2 => (
+          rows: 22,
+          cols: 22,
+          mask: ringMask(22, 22),
+          fbRows: 18,
+          fbCols: 18,
+          fbMask: ringMask(18, 18),
+        ),
+      3 => (
+          rows: 21,
+          cols: 21,
+          mask: cloverMask(21, 21),
+          fbRows: 17,
+          fbCols: 17,
+          fbMask: cloverMask(17, 17),
+        ),
+      4 => (
+          rows: 22,
+          cols: 20,
+          mask: hourglassMask(22, 20),
+          fbRows: 18,
+          fbCols: 16,
+          fbMask: hourglassMask(18, 16),
+        ),
+      5 => (
+          rows: 21,
+          cols: 22,
+          mask: crescentMask(21, 22),
+          fbRows: 17,
+          fbCols: 18,
+          fbMask: crescentMask(17, 18),
+        ),
+      6 => (
+          rows: 22,
+          cols: 22,
+          mask: diamondMask(22, 22),
+          fbRows: 18,
+          fbCols: 18,
+          fbMask: diamondMask(18, 18),
+        ),
+      7 => (
+          rows: 21,
+          cols: 23,
+          mask: hexagonMask(21, 23),
+          fbRows: 17,
+          fbCols: 19,
+          fbMask: hexagonMask(17, 19),
+        ),
+      8 => (
+          rows: 22,
+          cols: 23,
+          mask: invertedTriangleMask(22, 23),
+          fbRows: 18,
+          fbCols: 19,
+          fbMask: invertedTriangleMask(18, 19),
+        ),
+      9 => (
+          rows: 22,
+          cols: 22,
+          mask: circleMask(22, 22),
+          fbRows: 18,
+          fbCols: 18,
+          fbMask: circleMask(18, 18),
+        ),
+      10 => (
+          rows: 21,
+          cols: 21,
+          mask: plusMask(21, 21),
+          fbRows: 17,
+          fbCols: 17,
+          fbMask: plusMask(17, 17),
+        ),
+      11 => (
+          rows: 22,
+          cols: 20,
+          mask: shieldMask(22, 20),
+          fbRows: 18,
+          fbCols: 16,
+          fbMask: shieldMask(18, 16),
+        ),
+      12 => (
+          rows: 21,
+          cols: 21,
+          mask: octagonMask(21, 21),
+          fbRows: 17,
+          fbCols: 17,
+          fbMask: octagonMask(17, 17),
+        ),
+      13 => (
+          rows: 20,
+          cols: 23,
+          mask: stadiumMask(20, 23),
+          fbRows: 16,
+          fbCols: 19,
+          fbMask: stadiumMask(16, 19),
+        ),
+      14 => (
+          rows: 22,
+          cols: 22,
+          mask: flowerMask(22, 22),
+          fbRows: 18,
+          fbCols: 18,
+          fbMask: flowerMask(18, 18),
+        ),
+      _ => (
+          rows: 18,
+          cols: 23,
+          mask: infinityMask(18, 23),
+          fbRows: 15,
+          fbCols: 19,
+          fbMask: infinityMask(15, 19),
+        ),
+    };
+
+    const minArrows = 34;
+    const softMin = 24;
+    StateError? lastError;
+
+    for (var attempt = 0; attempt < 36; attempt++) {
+      try {
+        return generateNestedSolvableLevel(
+          levelNumber,
+          config.rows,
+          config.cols,
+          3,
+          2,
+          difficulty: LevelDifficulty.expert,
+          seed: levelNumber + attempt * 211 + shapeIndex * 47,
+          shapeMask: config.mask,
+          fillTarget: 0.88,
+          minPathLen: 3,
+          maxPathLen: 18,
+          minArrows: minArrows,
+        ).level;
+      } on StateError catch (e) {
+        lastError = e;
+      }
+    }
+
+    for (var attempt = 0; attempt < 24; attempt++) {
+      try {
+        return generateNestedSolvableLevel(
+          levelNumber,
+          config.fbRows,
+          config.fbCols,
+          3,
+          2,
+          difficulty: LevelDifficulty.expert,
+          seed: levelNumber + 9000 + attempt * 131,
+          shapeMask: config.fbMask,
+          fillTarget: 0.84,
+          minPathLen: 3,
+          maxPathLen: 16,
+          minArrows: softMin,
+        ).level;
+      } on StateError catch (e) {
+        lastError = e;
+      }
+    }
+
+    // Last-resort medium nest (still shaped, still Expert).
+    try {
+      return generateNestedSolvableLevel(
+        levelNumber,
+        16,
+        16,
+        3,
+        2,
+        difficulty: LevelDifficulty.expert,
+        seed: levelNumber,
+        shapeMask: circleMask(16, 16),
+        fillTarget: 0.82,
+        minPathLen: 2,
+        maxPathLen: 14,
+        minArrows: 18,
+      ).level;
+    } on StateError catch (e) {
+      throw lastError ?? e;
+    }
+  }
+
   static List<SolvableLevelResult> _buildCampaignLevels() {
-    // L1 tutorial, L2–L13 nested / sparse polylines.
+    // L1 tutorial, L2–L13 nested, L14–L20 shaped, L21–L30 harder shaped Experts.
     return [
       _tutorialLevel1(),
       _nestedLevel2(),
@@ -551,6 +924,23 @@ class LevelRepository {
       _nestedLevel11(),
       _nestedLevel12(),
       _nestedLevel13(),
+      _nestedLevel14(),
+      _nestedLevel15(),
+      _nestedLevel16(),
+      _nestedLevel17(),
+      _nestedLevel18(),
+      _nestedLevel19(),
+      _nestedLevel20(),
+      _nestedLevel21(),
+      _nestedLevel22(),
+      _nestedLevel23(),
+      _nestedLevel24(),
+      _nestedLevel25(),
+      _nestedLevel26(),
+      _nestedLevel27(),
+      _nestedLevel28(),
+      _nestedLevel29(),
+      _nestedLevel30(),
     ];
   }
 
@@ -2131,6 +2521,354 @@ class LevelRepository {
         '13-OUTD', '13-OUTC', '13-OUTB', '13-OUTA',
       ],
     );
+  }
+
+  /// Level 14 — Expert triangle nest (board silhouette is a △, not a square).
+  static SolvableLevelResult _nestedLevel14() {
+    return _shapedExpertLevel(
+      levelNumber: 14,
+      rows: 16,
+      cols: 17,
+      mask: uprightTriangleMask(16, 17),
+      minArrows: 26,
+      maxPathLen: 13,
+      fillTarget: 0.86,
+      fallbackRows: 14,
+      fallbackCols: 15,
+      fallbackMask: uprightTriangleMask(14, 15),
+    );
+  }
+
+  /// Level 15 — Expert diamond nest.
+  static SolvableLevelResult _nestedLevel15() {
+    return _shapedExpertLevel(
+      levelNumber: 15,
+      rows: 17,
+      cols: 17,
+      mask: diamondMask(17, 17),
+      minArrows: 26,
+      maxPathLen: 14,
+      fillTarget: 0.86,
+      fallbackRows: 15,
+      fallbackCols: 15,
+      fallbackMask: diamondMask(15, 15),
+    );
+  }
+
+  /// Level 16 — Expert hexagon nest.
+  static SolvableLevelResult _nestedLevel16() {
+    return _shapedExpertLevel(
+      levelNumber: 16,
+      rows: 17,
+      cols: 19,
+      mask: hexagonMask(17, 19),
+      minArrows: 28,
+      maxPathLen: 15,
+      fillTarget: 0.86,
+      fallbackRows: 15,
+      fallbackCols: 17,
+      fallbackMask: hexagonMask(15, 17),
+    );
+  }
+
+  /// Level 17 — Expert heart silhouette nest.
+  static SolvableLevelResult _nestedLevel17() {
+    return _shapedExpertLevel(
+      levelNumber: 17,
+      rows: 18,
+      cols: 18,
+      mask: generateHeartShapeMask(18),
+      minArrows: 28,
+      maxPathLen: 15,
+      fillTarget: 0.86,
+      fallbackRows: 16,
+      fallbackCols: 16,
+      fallbackMask: generateHeartShapeMask(16),
+    );
+  }
+
+  /// Level 18 — Expert inverted triangle.
+  static SolvableLevelResult _nestedLevel18() {
+    return _shapedExpertLevel(
+      levelNumber: 18,
+      rows: 17,
+      cols: 19,
+      mask: invertedTriangleMask(17, 19),
+      minArrows: 28,
+      maxPathLen: 15,
+      fillTarget: 0.86,
+      fallbackRows: 15,
+      fallbackCols: 17,
+      fallbackMask: invertedTriangleMask(15, 17),
+    );
+  }
+
+  /// Level 19 — Expert circle nest.
+  static SolvableLevelResult _nestedLevel19() {
+    return _shapedExpertLevel(
+      levelNumber: 19,
+      rows: 18,
+      cols: 18,
+      mask: circleMask(18, 18),
+      minArrows: 30,
+      maxPathLen: 16,
+      fillTarget: 0.86,
+      fallbackRows: 16,
+      fallbackCols: 16,
+      fallbackMask: circleMask(16, 16),
+    );
+  }
+
+  /// Level 20 — Expert star nest (densest shaped board).
+  static SolvableLevelResult _nestedLevel20() {
+    return _shapedExpertLevel(
+      levelNumber: 20,
+      rows: 19,
+      cols: 19,
+      mask: starMask(19, 19),
+      minArrows: 28,
+      maxPathLen: 16,
+      fillTarget: 0.86,
+      fallbackRows: 17,
+      fallbackCols: 17,
+      fallbackMask: starMask(17, 17),
+    );
+  }
+
+  /// Level 21 — Expert thick ring (readable donut, denser than thin ring).
+  static SolvableLevelResult _nestedLevel21() {
+    return _shapedExpertLevel(
+      levelNumber: 21,
+      rows: 19,
+      cols: 19,
+      mask: thickRingMask(19, 19),
+      minArrows: 30,
+      maxPathLen: 14,
+      fillTarget: 0.88,
+      fallbackRows: 17,
+      fallbackCols: 17,
+      fallbackMask: thickRingMask(17, 17),
+    );
+  }
+
+  /// Level 22 — Expert four-petal clover.
+  static SolvableLevelResult _nestedLevel22() {
+    return _shapedExpertLevel(
+      levelNumber: 22,
+      rows: 21,
+      cols: 21,
+      mask: cloverMask(21, 21),
+      minArrows: 28,
+      maxPathLen: 17,
+      fillTarget: 0.85,
+      fallbackRows: 18,
+      fallbackCols: 18,
+      fallbackMask: cloverMask(18, 18),
+    );
+  }
+
+  /// Level 23 — Expert hourglass (pinched waist).
+  static SolvableLevelResult _nestedLevel23() {
+    return _shapedExpertLevel(
+      levelNumber: 23,
+      rows: 22,
+      cols: 19,
+      mask: hourglassMask(22, 19),
+      minArrows: 28,
+      maxPathLen: 17,
+      fillTarget: 0.85,
+      fallbackRows: 18,
+      fallbackCols: 16,
+      fallbackMask: hourglassMask(18, 16),
+    );
+  }
+
+  /// Level 24 — Expert crescent moon.
+  static SolvableLevelResult _nestedLevel24() {
+    return _shapedExpertLevel(
+      levelNumber: 24,
+      rows: 21,
+      cols: 22,
+      mask: crescentMask(21, 22),
+      minArrows: 26,
+      maxPathLen: 17,
+      fillTarget: 0.84,
+      fallbackRows: 17,
+      fallbackCols: 18,
+      fallbackMask: crescentMask(17, 18),
+    );
+  }
+
+  /// Level 25 — Expert plus / cross arms.
+  static SolvableLevelResult _nestedLevel25() {
+    return _shapedExpertLevel(
+      levelNumber: 25,
+      rows: 21,
+      cols: 21,
+      mask: plusMask(21, 21),
+      minArrows: 26,
+      maxPathLen: 17,
+      fillTarget: 0.85,
+      fallbackRows: 17,
+      fallbackCols: 17,
+      fallbackMask: plusMask(17, 17),
+    );
+  }
+
+  /// Level 26 — Expert shield / teardrop.
+  static SolvableLevelResult _nestedLevel26() {
+    return _shapedExpertLevel(
+      levelNumber: 26,
+      rows: 22,
+      cols: 20,
+      mask: shieldMask(22, 20),
+      minArrows: 30,
+      maxPathLen: 17,
+      fillTarget: 0.85,
+      fallbackRows: 18,
+      fallbackCols: 16,
+      fallbackMask: shieldMask(18, 16),
+    );
+  }
+
+  /// Level 27 — Expert octagon.
+  static SolvableLevelResult _nestedLevel27() {
+    return _shapedExpertLevel(
+      levelNumber: 27,
+      rows: 21,
+      cols: 21,
+      mask: octagonMask(21, 21),
+      minArrows: 30,
+      maxPathLen: 18,
+      fillTarget: 0.86,
+      fallbackRows: 18,
+      fallbackCols: 18,
+      fallbackMask: octagonMask(18, 18),
+    );
+  }
+
+  /// Level 28 — Expert stadium / pill.
+  static SolvableLevelResult _nestedLevel28() {
+    return _shapedExpertLevel(
+      levelNumber: 28,
+      rows: 20,
+      cols: 24,
+      mask: stadiumMask(20, 24),
+      minArrows: 30,
+      maxPathLen: 18,
+      fillTarget: 0.86,
+      fallbackRows: 16,
+      fallbackCols: 20,
+      fallbackMask: stadiumMask(16, 20),
+    );
+  }
+
+  /// Level 29 — Expert six-petal flower.
+  static SolvableLevelResult _nestedLevel29() {
+    return _shapedExpertLevel(
+      levelNumber: 29,
+      rows: 22,
+      cols: 22,
+      mask: flowerMask(22, 22),
+      minArrows: 28,
+      maxPathLen: 17,
+      fillTarget: 0.85,
+      fallbackRows: 18,
+      fallbackCols: 18,
+      fallbackMask: flowerMask(18, 18),
+    );
+  }
+
+  /// Level 30 — Expert infinity / figure-eight (finale nest).
+  static SolvableLevelResult _nestedLevel30() {
+    return _shapedExpertLevel(
+      levelNumber: 30,
+      rows: 20,
+      cols: 24,
+      mask: infinityMask(20, 24),
+      minArrows: 30,
+      maxPathLen: 18,
+      fillTarget: 0.86,
+      fallbackRows: 16,
+      fallbackCols: 20,
+      fallbackMask: infinityMask(16, 20),
+    );
+  }
+
+  /// Shared builder for L14–L30 shaped Expert nests (solvable by construction).
+  static SolvableLevelResult _shapedExpertLevel({
+    required int levelNumber,
+    required int rows,
+    required int cols,
+    required List<List<bool>> mask,
+    required int minArrows,
+    required int maxPathLen,
+    required double fillTarget,
+    required int fallbackRows,
+    required int fallbackCols,
+    required List<List<bool>> fallbackMask,
+  }) {
+    StateError? lastError;
+    for (var attempt = 0; attempt < 80; attempt++) {
+      try {
+        return generateNestedSolvableLevel(
+          levelNumber,
+          rows,
+          cols,
+          3,
+          1,
+          difficulty: LevelDifficulty.expert,
+          seed: levelNumber * 9973 + attempt * 173 + rows * 19,
+          shapeMask: mask,
+          fillTarget: fillTarget,
+          minPathLen: 3,
+          maxPathLen: maxPathLen,
+          minArrows: minArrows,
+        );
+      } on StateError catch (e) {
+        lastError = e;
+      }
+    }
+    final softMin = (minArrows * 0.5).round().clamp(14, minArrows);
+    for (var attempt = 0; attempt < 40; attempt++) {
+      try {
+        return generateNestedSolvableLevel(
+          levelNumber,
+          fallbackRows,
+          fallbackCols,
+          3,
+          1,
+          difficulty: LevelDifficulty.expert,
+          seed: levelNumber * 7919 + attempt * 97 + 42,
+          shapeMask: fallbackMask,
+          fillTarget: (fillTarget - 0.08).clamp(0.75, 0.95),
+          minPathLen: 2,
+          maxPathLen: (maxPathLen - 3).clamp(8, 14),
+          minArrows: softMin,
+        );
+      } on StateError catch (e) {
+        lastError = e;
+      }
+    }
+    // Ultra-soft last resort (same silhouette, easier fill targets).
+    try {
+      return generateNestedSolvableLevel(
+        levelNumber,
+        fallbackRows,
+        fallbackCols,
+        3,
+        1,
+        difficulty: LevelDifficulty.expert,
+        seed: levelNumber * 4243,
+        shapeMask: fallbackMask,
+        fillTarget: 0.78,
+        minPathLen: 2,
+        maxPathLen: 12,
+        minArrows: 14,
+      );
+    } on StateError catch (e) {
+      throw lastError ?? e;
+    }
   }
 
 }

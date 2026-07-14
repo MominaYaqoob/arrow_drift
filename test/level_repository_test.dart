@@ -75,9 +75,9 @@ void main() {
   });
 
   group('LevelRepository', () {
-    test('exposes exactly 13 solvable campaign levels with expected params', () {
+    test('exposes exactly 30 solvable campaign levels with expected params', () {
       final repo = LevelRepository();
-      expect(repo.levels, hasLength(13));
+      expect(repo.levels, hasLength(30));
 
       // Level 1 tutorial
       expect(repo.levels[0].arrows, hasLength(3));
@@ -173,6 +173,83 @@ void main() {
       expect(l13.arrows, hasLength(44));
       expect(l13.difficulty.label, 'Expert');
       expect(l13.arrows.every((a) => a.path.isNotEmpty), isTrue);
+
+      final l14 = repo.levels[13];
+      expect(l14.levelNumber, 14);
+      expect(l14.difficulty.label, 'Expert');
+      expect(l14.shapeMask, isNotNull);
+      expect(l14.arrows.length, greaterThanOrEqualTo(20));
+      expect(l14.arrows.every((a) => a.path.isNotEmpty), isTrue);
+      expect(
+        l14.arrows.every((a) => a.path.length >= 2),
+        isTrue,
+        reason: 'L14 has orphan tip (path length < 2)',
+      );
+      // Every body cell sits inside the triangle silhouette.
+      for (final arrow in l14.arrows) {
+        for (final cell in arrow.path) {
+          expect(
+            l14.shapeMask![cell.row][cell.col],
+            isTrue,
+            reason: 'L14 arrow ${arrow.id} cell $cell outside triangle',
+          );
+        }
+      }
+
+      // L15–L30: shaped Expert + solvable + cells inside mask.
+      for (var i = 14; i < 30; i++) {
+        final level = repo.levels[i];
+        expect(level.levelNumber, i + 1);
+        expect(level.difficulty, LevelDifficulty.expert);
+        expect(level.shapeMask, isNotNull);
+        expect(level.arrows.length, greaterThanOrEqualTo(18));
+        expect(level.arrows.where((a) => a.isMultiCell).length,
+            greaterThanOrEqualTo(18));
+        // Nested Expert: no floating single-cell tip triangles.
+        expect(
+          level.arrows.every((a) => a.path.length >= 2),
+          isTrue,
+          reason: 'L${level.levelNumber} has orphan tip (path length < 2)',
+        );
+        for (final arrow in level.arrows) {
+          for (final cell in arrow.path) {
+            expect(
+              level.shapeMask![cell.row][cell.col],
+              isTrue,
+              reason: 'L${level.levelNumber} ${arrow.id} outside shape',
+            );
+          }
+        }
+        // No head-on tip pairs on the same row/column (▸…◂ / ▲…▼).
+        for (var ai = 0; ai < level.arrows.length; ai++) {
+          final a = level.arrows[ai];
+          for (var bi = ai + 1; bi < level.arrows.length; bi++) {
+            final b = level.arrows[bi];
+            if (a.row == b.row && a.col != b.col) {
+              final left = a.col < b.col ? a : b;
+              final right = a.col < b.col ? b : a;
+              expect(
+                !(left.direction == ArrowDirection.right &&
+                    right.direction == ArrowDirection.left),
+                isTrue,
+                reason:
+                    'L${level.levelNumber} tips face on row ${a.row}: ${left.id}/${right.id}',
+              );
+            }
+            if (a.col == b.col && a.row != b.row) {
+              final top = a.row < b.row ? a : b;
+              final bottom = a.row < b.row ? b : a;
+              expect(
+                !(top.direction == ArrowDirection.down &&
+                    bottom.direction == ArrowDirection.up),
+                isTrue,
+                reason:
+                    'L${level.levelNumber} tips face on col ${a.col}: ${top.id}/${bottom.id}',
+              );
+            }
+          }
+        }
+      }
 
       // All campaign levels solvable via placement reverse order.
       for (final level in repo.levels) {

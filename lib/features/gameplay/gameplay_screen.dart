@@ -55,7 +55,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
 
   bool _boardZoomed = false;
 
-  /// After Level 11+: rate dialog once, then Level Completed.
+  /// After every 10 campaign levels: rate dialog, then Level Completed.
   bool _ratePromptDone = false;
   bool _ratePromptChecked = false;
 
@@ -67,6 +67,10 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
   /// Delay Out of Lives until last heart empty animation is visible.
   bool _showOutOfLives = false;
   Timer? _outOfLivesTimer;
+
+  /// Delay Level Complete until last arrow finishes escape on-screen.
+  bool _showWinOverlay = false;
+  Timer? _winOverlayTimer;
 
   late final AnimationController _chromeController;
   late final Animation<double> _chromeOpacity;
@@ -115,6 +119,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     _hintTimer?.cancel();
     _halfwayTimer?.cancel();
     _outOfLivesTimer?.cancel();
+    _winOverlayTimer?.cancel();
     _chromeController.dispose();
     super.dispose();
   }
@@ -150,6 +155,9 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     _outOfLivesTimer?.cancel();
     _outOfLivesTimer = null;
     _showOutOfLives = false;
+    _winOverlayTimer?.cancel();
+    _winOverlayTimer = null;
+    _showWinOverlay = false;
   }
 
   void _scheduleOutOfLivesOverlay() {
@@ -205,6 +213,34 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     });
   }
 
+  /// Matches ArrowTile multi-cell exit timing (+ small cushion).
+  Duration _escapeWaitFor(ArrowModel arrow) {
+    if (!arrow.isMultiCell) {
+      return const Duration(milliseconds: 360);
+    }
+    final pathCells = arrow.path.length.clamp(2, 14);
+    final tip = arrow.path.last;
+    final level = _level;
+    final toEdge = switch (arrow.direction) {
+      ArrowDirection.up => tip.row + 1,
+      ArrowDirection.down => level.gridRows - tip.row,
+      ArrowDirection.left => tip.col + 1,
+      ArrowDirection.right => level.gridCols - tip.col,
+    };
+    final travel = (pathCells + toEdge).clamp(4, 26);
+    return Duration(milliseconds: 300 + travel * 30);
+  }
+
+  void _scheduleWinOverlay(ArrowModel lastArrow) {
+    _winOverlayTimer?.cancel();
+    setState(() => _showWinOverlay = false);
+    _winOverlayTimer = Timer(_escapeWaitFor(lastArrow), () {
+      if (!mounted) return;
+      AppFeedback.levelComplete(ref);
+      setState(() => _showWinOverlay = true);
+    });
+  }
+
   void _onArrowTap(String arrowId) {
     final gameState = ref.read(gameControllerProvider(_level));
     if (gameState.isLost || gameState.isWon) return;
@@ -238,7 +274,8 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
       AppFeedback.arrowTap(ref);
       final next = ref.read(gameControllerProvider(_level));
       if (next.isWon) {
-        AppFeedback.levelComplete(ref);
+        // Let last arrow finish escaping before Level Complete covers the board.
+        _scheduleWinOverlay(arrow);
       }
       _maybeShowHalfwayToast(next);
     }
@@ -253,7 +290,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
 
     // Hints left: use one. Hints at 0: watch rewarded ad → +1 hint → use it.
     if (gameState.hintsLeft <= 0) {
-      final earned = await AdsService.instance.showRewardedForHint();
+      final earned = await AdsService.instance.showRewardedForHint(context);
       if (!earned || !mounted) return;
       controller.grantExtraHint();
     }
@@ -306,7 +343,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
           },
           onQuit: () {
             Navigator.of(sheetContext).pop();
-            AdsService.instance.onReturnToMapAfterFail();
+            AdsService.instance.onReturnToMapAfterFail(context);
             _leaveToHub();
           },
         );
@@ -330,6 +367,8 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     if (widget.isDaily) {
       await _markDailyIfNeeded();
       if (!mounted) return;
+      await AdsService.instance.onDailyChallengeCleared(context);
+      if (!mounted) return;
       context.go(DailyChallengeScreen.routePath);
       return;
     }
@@ -341,7 +380,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     await repo.saveProgress(_level.levelNumber);
     ref.invalidate(currentLevelProvider);
     ref.invalidate(lastCompletedLevelProvider);
-    await AdsService.instance.onLevelCleared();
+    await AdsService.instance.onLevelCleared(context);
 
     if (!mounted) return;
 
@@ -361,20 +400,22 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
       if (widget.isDaily) {
         await _markDailyIfNeeded();
         if (!mounted) return;
+        await AdsService.instance.onDailyChallengeCleared(context);
+        if (!mounted) return;
         context.go(DailyChallengeScreen.routePath);
         return;
       }
       await repo.saveProgress(_level.levelNumber);
       ref.invalidate(currentLevelProvider);
       ref.invalidate(lastCompletedLevelProvider);
-      await AdsService.instance.onLevelCleared();
+      await AdsService.instance.onLevelCleared(context);
       if (!mounted) return;
       context.go(HomeScreen.routePath);
     });
   }
 
   Future<void> _grantExtraLife() async {
-    final earned = await AdsService.instance.showRewardedForHint();
+    final earned = await AdsService.instance.showRewardedForLives(context);
     if (!earned || !mounted) return;
     ref.read(gameControllerProvider(_level).notifier).grantExtraLife();
   }
@@ -412,9 +453,12 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
         (widget.isDaily ||
             (level.levelNumber >= 2 && level.levelNumber <= levelCount));
 
-    if (!_ratePromptChecked &&
+    final isRateMilestone =
         !widget.isDaily &&
-        widget.levelNumber == 11) {
+        widget.levelNumber >= 10 &&
+        widget.levelNumber % 10 == 0;
+
+    if (!_ratePromptChecked && isRateMilestone) {
       _ratePromptChecked = true;
       ref.read(progressRepositoryProvider.future).then((repo) {
         if (!mounted) return;
@@ -434,8 +478,8 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     }
 
     final showRatePrompt = gameState.isWon &&
-        !widget.isDaily &&
-        level.levelNumber == 11 &&
+        _showWinOverlay &&
+        isRateMilestone &&
         !_ratePromptDone;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -556,7 +600,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
               onLowStars: _finishRatePrompt,
               onFiveStars: _finishRatePrompt,
             )
-          else if (gameState.isWon)
+          else if (gameState.isWon && _showWinOverlay)
             LevelCompletedOverlay(
               completedLevel: level.levelNumber,
               nextLevelNumber: level.levelNumber + 1,
