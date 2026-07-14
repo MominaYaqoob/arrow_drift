@@ -89,8 +89,10 @@ Set<String> computeExteriorEscapeKeys({
 /// Returns true when another active arrow occupies a cell on [arrow]'s escape ray.
 ///
 /// Escape ray starts at the tip and walks in [arrow.direction] until off-board.
-/// With [shapeMask]: exterior outside-silhouette = escaped; interior holes
-/// (donut centers) are skipped so tips cannot "escape" into the hole.
+/// Outside-silhouette gaps: if more playable cells exist further on this ray,
+/// the gap is skipped (so a hit further ahead still blocks). If the silhouette
+/// has ended on this ray, the tip is free — cannot "slip out" via white
+/// corridors that still have playable cells ahead.
 bool isArrowBlocked({
   required ArrowModel arrow,
   required List<ArrowModel> arrows,
@@ -109,13 +111,28 @@ bool isArrowBlocked({
     }
   }
 
-  final exterior = shapeMask == null
-      ? null
-      : computeExteriorEscapeKeys(
-          shapeMask: shapeMask,
-          rows: gridRows,
-          cols: gridCols,
-        );
+  bool inMask(int r, int c) {
+    if (shapeMask == null) return true;
+    if (r < 0 ||
+        c < 0 ||
+        r >= shapeMask.length ||
+        c >= shapeMask[r].length) {
+      return false;
+    }
+    return shapeMask[r][c];
+  }
+
+  bool playableAhead(int r, int c, int dRow, int dCol) {
+    var rr = r;
+    var cc = c;
+    for (var i = 0; i < 64; i++) {
+      if (rr < 0 || cc < 0 || rr >= gridRows || cc >= gridCols) return false;
+      if (inMask(rr, cc)) return true;
+      rr += dRow;
+      cc += dCol;
+    }
+    return false;
+  }
 
   final (dRow, dCol) = switch (arrow.direction) {
     ArrowDirection.up => (-1, 0),
@@ -128,12 +145,9 @@ bool isArrowBlocked({
   var c = arrow.col + dCol;
   for (var step = 0; step < 64; step++) {
     if (r < 0 || c < 0 || r >= gridRows || c >= gridCols) return false;
-    final outsideMask = shapeMask != null &&
-        (r >= shapeMask.length ||
-            c >= shapeMask[r].length ||
-            !shapeMask[r][c]);
-    if (outsideMask) {
-      if (exterior == null || exterior.contains('$r:$c')) return false;
+    if (!inMask(r, c)) {
+      // Silhouette ended this way → escaped. Gap with more shape ahead → skip.
+      if (!playableAhead(r, c, dRow, dCol)) return false;
       r += dRow;
       c += dCol;
       continue;
@@ -165,14 +179,6 @@ bool isArrowBlocked({
     }
   }
 
-  final exterior = shapeMask == null
-      ? null
-      : computeExteriorEscapeKeys(
-          shapeMask: shapeMask,
-          rows: gridRows,
-          cols: gridCols,
-        );
-
   final (dRow, dCol) = switch (arrow.direction) {
     ArrowDirection.up => (-1, 0),
     ArrowDirection.down => (1, 0),
@@ -180,16 +186,35 @@ bool isArrowBlocked({
     ArrowDirection.right => (0, 1),
   };
 
+  bool inMask(int r, int c) {
+    if (shapeMask == null) return true;
+    if (r < 0 ||
+        c < 0 ||
+        r >= shapeMask.length ||
+        c >= shapeMask[r].length) {
+      return false;
+    }
+    return shapeMask[r][c];
+  }
+
+  bool playableAhead(int r, int c) {
+    var rr = r;
+    var cc = c;
+    for (var i = 0; i < 64; i++) {
+      if (rr < 0 || cc < 0 || rr >= gridRows || cc >= gridCols) return false;
+      if (inMask(rr, cc)) return true;
+      rr += dRow;
+      cc += dCol;
+    }
+    return false;
+  }
+
   var r = arrow.row + dRow;
   var c = arrow.col + dCol;
   for (var step = 1; step <= 64; step++) {
     if (r < 0 || c < 0 || r >= gridRows || c >= gridCols) return null;
-    final outsideMask = shapeMask != null &&
-        (r >= shapeMask.length ||
-            c >= shapeMask[r].length ||
-            !shapeMask[r][c]);
-    if (outsideMask) {
-      if (exterior == null || exterior.contains('$r:$c')) return null;
+    if (!inMask(r, c)) {
+      if (!playableAhead(r, c)) return null;
       r += dRow;
       c += dCol;
       continue;
@@ -363,6 +388,7 @@ class GameController extends StateNotifier<GameState> {
       arrows: state.arrows,
       gridRows: state.level.gridRows,
       gridCols: state.level.gridCols,
+      shapeMask: state.level.shapeMask,
     );
     if (freeArrow == null) return null;
 
@@ -370,10 +396,11 @@ class GameController extends StateNotifier<GameState> {
     return freeArrow.id;
   }
 
-  /// After a rewarded ad (or placeholder), grant one extra hint.
-  void grantExtraHint() {
+  /// After a rewarded ad (or placeholder), grant extra hints.
+  void grantExtraHint({int count = 1}) {
     if (state.isWon || state.isLost) return;
-    state = state.copyWith(hintsLeft: state.hintsLeft + 1);
+    final next = state.hintsLeft + count;
+    state = state.copyWith(hintsLeft: next < 0 ? 0 : next);
   }
 
   /// Reloads the level with fresh arrows, hearts, and hints.

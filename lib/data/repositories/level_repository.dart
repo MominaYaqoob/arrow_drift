@@ -231,6 +231,7 @@ bool _polylineSelfHugs(List<GridCell> path) {
 }
 
 /// Tips on one row/col aiming at each other (▸ … ◂) confuse escape reading.
+/// Only nearby pairs (≤4 cells apart) are rejected so dense packs still fill.
 bool _tipsFaceEachOtherOnLine({
   required int tipR,
   required int tipC,
@@ -238,8 +239,9 @@ bool _tipsFaceEachOtherOnLine({
   required List<ArrowModel> others,
 }) {
   for (final other in others) {
-    // Same row: ◂——▸  or  ▸——◂
     if (tipR == other.row && tipC != other.col) {
+      final dist = (tipC - other.col).abs();
+      if (dist > 4) continue;
       final newLeft = tipC < other.col;
       final facing =
           (newLeft &&
@@ -250,8 +252,9 @@ bool _tipsFaceEachOtherOnLine({
               other.direction == ArrowDirection.right);
       if (facing) return true;
     }
-    // Same column: ▲/▼ pair aimed at each other.
     if (tipC == other.col && tipR != other.row) {
+      final dist = (tipR - other.row).abs();
+      if (dist > 4) continue;
       final newAbove = tipR < other.row;
       final facing =
           (newAbove &&
@@ -285,7 +288,15 @@ SolvableLevelResult generateNestedSolvableLevel(
   int minPathLen = 3,
   int maxPathLen = 14,
   int minArrows = 28,
+  /// Stop placing once this many arrows exist (daily caps at 100).
+  int? maxArrows,
   List<List<bool>>? shapeMask,
+  /// Escape-puzzle mode: prefer bends / U-hooks; allow own parallel arms.
+  bool hardNest = false,
+  /// Retry if too many tips are free at start (easy first moves).
+  int? maxFreeAtStart,
+  /// Daily-style mix: long + medium + small arrow lengths interleaved.
+  bool mixPathSizes = false,
 }) {
   final random = Random(
     seed ?? levelNumber * 9973 + rows * 131 + cols * 17,
@@ -323,25 +334,27 @@ SolvableLevelResult generateNestedSolvableLevel(
   }
   final targetCells = (playableCount * fillTarget).floor();
 
-  final exterior = shapeMask == null
-      ? null
-      : computeExteriorEscapeKeys(
-          shapeMask: shapeMask,
-          rows: rows,
-          cols: cols,
-        );
-
-  /// Escape ray: occupied blocks; true exterior / off-grid = free.
-  /// Interior holes (donut) are skipped — tips cannot dump into the hole.
+  /// Escape ray: occupied blocks. Outside-mask gaps with more shape ahead are
+  /// skipped; ending the silhouette on this ray = free.
   bool escapeClear(int tipR, int tipC, ArrowDirection direction) {
     final (dr, dc) = _dirDelta(direction);
+    bool playableAhead(int r, int c) {
+      var rr = r;
+      var cc = c;
+      for (var i = 0; i < 64; i++) {
+        if (!inBounds(rr, cc)) return false;
+        if (inMask(rr, cc)) return true;
+        rr += dr;
+        cc += dc;
+      }
+      return false;
+    }
+
     var r = tipR + dr;
     var c = tipC + dc;
     while (inBounds(r, c)) {
       if (!inMask(r, c)) {
-        if (exterior == null || exterior.contains(cellKey(r, c))) {
-          return true;
-        }
+        if (!playableAhead(r, c)) return true;
         r += dr;
         c += dc;
         continue;
@@ -351,6 +364,79 @@ SolvableLevelResult generateNestedSolvableLevel(
       c += dc;
     }
     return true;
+  }
+
+  bool playableAheadOnRay(int r, int c, int dr, int dc) {
+    var rr = r;
+    var cc = c;
+    for (var i = 0; i < 64; i++) {
+      if (!inBounds(rr, cc)) return false;
+      if (inMask(rr, cc)) return true;
+      rr += dr;
+      cc += dc;
+    }
+    return false;
+  }
+
+  int centerBiased(int max) {
+    if (max <= 1) return 0;
+    return ((random.nextInt(max) + random.nextInt(max)) / 2).floor();
+  }
+
+  bool hasOccupiedNeighbor(int r, int c) {
+    for (final (dr, dc) in const [(0, 1), (0, -1), (1, 0), (-1, 0)]) {
+      if (occupied.contains(cellKey(r + dr, c + dc))) return true;
+    }
+    return false;
+  }
+
+  int nestContactScore(List<GridCell> path) {
+    var contacts = 0;
+    for (final cell in path) {
+      for (final (dr, dc) in const [(0, 1), (0, -1), (1, 0), (-1, 0)]) {
+        if (occupied.contains(cellKey(cell.row + dr, cell.col + dc))) {
+          contacts++;
+        }
+      }
+    }
+    return contacts;
+  }
+
+  (int, int)? samplePocketTip() {
+    if (occupied.isEmpty) return null;
+    for (var t = 0; t < 48; t++) {
+      final tipR = centerBiased(rows);
+      final tipC = centerBiased(cols);
+      if (!isEmpty(tipR, tipC)) continue;
+      if (hasOccupiedNeighbor(tipR, tipC)) return (tipR, tipC);
+    }
+    final keys = occupied.toList(growable: false);
+    final start = random.nextInt(keys.length);
+    for (var i = 0; i < keys.length && i < 24; i++) {
+      final parts = keys[(start + i) % keys.length].split(':');
+      final or = int.parse(parts[0]);
+      final oc = int.parse(parts[1]);
+      final dirs = [
+        (0, 1),
+        (0, -1),
+        (1, 0),
+        (-1, 0),
+      ]..shuffle(random);
+      for (final (dr, dc) in dirs) {
+        final nr = or + dr;
+        final nc = oc + dc;
+        if (isEmpty(nr, nc)) return (nr, nc);
+      }
+    }
+    return null;
+  }
+
+  (int tipR, int tipC) pickTip() {
+    if (hardNest && occupied.isNotEmpty && random.nextDouble() < 0.78) {
+      final pocket = samplePocketTip();
+      if (pocket != null) return pocket;
+    }
+    return (centerBiased(rows), centerBiased(cols));
   }
 
   /// Grow tail←tip so the last step into the tip matches [direction].
@@ -379,7 +465,9 @@ SolvableLevelResult generateNestedSolvableLevel(
     var growDc = -dc;
 
     /// New cell may only touch the current head — not earlier body cells.
+    /// Hard nests allow parallel U-arms (like reference Escape Puzzle boards).
     bool hugsOwnBody(int nr, int nc) {
+      if (hardNest) return false;
       for (final cell in rev) {
         if (cell.row == r && cell.col == c) continue;
         if ((cell.row - nr).abs() + (cell.col - nc).abs() == 1) {
@@ -416,6 +504,29 @@ SolvableLevelResult generateNestedSolvableLevel(
       (int, int, int, int) pick;
       if (candidates.length == 1) {
         pick = candidates.first;
+      } else if (hardNest) {
+        // Prefer growing along / into existing snakes so paths nest, not float alone.
+        final hugging = [
+          for (final c in candidates)
+            if (hasOccupiedNeighbor(c.$1, c.$2)) c,
+        ];
+        final turns = [
+          for (final c in candidates)
+            if (!(c.$3 == growDr && c.$4 == growDc)) c,
+        ];
+        final nestTurns = [
+          for (final c in hugging)
+            if (!(c.$3 == growDr && c.$4 == growDc)) c,
+        ];
+        if (nestTurns.isNotEmpty && random.nextDouble() < 0.8) {
+          pick = nestTurns[random.nextInt(nestTurns.length)];
+        } else if (hugging.isNotEmpty && random.nextDouble() < 0.7) {
+          pick = hugging[random.nextInt(hugging.length)];
+        } else if (turns.isNotEmpty && random.nextDouble() < 0.88) {
+          pick = turns[random.nextInt(turns.length)];
+        } else {
+          pick = candidates[random.nextInt(candidates.length)];
+        }
       } else {
         // Prefer straight runs — fewer sharp folds.
         final straight = candidates.first;
@@ -438,7 +549,7 @@ SolvableLevelResult generateNestedSolvableLevel(
 
     if (rev.length < need) return null;
     final path = rev.reversed.toList(growable: false);
-    if (_polylineSelfHugs(path)) return null;
+    if (!hardNest && _polylineSelfHugs(path)) return null;
     return path;
   }
 
@@ -450,25 +561,49 @@ SolvableLevelResult generateNestedSolvableLevel(
     }
   }
 
+  /// Tip steps toward board center (tail will grow toward the rim).
+  bool pointsInward(int tipR, int tipC, ArrowDirection direction) {
+    final cy = (rows - 1) / 2.0;
+    final cx = (cols - 1) / 2.0;
+    final (dr, dc) = _dirDelta(direction);
+    final before = (tipR - cy).abs() + (tipC - cx).abs();
+    final after = (tipR + dr - cy).abs() + (tipC + dc - cx).abs();
+    return after < before - 0.05;
+  }
+
+  /// Tip on rim pointing straight off the board — too easy to clear first.
+  bool easyOutwardRim(int tipR, int tipC, ArrowDirection direction) {
+    return switch (direction) {
+      ArrowDirection.up => tipR <= 1,
+      ArrowDirection.down => tipR >= rows - 2,
+      ArrowDirection.left => tipC <= 1,
+      ArrowDirection.right => tipC >= cols - 2,
+    };
+  }
+
   bool tryPlaceAt({
     required int tipR,
     required int tipC,
     required int targetLen,
     required int minLen,
+    bool preferInward = true,
+    bool allowFacingTips = false,
   }) {
     if (!isEmpty(tipR, tipC)) return false;
     final dirs = ArrowDirection.values.toList(growable: false);
-    // Rotate start dir instead of full shuffle alloc each call.
     final start = random.nextInt(dirs.length);
+
+    final options = <({ArrowDirection dir, List<GridCell> path, int score})>[];
     for (var i = 0; i < dirs.length; i++) {
       final direction = dirs[(start + i) % dirs.length];
       if (!escapeClear(tipR, tipC, direction)) continue;
-      if (_tipsFaceEachOtherOnLine(
-        tipR: tipR,
-        tipC: tipC,
-        direction: direction,
-        others: arrows,
-      )) {
+      if (!allowFacingTips &&
+          _tipsFaceEachOtherOnLine(
+            tipR: tipR,
+            tipC: tipC,
+            direction: direction,
+            others: arrows,
+          )) {
         continue;
       }
 
@@ -481,35 +616,159 @@ SolvableLevelResult generateNestedSolvableLevel(
       );
       if (path == null) continue;
 
-      placeArrow(
-        ArrowModel(
-          id: '$levelNumber-${arrows.length}',
-          row: tipR,
-          col: tipC,
-          direction: direction,
-          path: path,
-        ),
-      );
-      return true;
+      var score = 0;
+      if (preferInward) {
+        if (pointsInward(tipR, tipC, direction)) score += 8;
+        if (easyOutwardRim(tipR, tipC, direction)) {
+          // Reference boards bury tips — skip easy rim clears when possible.
+          score -= hardNest ? 20 : 8;
+        }
+        // Prefer tips away from the absolute rim.
+        if (tipR > 1 && tipR < rows - 2 && tipC > 1 && tipC < cols - 2) {
+          score += 4;
+        }
+        // Tail (path.first) hugging the border = complex like reference boards.
+        final tail = path.first;
+        if (tail.row <= 1 ||
+            tail.row >= rows - 2 ||
+            tail.col <= 1 ||
+            tail.col >= cols - 2) {
+          score += hardNest ? 6 : 3;
+        }
+        if (hardNest) {
+          // Reward bends / hooks (Escape Puzzle style interlocking).
+          var turns = 0;
+          for (var i = 2; i < path.length; i++) {
+            final a = path[i - 2];
+            final b = path[i - 1];
+            final c = path[i];
+            final d1r = b.row - a.row;
+            final d1c = b.col - a.col;
+            final d2r = c.row - b.row;
+            final d2c = c.col - b.col;
+            if (d1r != d2r || d1c != d2c) turns++;
+          }
+          score += turns * 4;
+          if (path.length >= 5 && turns == 0) score -= 6;
+
+          // Nest against neighbors — floating separated snakes score poorly.
+          final contacts = nestContactScore(path);
+          score += contacts * 4;
+          if (arrows.isNotEmpty && contacts == 0) score -= 18;
+          if (contacts >= 3) score += 6;
+
+          // Prefer placements that seal currently-free tips (deep dependency chains).
+          for (final other in arrows) {
+            if (!escapeClear(other.row, other.col, other.direction)) continue;
+            final (odr, odc) = _dirDelta(other.direction);
+            var rr = other.row + odr;
+            var cc = other.col + odc;
+            var sealed = false;
+            while (inBounds(rr, cc) && !sealed) {
+              if (!inMask(rr, cc)) {
+                if (!playableAheadOnRay(rr, cc, odr, odc)) break;
+                rr += odr;
+                cc += odc;
+                continue;
+              }
+              for (final cell in path) {
+                if (cell.row == rr && cell.col == cc) {
+                  score += 7;
+                  sealed = true;
+                  break;
+                }
+              }
+              rr += odr;
+              cc += odc;
+            }
+          }
+        }
+      } else if (hardNest && arrows.isNotEmpty) {
+        // Late fill: still prefer nesting against existing paths.
+        final contacts = nestContactScore(path);
+        score += contacts * 3;
+        if (contacts == 0) score -= 10;
+      }
+      options.add((dir: direction, path: path, score: score));
     }
-    return false;
+
+    if (options.isEmpty) return false;
+
+    // Hard nests: drop easy outward-rim tips if any better options exist.
+    var pool = options;
+    if (preferInward && hardNest) {
+      final buried = [
+        for (final o in options)
+          if (!easyOutwardRim(tipR, tipC, o.dir)) o,
+      ];
+      if (buried.isNotEmpty) pool = buried;
+    }
+    // Prefer nested (contacting) paths once the board has snakes.
+    if (hardNest && arrows.isNotEmpty) {
+      final nested = [
+        for (final o in pool)
+          if (nestContactScore(o.path) > 0) o,
+      ];
+      if (nested.isNotEmpty) pool = nested;
+    }
+
+    pool.sort((a, b) => b.score.compareTo(a.score));
+    final best = pool.first.score;
+    final top = [
+      for (final o in pool)
+        if (o.score >= best - (preferInward ? 3 : 99)) o,
+    ];
+    final pick = top[random.nextInt(top.length)];
+
+    placeArrow(
+      ArrowModel(
+        id: '$levelNumber-${arrows.length}',
+        row: tipR,
+        col: tipC,
+        direction: pick.dir,
+        path: pick.path,
+      ),
+    );
+    return true;
   }
 
-  // Phase 1: long woven snakes (hard cap keeps UI responsive).
+  bool underArrowCap() =>
+      maxArrows == null || arrows.length < maxArrows;
+
+  int pickPathLen() {
+    if (!mixPathSizes) {
+      final span = (maxPathLen - minPathLen).clamp(0, 99);
+      return minPathLen + (span == 0 ? 0 : random.nextInt(span + 1));
+    }
+    // Length mix tuned so ~100 arrows nearly fill a dense silhouette (avg ~6).
+    final roll = random.nextDouble();
+    if (roll < 0.25) {
+      final tallMin = (maxPathLen - 2).clamp(minPathLen, maxPathLen);
+      return tallMin + random.nextInt((maxPathLen - tallMin).clamp(0, 99) + 1);
+    }
+    if (roll < 0.70) {
+      final mid = ((minPathLen + maxPathLen) / 2).round().clamp(4, maxPathLen);
+      final lo = (mid - 1).clamp(4, maxPathLen);
+      final hi = (mid + 2).clamp(4, maxPathLen);
+      return lo + random.nextInt((hi - lo).clamp(0, 99) + 1);
+    }
+    return 2 + random.nextInt(2); // small 2–3
+  }
+
+  // Phase 1: woven snakes — tips biased into nesting pockets.
   var safety = 0;
   var stall = 0;
-  while (occupied.length < targetCells && safety < 4000) {
+  while (occupied.length < targetCells && underArrowCap() && safety < 5000) {
     safety++;
     final before = occupied.length;
-    final tipR = random.nextInt(rows);
-    final tipC = random.nextInt(cols);
-    final span = (maxPathLen - minPathLen).clamp(0, 99);
-    final len = minPathLen + (span == 0 ? 0 : random.nextInt(span + 1));
+    final tip = pickTip();
+    final len = pickPathLen();
     tryPlaceAt(
-      tipR: tipR,
-      tipC: tipC,
+      tipR: tip.$1,
+      tipC: tip.$2,
       targetLen: len < 2 ? 2 : len,
-      minLen: minPathLen < 2 ? 2 : minPathLen,
+      minLen: mixPathSizes ? 2 : (minPathLen < 2 ? 2 : minPathLen),
+      preferInward: true,
     );
     if (occupied.length == before) {
       stall++;
@@ -519,16 +778,21 @@ SolvableLevelResult generateNestedSolvableLevel(
     }
   }
 
-  // Phase 2: mop up with short shafts (never lone tip triangles).
+  // Phase 2: mop up — keep size mix; fill gaps tightly for daily.
   safety = 0;
   stall = 0;
-  while (occupied.length < targetCells && safety < 2500) {
+  while (occupied.length < targetCells && underArrowCap() && safety < 3000) {
     safety++;
     final before = occupied.length;
-    final tipR = random.nextInt(rows);
-    final tipC = random.nextInt(cols);
-    final len = 2 + random.nextInt(3);
-    tryPlaceAt(tipR: tipR, tipC: tipC, targetLen: len, minLen: 2);
+    final tip = pickTip();
+    final len = mixPathSizes ? pickPathLen() : (2 + random.nextInt(3));
+    tryPlaceAt(
+      tipR: tip.$1,
+      tipC: tip.$2,
+      targetLen: len < 2 ? 2 : len,
+      minLen: 2,
+      preferInward: true,
+    );
     if (occupied.length == before) {
       stall++;
       if (stall > 300) break;
@@ -537,11 +801,65 @@ SolvableLevelResult generateNestedSolvableLevel(
     }
   }
 
-  // Phase 3: leftovers as short polylines (tip + shaft); leave gaps if needed.
-  for (var r = 0; r < rows; r++) {
-    for (var c = 0; c < cols; c++) {
+  // Phase 3: leftovers — hard nests still bury tips (refs); soft allow any tip.
+  for (var r = 0; r < rows && underArrowCap(); r++) {
+    for (var c = 0; c < cols && underArrowCap(); c++) {
       if (!isEmpty(r, c)) continue;
-      tryPlaceAt(tipR: r, tipC: c, targetLen: 3, minLen: 2);
+      tryPlaceAt(
+        tipR: r,
+        tipC: c,
+        targetLen: mixPathSizes
+            ? pickPathLen()
+            : (hardNest ? 4 : 3),
+        minLen: 2,
+        preferInward: hardNest || mixPathSizes,
+      );
+    }
+  }
+
+  // Phase 4: hard nests mop remaining corridors — keep inward bias.
+  if (hardNest) {
+    for (var pass = 0; pass < 5 && underArrowCap(); pass++) {
+      var placed = false;
+      for (var r = 0; r < rows && underArrowCap(); r++) {
+        for (var c = 0; c < cols && underArrowCap(); c++) {
+          if (!isEmpty(r, c)) continue;
+          if (tryPlaceAt(
+            tipR: r,
+            tipC: c,
+            targetLen: 2 + (pass % 3),
+            minLen: 2,
+            preferInward: true,
+            allowFacingTips: pass >= 3,
+          )) {
+            placed = true;
+          }
+        }
+      }
+      if (!placed) break;
+    }
+  }
+
+  // Phase 5: pack leftover gaps with short shafts (esp. daily size-mix packs).
+  if (mixPathSizes || maxArrows != null) {
+    for (var pass = 0; pass < 20 && underArrowCap(); pass++) {
+      var placed = false;
+      for (var r = 0; r < rows && underArrowCap(); r++) {
+        for (var c = 0; c < cols && underArrowCap(); c++) {
+          if (!isEmpty(r, c)) continue;
+          if (tryPlaceAt(
+            tipR: r,
+            tipC: c,
+            targetLen: 2 + (pass % 4),
+            minLen: 2,
+            preferInward: false,
+            allowFacingTips: true,
+          )) {
+            placed = true;
+          }
+        }
+      }
+      if (!placed) break;
     }
   }
 
@@ -550,6 +868,26 @@ SolvableLevelResult generateNestedSolvableLevel(
       'Nested daily only placed ${arrows.length}/$minArrows arrows '
       '($rows×$cols, fill ${occupied.length}/${rows * cols})',
     );
+  }
+
+  if (maxFreeAtStart != null) {
+    var free = 0;
+    for (final arrow in arrows) {
+      if (isArrowFree(
+        arrow: arrow,
+        arrows: arrows,
+        gridRows: rows,
+        gridCols: cols,
+        shapeMask: shapeMask,
+      )) {
+        free++;
+      }
+    }
+    if (free > maxFreeAtStart) {
+      throw StateError(
+        'Nested nest too open at start ($free free > $maxFreeAtStart)',
+      );
+    }
   }
 
   return SolvableLevelResult(
@@ -647,25 +985,36 @@ List<List<bool>> starMask(int rows, int cols) {
   });
 }
 
-/// Campaign levels 1–13 built as nested polyline boards.
+/// Campaign levels 1–30. Dense late levels are built lazily so app start
+/// does not freeze the UI (~20s+ if every nest were generated up front).
 class LevelRepository {
   LevelRepository({List<SolvableLevelResult>? prebuilt})
-      : _results = prebuilt ?? _buildCampaignLevels();
+      : _prebuilt = prebuilt,
+        _lazy = List<SolvableLevelResult?>.filled(30, null);
 
-  final List<SolvableLevelResult> _results;
+  final List<SolvableLevelResult>? _prebuilt;
+  final List<SolvableLevelResult?> _lazy;
   final Map<int, LevelModel> _dailyCache = {};
+  final Map<int, LevelModel> _endlessCache = {};
 
-  List<LevelModel> get levels =>
-      _results.map((result) => result.level).toList(growable: false);
+  static const int campaignLevelCount = 30;
 
-  int get levelCount => _results.length;
+  SolvableLevelResult _resultAt(int index) {
+    if (index < 0 || index >= campaignLevelCount) {
+      throw RangeError('No campaign level at index $index');
+    }
+    if (_prebuilt != null) return _prebuilt![index];
+    return _lazy[index] ??= _buildCampaignLevel(index + 1);
+  }
+
+  List<LevelModel> get levels => [
+        for (var i = 0; i < campaignLevelCount; i++) _resultAt(i).level,
+      ];
+
+  int get levelCount => campaignLevelCount;
 
   List<String> placementOrderFor(int levelNumber) {
-    final index = levelNumber - 1;
-    if (index < 0 || index >= _results.length) {
-      throw RangeError('No placement order for level $levelNumber');
-    }
-    return _results[index].placementOrder;
+    return _resultAt(levelNumber - 1).placementOrder;
   }
 
   /// Solve order for tutorials (reverse of placement).
@@ -674,19 +1023,50 @@ class LevelRepository {
 
   LevelModel getLevel(int levelNumber) {
     final key = levelNumber < 1 ? 1 : levelNumber;
-    if (key <= _results.length) {
-      return _results[key - 1].level;
+    if (key <= campaignLevelCount) {
+      return _resultAt(key - 1).level;
     }
 
-    // Loop / extend past curated pack with hard boards.
-    return generateSolvableLevel(
-      key,
-      6,
-      14,
-      4,
-      2,
-      difficulty: LevelDifficulty.hard,
-    ).level;
+    return _endlessCache.putIfAbsent(key, () {
+      // Endless Expert nests after the curated pack (auto-grows harder).
+      final size = (18 + ((key - 30) % 8)).clamp(18, 24);
+      final minArrows = (66 + (key - 30) * 2).clamp(66, 100);
+      final maxFree = (3 - ((key - 30) ~/ 8)).clamp(2, 3);
+      try {
+        return generateNestedSolvableLevel(
+          key,
+          size,
+          size + (key.isEven ? 1 : 0),
+          3,
+          1,
+          difficulty: LevelDifficulty.expert,
+          seed: key * 9973 + size * 19,
+          fillTarget: 0.98,
+          minPathLen: 2,
+          maxPathLen: 12,
+          minArrows: minArrows,
+          hardNest: true,
+          mixPathSizes: true,
+          maxFreeAtStart: maxFree,
+        ).level;
+      } on StateError {
+        return generateNestedSolvableLevel(
+          key,
+          18,
+          18,
+          3,
+          1,
+          difficulty: LevelDifficulty.expert,
+          seed: key,
+          fillTarget: 0.92,
+          minPathLen: 2,
+          maxPathLen: 10,
+          minArrows: 50,
+          hardNest: true,
+          mixPathSizes: true,
+        ).level;
+      }
+    });
   }
 
   LevelModel nextLevel(int currentLevelNumber) =>
@@ -702,164 +1082,263 @@ class LevelRepository {
     );
   }
 
-  /// Daily puzzles are calendar-seeded (one unique board per day, unbounded).
-  /// Always a **shaped** Expert nest, sized above late campaign (L14–L20).
-  /// Rotates through 16 silhouettes so consecutive days feel different.
+  /// Daily puzzles are calendar-seeded (one unique board per day).
+  /// Dense shaped nest (~100 arrows): no free space, mixed small/medium/tall.
   static LevelModel _buildDailyChallengeLevel(DateTime day, int levelNumber) {
     final dayOfYear = day.difference(DateTime(day.year)).inDays;
     final shapeIndex = (dayOfYear + day.year * 5 + day.month * 3) % 16;
 
-    // Bigger + denser than campaign shaped Experts (~17–19 grids / ~28 arrows).
+    // Shrink primary boards so 100 mixed arrows pack nearly solid.
     final config = switch (shapeIndex) {
       0 => (
           rows: 22,
           cols: 22,
-          mask: generateHeartShapeMask(22),
-          fbRows: 18,
-          fbCols: 18,
-          fbMask: generateHeartShapeMask(18),
+          mask: circleMask(22, 22),
+          fbRows: 22,
+          fbCols: 22,
+          fbMask: circleMask(22, 22),
         ),
       1 => (
-          rows: 21,
-          cols: 23,
-          mask: starMask(21, 23),
-          fbRows: 17,
-          fbCols: 19,
-          fbMask: starMask(17, 19),
+          rows: 22,
+          cols: 22,
+          mask: octagonMask(22, 22),
+          fbRows: 22,
+          fbCols: 22,
+          fbMask: octagonMask(22, 22),
         ),
       2 => (
           rows: 22,
           cols: 22,
-          mask: ringMask(22, 22),
-          fbRows: 18,
-          fbCols: 18,
-          fbMask: ringMask(18, 18),
+          mask: diamondMask(22, 22),
+          fbRows: 22,
+          fbCols: 22,
+          fbMask: diamondMask(22, 22),
         ),
       3 => (
-          rows: 21,
-          cols: 21,
-          mask: cloverMask(21, 21),
-          fbRows: 17,
-          fbCols: 17,
-          fbMask: cloverMask(17, 17),
+          rows: 23,
+          cols: 25,
+          mask: hexagonMask(23, 25),
+          fbRows: 21,
+          fbCols: 23,
+          fbMask: hexagonMask(21, 23),
         ),
       4 => (
           rows: 22,
-          cols: 20,
-          mask: hourglassMask(22, 20),
-          fbRows: 18,
-          fbCols: 16,
-          fbMask: hourglassMask(18, 16),
+          cols: 22,
+          mask: generateHeartShapeMask(22),
+          fbRows: 22,
+          fbCols: 22,
+          fbMask: generateHeartShapeMask(22),
         ),
       5 => (
-          rows: 21,
-          cols: 22,
-          mask: crescentMask(21, 22),
-          fbRows: 17,
-          fbCols: 18,
-          fbMask: crescentMask(17, 18),
-        ),
-      6 => (
-          rows: 22,
-          cols: 22,
-          mask: diamondMask(22, 22),
-          fbRows: 18,
-          fbCols: 18,
-          fbMask: diamondMask(18, 18),
-        ),
-      7 => (
-          rows: 21,
-          cols: 23,
-          mask: hexagonMask(21, 23),
-          fbRows: 17,
-          fbCols: 19,
-          fbMask: hexagonMask(17, 19),
-        ),
-      8 => (
-          rows: 22,
-          cols: 23,
-          mask: invertedTriangleMask(22, 23),
-          fbRows: 18,
-          fbCols: 19,
-          fbMask: invertedTriangleMask(18, 19),
-        ),
-      9 => (
           rows: 22,
           cols: 22,
           mask: circleMask(22, 22),
-          fbRows: 18,
-          fbCols: 18,
-          fbMask: circleMask(18, 18),
+          fbRows: 22,
+          fbCols: 22,
+          fbMask: octagonMask(22, 22),
+        ),
+      6 => (
+          rows: 25,
+          cols: 25,
+          mask: octagonMask(25, 25),
+          fbRows: 23,
+          fbCols: 23,
+          fbMask: circleMask(23, 23),
+        ),
+      7 => (
+          rows: 23,
+          cols: 25,
+          mask: stadiumMask(23, 25),
+          fbRows: 21,
+          fbCols: 23,
+          fbMask: stadiumMask(21, 23),
+        ),
+      8 => (
+          rows: 22,
+          cols: 22,
+          mask: cloverMask(22, 22),
+          fbRows: 22,
+          fbCols: 22,
+          fbMask: octagonMask(22, 22),
+        ),
+      9 => (
+          rows: 25,
+          cols: 25,
+          mask: circleMask(25, 25),
+          fbRows: 23,
+          fbCols: 23,
+          fbMask: circleMask(23, 23),
         ),
       10 => (
-          rows: 21,
-          cols: 21,
-          mask: plusMask(21, 21),
-          fbRows: 17,
-          fbCols: 17,
-          fbMask: plusMask(17, 17),
-        ),
-      11 => (
-          rows: 22,
-          cols: 20,
-          mask: shieldMask(22, 20),
-          fbRows: 18,
-          fbCols: 16,
-          fbMask: shieldMask(18, 16),
-        ),
-      12 => (
-          rows: 21,
-          cols: 21,
-          mask: octagonMask(21, 21),
-          fbRows: 17,
-          fbCols: 17,
-          fbMask: octagonMask(17, 17),
-        ),
-      13 => (
-          rows: 20,
-          cols: 23,
-          mask: stadiumMask(20, 23),
-          fbRows: 16,
-          fbCols: 19,
-          fbMask: stadiumMask(16, 19),
-        ),
-      14 => (
           rows: 22,
           cols: 22,
           mask: flowerMask(22, 22),
-          fbRows: 18,
-          fbCols: 18,
-          fbMask: flowerMask(18, 18),
+          fbRows: 22,
+          fbCols: 22,
+          fbMask: diamondMask(22, 22),
+        ),
+      11 => (
+          rows: 24,
+          cols: 22,
+          mask: shieldMask(24, 22),
+          fbRows: 22,
+          fbCols: 20,
+          fbMask: octagonMask(22, 20),
+        ),
+      12 => (
+          rows: 22,
+          cols: 22,
+          mask: octagonMask(22, 22),
+          fbRows: 22,
+          fbCols: 22,
+          fbMask: diamondMask(22, 22),
+        ),
+      13 => (
+          rows: 22,
+          cols: 26,
+          mask: stadiumMask(22, 26),
+          fbRows: 20,
+          fbCols: 24,
+          fbMask: stadiumMask(20, 24),
+        ),
+      14 => (
+          rows: 25,
+          cols: 25,
+          mask: diamondMask(25, 25),
+          fbRows: 23,
+          fbCols: 23,
+          fbMask: circleMask(23, 23),
         ),
       _ => (
-          rows: 18,
-          cols: 23,
-          mask: infinityMask(18, 23),
-          fbRows: 15,
-          fbCols: 19,
-          fbMask: infinityMask(15, 19),
+          rows: 22,
+          cols: 22,
+          mask: circleMask(22, 22),
+          fbRows: 22,
+          fbCols: 22,
+          fbMask: octagonMask(22, 22),
         ),
     };
 
-    const minArrows = 34;
-    const softMin = 24;
+    const minArrows = 100;
+    const maxArrows = 100;
     StateError? lastError;
 
-    for (var attempt = 0; attempt < 36; attempt++) {
+    LevelModel? tryBuild({
+      required int rows,
+      required int cols,
+      required List<List<bool>> mask,
+      required int seed,
+      required double fill,
+      int? freeCap,
+    }) {
       try {
         return generateNestedSolvableLevel(
           levelNumber,
-          config.rows,
-          config.cols,
+          rows,
+          cols,
           3,
           2,
           difficulty: LevelDifficulty.expert,
-          seed: levelNumber + attempt * 211 + shapeIndex * 47,
-          shapeMask: config.mask,
-          fillTarget: 0.88,
-          minPathLen: 3,
-          maxPathLen: 18,
+          seed: seed,
+          shapeMask: mask,
+          fillTarget: fill,
+          minPathLen: 2,
+          maxPathLen: 11,
           minArrows: minArrows,
+          maxArrows: maxArrows,
+          hardNest: true,
+          mixPathSizes: true,
+          maxFreeAtStart: freeCap,
+        ).level;
+      } on StateError catch (e) {
+        lastError = e;
+        return null;
+      }
+    }
+
+    // Near-solid fill — keep placing until 100 arrows pack the silhouette.
+    for (var attempt = 0; attempt < 28; attempt++) {
+      final level = tryBuild(
+        rows: config.rows,
+        cols: config.cols,
+        mask: config.mask,
+        seed: levelNumber + attempt * 211 + shapeIndex * 47,
+        fill: 0.995,
+        freeCap: attempt < 18 ? 12 : 16,
+      );
+      if (level != null) return level;
+    }
+
+    for (var attempt = 0; attempt < 18; attempt++) {
+      final level = tryBuild(
+        rows: config.fbRows,
+        cols: config.fbCols,
+        mask: config.fbMask,
+        seed: levelNumber + 9000 + attempt * 131,
+        fill: 0.99,
+        freeCap: attempt < 10 ? 14 : null,
+      );
+      if (level != null) return level;
+    }
+
+    for (var attempt = 0; attempt < 20; attempt++) {
+      final size = 21 + (attempt % 3); // 21–23 dense circles
+      final level = tryBuild(
+        rows: size,
+        cols: size,
+        mask: circleMask(size, size),
+        seed: levelNumber + 17000 + attempt * 97,
+        fill: 0.98,
+        freeCap: null,
+      );
+      if (level != null) return level;
+    }
+
+    // Rectangles sized so 100 mixed arrows pack nearly solid.
+    for (var attempt = 0; attempt < 36; attempt++) {
+      final size = 20 + (attempt % 4); // 20–23
+      try {
+        return generateNestedSolvableLevel(
+          levelNumber,
+          size,
+          size,
+          3,
+          2,
+          difficulty: LevelDifficulty.expert,
+          seed: levelNumber + 29000 + attempt * 37,
+          fillTarget: 0.98,
+          minPathLen: 2,
+          maxPathLen: 10,
+          minArrows: minArrows,
+          maxArrows: maxArrows,
+          hardNest: true,
+          mixPathSizes: true,
+        ).level;
+      } on StateError catch (e) {
+        lastError = e;
+      }
+    }
+
+    // Soft hardNest off — still bent paths via mix sizes, pack 20–22 boards solid.
+    for (var attempt = 0; attempt < 28; attempt++) {
+      final size = 20 + (attempt % 3); // 20–22
+      try {
+        return generateNestedSolvableLevel(
+          levelNumber,
+          size,
+          size,
+          3,
+          2,
+          difficulty: LevelDifficulty.expert,
+          seed: levelNumber + 41000 + attempt * 19,
+          fillTarget: 0.97,
+          minPathLen: 2,
+          maxPathLen: 10,
+          minArrows: 90,
+          maxArrows: maxArrows,
+          hardNest: attempt.isEven,
+          mixPathSizes: true,
         ).level;
       } on StateError catch (e) {
         lastError = e;
@@ -870,78 +1349,81 @@ class LevelRepository {
       try {
         return generateNestedSolvableLevel(
           levelNumber,
-          config.fbRows,
-          config.fbCols,
+          24,
+          24,
           3,
           2,
           difficulty: LevelDifficulty.expert,
-          seed: levelNumber + 9000 + attempt * 131,
-          shapeMask: config.fbMask,
-          fillTarget: 0.84,
-          minPathLen: 3,
-          maxPathLen: 16,
-          minArrows: softMin,
+          seed: levelNumber + 52000 + attempt * 23,
+          fillTarget: 0.92,
+          minPathLen: 2,
+          maxPathLen: 9,
+          minArrows: 80,
+          maxArrows: maxArrows,
+          hardNest: false,
+          mixPathSizes: true,
         ).level;
       } on StateError catch (e) {
         lastError = e;
       }
     }
 
-    // Last-resort medium nest (still shaped, still Expert).
     try {
       return generateNestedSolvableLevel(
         levelNumber,
-        16,
-        16,
+        24,
+        24,
         3,
         2,
         difficulty: LevelDifficulty.expert,
-        seed: levelNumber,
-        shapeMask: circleMask(16, 16),
-        fillTarget: 0.82,
+        seed: levelNumber + 99,
+        fillTarget: 0.9,
         minPathLen: 2,
-        maxPathLen: 14,
-        minArrows: 18,
+        maxPathLen: 8,
+        minArrows: 70,
+        maxArrows: maxArrows,
+        hardNest: false,
+        mixPathSizes: true,
       ).level;
     } on StateError catch (e) {
       throw lastError ?? e;
     }
   }
 
-  static List<SolvableLevelResult> _buildCampaignLevels() {
-    // L1 tutorial, L2–L13 nested, L14–L20 shaped, L21–L30 harder shaped Experts.
-    return [
-      _tutorialLevel1(),
-      _nestedLevel2(),
-      _nestedLevel3(),
-      _nestedLevel4(),
-      _nestedLevel5(),
-      _nestedLevel6(),
-      _nestedLevel7(),
-      _nestedLevel8(),
-      _nestedLevel9(),
-      _nestedLevel10(),
-      _nestedLevel11(),
-      _nestedLevel12(),
-      _nestedLevel13(),
-      _nestedLevel14(),
-      _nestedLevel15(),
-      _nestedLevel16(),
-      _nestedLevel17(),
-      _nestedLevel18(),
-      _nestedLevel19(),
-      _nestedLevel20(),
-      _nestedLevel21(),
-      _nestedLevel22(),
-      _nestedLevel23(),
-      _nestedLevel24(),
-      _nestedLevel25(),
-      _nestedLevel26(),
-      _nestedLevel27(),
-      _nestedLevel28(),
-      _nestedLevel29(),
-      _nestedLevel30(),
-    ];
+  static SolvableLevelResult _buildCampaignLevel(int levelNumber) {
+    return switch (levelNumber) {
+      1 => _tutorialLevel1(),
+      2 => _nestedLevel2(),
+      3 => _nestedLevel3(),
+      4 => _nestedLevel4(),
+      5 => _nestedLevel5(),
+      6 => _nestedLevel6(),
+      7 => _nestedLevel7(),
+      8 => _nestedLevel8(),
+      9 => _nestedLevel9(),
+      10 => _nestedLevel10(),
+      11 => _nestedLevel11(),
+      12 => _nestedLevel12(),
+      13 => _nestedLevel13(),
+      14 => _nestedLevel14(),
+      15 => _nestedLevel15(),
+      16 => _nestedLevel16(),
+      17 => _nestedLevel17(),
+      18 => _nestedLevel18(),
+      19 => _nestedLevel19(),
+      20 => _nestedLevel20(),
+      21 => _nestedLevel21(),
+      22 => _nestedLevel22(),
+      23 => _nestedLevel23(),
+      24 => _nestedLevel24(),
+      25 => _nestedLevel25(),
+      26 => _nestedLevel26(),
+      27 => _nestedLevel27(),
+      28 => _nestedLevel28(),
+      29 => _nestedLevel29(),
+      30 => _nestedLevel30(),
+      _ => throw RangeError('No campaign builder for level $levelNumber'),
+    };
   }
 
   /// Fixed Level 1: three vertical arrows — UP, UP, DOWN (left → right).
@@ -2523,279 +3005,371 @@ class LevelRepository {
     );
   }
 
-  /// Level 14 — Expert triangle nest (board silhouette is a △, not a square).
+  /// Level 14 — denser Expert triangle nest.
   static SolvableLevelResult _nestedLevel14() {
     return _shapedExpertLevel(
       levelNumber: 14,
-      rows: 16,
-      cols: 17,
-      mask: uprightTriangleMask(16, 17),
-      minArrows: 26,
+      rows: 18,
+      cols: 19,
+      mask: uprightTriangleMask(18, 19),
+      minArrows: 32,
       maxPathLen: 13,
-      fillTarget: 0.86,
-      fallbackRows: 14,
-      fallbackCols: 15,
-      fallbackMask: uprightTriangleMask(14, 15),
+      fillTarget: 0.9,
+      fallbackRows: 16,
+      fallbackCols: 17,
+      fallbackMask: uprightTriangleMask(16, 17),
     );
   }
 
-  /// Level 15 — Expert diamond nest.
+  /// Level 15 — denser Expert diamond nest.
   static SolvableLevelResult _nestedLevel15() {
     return _shapedExpertLevel(
       levelNumber: 15,
-      rows: 17,
-      cols: 17,
-      mask: diamondMask(17, 17),
-      minArrows: 26,
-      maxPathLen: 14,
-      fillTarget: 0.86,
-      fallbackRows: 15,
-      fallbackCols: 15,
-      fallbackMask: diamondMask(15, 15),
+      rows: 18,
+      cols: 18,
+      mask: diamondMask(18, 18),
+      minArrows: 34,
+      maxPathLen: 13,
+      fillTarget: 0.9,
+      fallbackRows: 16,
+      fallbackCols: 16,
+      fallbackMask: diamondMask(16, 16),
     );
   }
 
-  /// Level 16 — Expert hexagon nest.
+  /// Level 16 — denser Expert hexagon nest.
   static SolvableLevelResult _nestedLevel16() {
     return _shapedExpertLevel(
       levelNumber: 16,
-      rows: 17,
-      cols: 19,
-      mask: hexagonMask(17, 19),
-      minArrows: 28,
-      maxPathLen: 15,
-      fillTarget: 0.86,
-      fallbackRows: 15,
-      fallbackCols: 17,
-      fallbackMask: hexagonMask(15, 17),
+      rows: 19,
+      cols: 21,
+      mask: hexagonMask(19, 21),
+      minArrows: 36,
+      maxPathLen: 13,
+      fillTarget: 0.9,
+      fallbackRows: 17,
+      fallbackCols: 19,
+      fallbackMask: hexagonMask(17, 19),
     );
   }
 
-  /// Level 17 — Expert heart silhouette nest.
+  /// Level 17 — packed mix nest (small/medium/tall, little free space).
   static SolvableLevelResult _nestedLevel17() {
     return _shapedExpertLevel(
       levelNumber: 17,
-      rows: 18,
-      cols: 18,
-      mask: generateHeartShapeMask(18),
-      minArrows: 28,
-      maxPathLen: 15,
-      fillTarget: 0.86,
-      fallbackRows: 16,
-      fallbackCols: 16,
-      fallbackMask: generateHeartShapeMask(16),
+      rows: 20,
+      cols: 20,
+      mask: generateHeartShapeMask(20),
+      minArrows: 40,
+      maxPathLen: 12,
+      fillTarget: 0.98,
+      fallbackRows: 18,
+      fallbackCols: 18,
+      fallbackMask: generateHeartShapeMask(18),
+      mixPathSizes: true,
     );
   }
 
-  /// Level 18 — Expert inverted triangle.
+  /// Level 18 — heart silhouette: short L/U/zigzag arrows pack into each other
+  /// (Escape Puzzle style). Not a concentric ring like L12/L13.
   static SolvableLevelResult _nestedLevel18() {
     return _shapedExpertLevel(
       levelNumber: 18,
-      rows: 17,
+      rows: 19,
       cols: 19,
-      mask: invertedTriangleMask(17, 19),
-      minArrows: 28,
-      maxPathLen: 15,
-      fillTarget: 0.86,
-      fallbackRows: 15,
+      mask: generateHeartShapeMask(19),
+      minArrows: 50,
+      maxPathLen: 8,
+      fillTarget: 0.99,
+      fallbackRows: 17,
       fallbackCols: 17,
-      fallbackMask: invertedTriangleMask(15, 17),
+      fallbackMask: generateHeartShapeMask(17),
+      mixPathSizes: true,
     );
   }
 
-  /// Level 19 — Expert circle nest.
+  /// Level 19 — packed mix circle nest.
   static SolvableLevelResult _nestedLevel19() {
     return _shapedExpertLevel(
       levelNumber: 19,
-      rows: 18,
-      cols: 18,
-      mask: circleMask(18, 18),
-      minArrows: 30,
-      maxPathLen: 16,
-      fillTarget: 0.86,
-      fallbackRows: 16,
-      fallbackCols: 16,
-      fallbackMask: circleMask(16, 16),
+      rows: 21,
+      cols: 21,
+      mask: circleMask(21, 21),
+      minArrows: 48,
+      maxPathLen: 12,
+      fillTarget: 0.97,
+      fallbackRows: 19,
+      fallbackCols: 19,
+      fallbackMask: circleMask(19, 19),
+      mixPathSizes: true,
     );
   }
 
-  /// Level 20 — Expert star nest (densest shaped board).
+  /// Level 20 — packed mix nest.
   static SolvableLevelResult _nestedLevel20() {
     return _shapedExpertLevel(
       levelNumber: 20,
-      rows: 19,
-      cols: 19,
-      mask: starMask(19, 19),
-      minArrows: 28,
-      maxPathLen: 16,
-      fillTarget: 0.86,
-      fallbackRows: 17,
-      fallbackCols: 17,
-      fallbackMask: starMask(17, 17),
-    );
-  }
-
-  /// Level 21 — Expert thick ring (readable donut, denser than thin ring).
-  static SolvableLevelResult _nestedLevel21() {
-    return _shapedExpertLevel(
-      levelNumber: 21,
-      rows: 19,
-      cols: 19,
-      mask: thickRingMask(19, 19),
-      minArrows: 30,
-      maxPathLen: 14,
-      fillTarget: 0.88,
-      fallbackRows: 17,
-      fallbackCols: 17,
-      fallbackMask: thickRingMask(17, 17),
-    );
-  }
-
-  /// Level 22 — Expert four-petal clover.
-  static SolvableLevelResult _nestedLevel22() {
-    return _shapedExpertLevel(
-      levelNumber: 22,
-      rows: 21,
-      cols: 21,
-      mask: cloverMask(21, 21),
-      minArrows: 28,
-      maxPathLen: 17,
-      fillTarget: 0.85,
-      fallbackRows: 18,
-      fallbackCols: 18,
-      fallbackMask: cloverMask(18, 18),
-    );
-  }
-
-  /// Level 23 — Expert hourglass (pinched waist).
-  static SolvableLevelResult _nestedLevel23() {
-    return _shapedExpertLevel(
-      levelNumber: 23,
       rows: 22,
-      cols: 19,
-      mask: hourglassMask(22, 19),
-      minArrows: 28,
-      maxPathLen: 17,
-      fillTarget: 0.85,
-      fallbackRows: 18,
-      fallbackCols: 16,
-      fallbackMask: hourglassMask(18, 16),
-    );
-  }
-
-  /// Level 24 — Expert crescent moon.
-  static SolvableLevelResult _nestedLevel24() {
-    return _shapedExpertLevel(
-      levelNumber: 24,
-      rows: 21,
       cols: 22,
-      mask: crescentMask(21, 22),
-      minArrows: 26,
-      maxPathLen: 17,
-      fillTarget: 0.84,
-      fallbackRows: 17,
-      fallbackCols: 18,
-      fallbackMask: crescentMask(17, 18),
+      mask: octagonMask(22, 22),
+      minArrows: 52,
+      maxPathLen: 12,
+      fillTarget: 0.97,
+      fallbackRows: 20,
+      fallbackCols: 20,
+      fallbackMask: circleMask(20, 20),
+      mixPathSizes: true,
     );
   }
 
-  /// Level 25 — Expert plus / cross arms.
-  static SolvableLevelResult _nestedLevel25() {
-    return _shapedExpertLevel(
-      levelNumber: 25,
-      rows: 21,
-      cols: 21,
-      mask: plusMask(21, 21),
-      minArrows: 26,
-      maxPathLen: 17,
-      fillTarget: 0.85,
-      fallbackRows: 17,
-      fallbackCols: 17,
-      fallbackMask: plusMask(17, 17),
+  /// Level 21 — packed Escape-puzzle mix nest.
+  static SolvableLevelResult _nestedLevel21() {
+    return _denseExpertRect(
+      levelNumber: 21,
+      rows: 18,
+      cols: 18,
+      minArrows: 48,
+      maxFreeAtStart: 6,
+      mixPathSizes: true,
     );
   }
 
-  /// Level 26 — Expert shield / teardrop.
-  static SolvableLevelResult _nestedLevel26() {
-    return _shapedExpertLevel(
-      levelNumber: 26,
-      rows: 22,
+  /// Level 22 — packed Escape-puzzle mix nest.
+  static SolvableLevelResult _nestedLevel22() {
+    return _denseExpertRect(
+      levelNumber: 22,
+      rows: 18,
+      cols: 19,
+      minArrows: 50,
+      maxFreeAtStart: 6,
+      mixPathSizes: true,
+    );
+  }
+
+  /// Level 23 — packed Escape-puzzle mix nest.
+  static SolvableLevelResult _nestedLevel23() {
+    return _denseExpertRect(
+      levelNumber: 23,
+      rows: 19,
+      cols: 19,
+      minArrows: 52,
+      maxFreeAtStart: 6,
+      mixPathSizes: true,
+    );
+  }
+
+  /// Level 24 — packed Escape-puzzle mix nest.
+  static SolvableLevelResult _nestedLevel24() {
+    return _denseExpertRect(
+      levelNumber: 24,
+      rows: 19,
       cols: 20,
-      mask: shieldMask(22, 20),
-      minArrows: 30,
-      maxPathLen: 17,
-      fillTarget: 0.85,
-      fallbackRows: 18,
-      fallbackCols: 16,
-      fallbackMask: shieldMask(18, 16),
+      minArrows: 54,
+      maxFreeAtStart: 6,
+      mixPathSizes: true,
     );
   }
 
-  /// Level 27 — Expert octagon.
+  /// Level 25 — packed Escape-puzzle mix nest.
+  static SolvableLevelResult _nestedLevel25() {
+    return _denseExpertRect(
+      levelNumber: 25,
+      rows: 20,
+      cols: 20,
+      minArrows: 56,
+      maxFreeAtStart: 7,
+      mixPathSizes: true,
+    );
+  }
+
+  /// Level 26 — packed Escape-puzzle mix nest.
+  static SolvableLevelResult _nestedLevel26() {
+    return _denseExpertRect(
+      levelNumber: 26,
+      rows: 20,
+      cols: 21,
+      minArrows: 58,
+      maxFreeAtStart: 7,
+      mixPathSizes: true,
+    );
+  }
+
+  /// Level 27 — packed Escape-puzzle mix nest.
   static SolvableLevelResult _nestedLevel27() {
-    return _shapedExpertLevel(
+    return _denseExpertRect(
       levelNumber: 27,
       rows: 21,
       cols: 21,
-      mask: octagonMask(21, 21),
-      minArrows: 30,
-      maxPathLen: 18,
-      fillTarget: 0.86,
-      fallbackRows: 18,
-      fallbackCols: 18,
-      fallbackMask: octagonMask(18, 18),
+      minArrows: 60,
+      maxFreeAtStart: 7,
+      mixPathSizes: true,
     );
   }
 
-  /// Level 28 — Expert stadium / pill.
+  /// Level 28 — packed Escape-puzzle mix nest.
   static SolvableLevelResult _nestedLevel28() {
-    return _shapedExpertLevel(
+    return _denseExpertRect(
       levelNumber: 28,
-      rows: 20,
-      cols: 24,
-      mask: stadiumMask(20, 24),
-      minArrows: 30,
-      maxPathLen: 18,
-      fillTarget: 0.86,
-      fallbackRows: 16,
-      fallbackCols: 20,
-      fallbackMask: stadiumMask(16, 20),
+      rows: 21,
+      cols: 22,
+      minArrows: 62,
+      maxFreeAtStart: 8,
+      mixPathSizes: true,
     );
   }
 
-  /// Level 29 — Expert six-petal flower.
+  /// Level 29 — packed Escape-puzzle mix nest.
   static SolvableLevelResult _nestedLevel29() {
-    return _shapedExpertLevel(
+    return _denseExpertRect(
       levelNumber: 29,
       rows: 22,
       cols: 22,
-      mask: flowerMask(22, 22),
-      minArrows: 28,
-      maxPathLen: 17,
-      fillTarget: 0.85,
-      fallbackRows: 18,
-      fallbackCols: 18,
-      fallbackMask: flowerMask(18, 18),
+      minArrows: 64,
+      maxFreeAtStart: 8,
+      mixPathSizes: true,
     );
   }
 
-  /// Level 30 — Expert infinity / figure-eight (finale nest).
+  /// Level 30 — packed Escape-puzzle mix nest (campaign finale).
   static SolvableLevelResult _nestedLevel30() {
-    return _shapedExpertLevel(
+    return _denseExpertRect(
       levelNumber: 30,
-      rows: 20,
-      cols: 24,
-      mask: infinityMask(20, 24),
-      minArrows: 30,
-      maxPathLen: 18,
-      fillTarget: 0.86,
-      fallbackRows: 16,
-      fallbackCols: 20,
-      fallbackMask: infinityMask(16, 20),
+      rows: 22,
+      cols: 23,
+      minArrows: 66,
+      maxFreeAtStart: 8,
+      mixPathSizes: true,
     );
   }
 
-  /// Shared builder for L14–L30 shaped Expert nests (solvable by construction).
+  /// Full-rectangle Expert nest — ref-style bent hooks, few free at start.
+  static SolvableLevelResult _denseExpertRect({
+    required int levelNumber,
+    required int rows,
+    required int cols,
+    required int minArrows,
+    int maxFreeAtStart = 4,
+    bool mixPathSizes = false,
+  }) {
+    StateError? lastError;
+    final minPath = mixPathSizes ? 2 : 3;
+    final fillTight = mixPathSizes ? 0.97 : 0.94;
+
+    SolvableLevelResult? tryOnce({
+      required int r,
+      required int c,
+      required int seed,
+      required int arrows,
+      required double fill,
+      required int maxPath,
+      int? freeCap,
+    }) {
+      try {
+        return generateNestedSolvableLevel(
+          levelNumber,
+          r,
+          c,
+          3,
+          1,
+          difficulty: LevelDifficulty.expert,
+          seed: seed,
+          fillTarget: fill,
+          minPathLen: minPath,
+          maxPathLen: maxPath,
+          minArrows: arrows,
+          hardNest: true,
+          mixPathSizes: mixPathSizes,
+          maxFreeAtStart: freeCap,
+        );
+      } on StateError catch (e) {
+        lastError = e;
+        return null;
+      }
+    }
+
+    for (var attempt = 0; attempt < (mixPathSizes ? 60 : 160); attempt++) {
+      final result = tryOnce(
+        r: rows,
+        c: cols,
+        seed: levelNumber * 9973 + attempt * 173 + rows * 19,
+        arrows: minArrows,
+        fill: fillTight,
+        maxPath: mixPathSizes ? 12 : 11,
+        freeCap: attempt < (mixPathSizes ? 40 : 90)
+            ? maxFreeAtStart
+            : maxFreeAtStart + 2,
+      );
+      if (result != null) return result;
+    }
+
+    final soft = (minArrows * 0.85).round().clamp(34, minArrows);
+    for (var attempt = 0; attempt < (mixPathSizes ? 40 : 100); attempt++) {
+      final result = tryOnce(
+        r: rows,
+        c: cols,
+        seed: levelNumber * 4243 + attempt * 41,
+        arrows: soft,
+        fill: mixPathSizes ? 0.95 : 0.92,
+        maxPath: mixPathSizes ? 10 : 9,
+        freeCap: maxFreeAtStart + 3,
+      );
+      if (result != null) return result;
+    }
+
+    for (var attempt = 0; attempt < 80; attempt++) {
+      final result = tryOnce(
+        r: (rows + 1).clamp(rows, 24),
+        c: (cols + 1).clamp(cols, 24),
+        seed: levelNumber * 1117 + attempt * 29,
+        arrows: (minArrows * 0.75).round().clamp(32, soft),
+        fill: mixPathSizes ? 0.93 : 0.9,
+        maxPath: 8,
+        freeCap: maxFreeAtStart + 3,
+      );
+      if (result != null) return result;
+    }
+
+    for (var attempt = 0; attempt < 100; attempt++) {
+      final size = 18 + (attempt % 5);
+      final result = tryOnce(
+        r: size,
+        c: size + (attempt.isEven ? 1 : 0),
+        seed: levelNumber * 3331 + attempt * 17,
+        arrows: (minArrows * 0.65).round().clamp(36, soft),
+        fill: mixPathSizes ? 0.94 : 0.91,
+        maxPath: 8,
+        freeCap: 8,
+      );
+      if (result != null) return result;
+    }
+
+    return tryOnce(
+          r: 19,
+          c: 19,
+          seed: levelNumber * 3331,
+          arrows: mixPathSizes ? 40 : 42,
+          fill: mixPathSizes ? 0.93 : 0.91,
+          maxPath: 8,
+          freeCap: 8,
+        ) ??
+        generateNestedSolvableLevel(
+          levelNumber,
+          19,
+          19,
+          3,
+          1,
+          difficulty: LevelDifficulty.expert,
+          seed: levelNumber * 3331 + 7,
+          fillTarget: mixPathSizes ? 0.92 : 0.9,
+          minPathLen: minPath,
+          maxPathLen: 8,
+          minArrows: 40,
+          hardNest: true,
+          mixPathSizes: mixPathSizes,
+        );
+  }
+
+  /// Shared builder for L14–L20 shaped Expert nests (solvable by construction).
   static SolvableLevelResult _shapedExpertLevel({
     required int levelNumber,
     required int rows,
@@ -2807,68 +3381,114 @@ class LevelRepository {
     required int fallbackRows,
     required int fallbackCols,
     required List<List<bool>> fallbackMask,
+    bool mixPathSizes = false,
   }) {
     StateError? lastError;
-    for (var attempt = 0; attempt < 80; attempt++) {
+    final minPath = mixPathSizes ? 2 : 3;
+
+    SolvableLevelResult? tryOnce({
+      required int r,
+      required int c,
+      required List<List<bool>> m,
+      required int seed,
+      required int arrows,
+      required double fill,
+      required int maxPath,
+      int? freeCap,
+    }) {
       try {
         return generateNestedSolvableLevel(
           levelNumber,
-          rows,
-          cols,
+          r,
+          c,
           3,
           1,
           difficulty: LevelDifficulty.expert,
-          seed: levelNumber * 9973 + attempt * 173 + rows * 19,
-          shapeMask: mask,
-          fillTarget: fillTarget,
-          minPathLen: 3,
-          maxPathLen: maxPathLen,
-          minArrows: minArrows,
+          seed: seed,
+          shapeMask: m,
+          fillTarget: fill,
+          minPathLen: minPath,
+          maxPathLen: maxPath,
+          minArrows: arrows,
+          hardNest: true,
+          mixPathSizes: mixPathSizes,
+          maxFreeAtStart: freeCap,
         );
       } on StateError catch (e) {
         lastError = e;
+        return null;
       }
     }
-    final softMin = (minArrows * 0.5).round().clamp(14, minArrows);
-    for (var attempt = 0; attempt < 40; attempt++) {
-      try {
-        return generateNestedSolvableLevel(
-          levelNumber,
-          fallbackRows,
-          fallbackCols,
-          3,
-          1,
-          difficulty: LevelDifficulty.expert,
-          seed: levelNumber * 7919 + attempt * 97 + 42,
-          shapeMask: fallbackMask,
-          fillTarget: (fillTarget - 0.08).clamp(0.75, 0.95),
-          minPathLen: 2,
-          maxPathLen: (maxPathLen - 3).clamp(8, 14),
-          minArrows: softMin,
-        );
-      } on StateError catch (e) {
-        lastError = e;
-      }
-    }
-    // Ultra-soft last resort (same silhouette, easier fill targets).
-    try {
-      return generateNestedSolvableLevel(
-        levelNumber,
-        fallbackRows,
-        fallbackCols,
-        3,
-        1,
-        difficulty: LevelDifficulty.expert,
-        seed: levelNumber * 4243,
-        shapeMask: fallbackMask,
-        fillTarget: 0.78,
-        minPathLen: 2,
-        maxPathLen: 12,
-        minArrows: 14,
+
+    for (var attempt = 0; attempt < (mixPathSizes ? 50 : 120); attempt++) {
+      final result = tryOnce(
+        r: rows,
+        c: cols,
+        m: mask,
+        seed: levelNumber * 9973 + attempt * 173 + rows * 19,
+        arrows: minArrows,
+        fill: fillTarget,
+        maxPath: maxPathLen,
+        freeCap: attempt < (mixPathSizes ? 30 : 70) ? 8 : 11,
       );
-    } on StateError catch (e) {
-      throw lastError ?? e;
+      if (result != null) return result;
     }
+
+    final softMin = (minArrows * 0.8).round().clamp(26, minArrows);
+    for (var attempt = 0; attempt < (mixPathSizes ? 30 : 80); attempt++) {
+      final result = tryOnce(
+        r: fallbackRows,
+        c: fallbackCols,
+        m: fallbackMask,
+        seed: levelNumber * 7919 + attempt * 97 + 42,
+        arrows: softMin,
+        fill: (fillTarget - 0.02).clamp(0.84, 0.95),
+        maxPath: maxPathLen,
+        freeCap: 12,
+      );
+      if (result != null) return result;
+    }
+
+    for (var attempt = 0; attempt < 70; attempt++) {
+      final size = 18 + (attempt % 4);
+      final result = tryOnce(
+        r: size,
+        c: size,
+        m: octagonMask(size, size),
+        seed: levelNumber * 4243 + attempt * 53,
+        arrows: softMin,
+        fill: mixPathSizes ? 0.94 : 0.9,
+        maxPath: mixPathSizes ? 10 : 9,
+        freeCap: 10,
+      );
+      if (result != null) return result;
+    }
+
+    return tryOnce(
+          r: 18,
+          c: 18,
+          m: octagonMask(18, 18),
+          seed: levelNumber * 2221,
+          arrows: mixPathSizes ? 32 : 28,
+          fill: mixPathSizes ? 0.92 : 0.88,
+          maxPath: 8,
+        ) ??
+        generateNestedSolvableLevel(
+          levelNumber,
+          18,
+          18,
+          3,
+          1,
+          difficulty: LevelDifficulty.expert,
+          seed: levelNumber * 2221 + 3,
+          shapeMask: octagonMask(18, 18),
+          fillTarget: mixPathSizes ? 0.9 : 0.86,
+          minPathLen: minPath,
+          maxPathLen: 8,
+          minArrows: mixPathSizes ? 28 : 24,
+          hardNest: true,
+          mixPathSizes: mixPathSizes,
+        );
   }
 
 }

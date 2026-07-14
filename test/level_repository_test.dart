@@ -196,28 +196,26 @@ void main() {
         }
       }
 
-      // L15–L30: shaped Expert + solvable + cells inside mask.
+      // L15–L30: denser Expert nests; arrow count rises with level.
       for (var i = 14; i < 30; i++) {
         final level = repo.levels[i];
         expect(level.levelNumber, i + 1);
         expect(level.difficulty, LevelDifficulty.expert);
-        expect(level.shapeMask, isNotNull);
-        expect(level.arrows.length, greaterThanOrEqualTo(18));
-        expect(level.arrows.where((a) => a.isMultiCell).length,
-            greaterThanOrEqualTo(18));
-        // Nested Expert: no floating single-cell tip triangles.
+        expect(level.arrows.length, greaterThanOrEqualTo(28));
         expect(
           level.arrows.every((a) => a.path.length >= 2),
           isTrue,
           reason: 'L${level.levelNumber} has orphan tip (path length < 2)',
         );
-        for (final arrow in level.arrows) {
-          for (final cell in arrow.path) {
-            expect(
-              level.shapeMask![cell.row][cell.col],
-              isTrue,
-              reason: 'L${level.levelNumber} ${arrow.id} outside shape',
-            );
+        if (level.shapeMask != null) {
+          for (final arrow in level.arrows) {
+            for (final cell in arrow.path) {
+              expect(
+                level.shapeMask![cell.row][cell.col],
+                isTrue,
+                reason: 'L${level.levelNumber} ${arrow.id} outside shape',
+              );
+            }
           }
         }
         // No head-on tip pairs on the same row/column (▸…◂ / ▲…▼).
@@ -226,26 +224,32 @@ void main() {
           for (var bi = ai + 1; bi < level.arrows.length; bi++) {
             final b = level.arrows[bi];
             if (a.row == b.row && a.col != b.col) {
-              final left = a.col < b.col ? a : b;
-              final right = a.col < b.col ? b : a;
-              expect(
-                !(left.direction == ArrowDirection.right &&
-                    right.direction == ArrowDirection.left),
-                isTrue,
-                reason:
-                    'L${level.levelNumber} tips face on row ${a.row}: ${left.id}/${right.id}',
-              );
+              final dist = (a.col - b.col).abs();
+              if (dist <= 4) {
+                final left = a.col < b.col ? a : b;
+                final right = a.col < b.col ? b : a;
+                expect(
+                  !(left.direction == ArrowDirection.right &&
+                      right.direction == ArrowDirection.left),
+                  isTrue,
+                  reason:
+                      'L${level.levelNumber} tips face on row ${a.row}: ${left.id}/${right.id}',
+                );
+              }
             }
             if (a.col == b.col && a.row != b.row) {
-              final top = a.row < b.row ? a : b;
-              final bottom = a.row < b.row ? b : a;
-              expect(
-                !(top.direction == ArrowDirection.down &&
-                    bottom.direction == ArrowDirection.up),
-                isTrue,
-                reason:
-                    'L${level.levelNumber} tips face on col ${a.col}: ${top.id}/${bottom.id}',
-              );
+              final dist = (a.row - b.row).abs();
+              if (dist <= 4) {
+                final top = a.row < b.row ? a : b;
+                final bottom = a.row < b.row ? b : a;
+                expect(
+                  !(top.direction == ArrowDirection.down &&
+                      bottom.direction == ArrowDirection.up),
+                  isTrue,
+                  reason:
+                      'L${level.levelNumber} tips face on col ${a.col}: ${top.id}/${bottom.id}',
+                );
+              }
             }
           }
         }

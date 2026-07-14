@@ -107,11 +107,11 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
       vsync: this,
       duration: _exitDurationFor(widget.arrow),
     );
-    // Stay fully visible until almost off-board, then cut out.
+    // Stay fully visible until near the board rim, then fade inside the clip.
     _exitOpacity = Tween<double>(begin: 1, end: 0).animate(
       CurvedAnimation(
         parent: _exitController,
-        curve: const Interval(0.92, 1.0, curve: Curves.linear),
+        curve: const Interval(0.62, 1.0, curve: Curves.easeIn),
       ),
     );
     _exitOffset = _buildExitOffset(widget.arrow.direction);
@@ -224,7 +224,7 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
       if (c.col < minC) minC = c.col;
       if (c.col > maxC) maxC = c.col;
     }
-    final pad = cell * 2.5;
+    final pad = cell * 0.55;
     final travel = switch (direction) {
       ArrowDirection.up => (maxR + 1) * cell + pad,
       ArrowDirection.down => (widget.gridRows - minR) * cell + pad,
@@ -272,12 +272,13 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
     final boardW = widget.gridCols * cell;
     final boardH = widget.gridRows * cell;
     final clearPastEdge = switch (widget.arrow.direction) {
-      ArrowDirection.up => tip.dy + cell * 3.2,
-      ArrowDirection.down => (boardH - tip.dy) + cell * 3.2,
-      ArrowDirection.left => tip.dx + cell * 3.2,
-      ArrowDirection.right => (boardW - tip.dx) + cell * 3.2,
+      ArrowDirection.up => tip.dy + cell * 0.7,
+      ArrowDirection.down => (boardH - tip.dy) + cell * 0.7,
+      ArrowDirection.left => tip.dx + cell * 0.7,
+      ArrowDirection.right => (boardW - tip.dx) + cell * 0.7,
     };
-    // bodyLen: slide fully onto the exit ray; clearPastEdge: leave the board.
+    // bodyLen: slide onto the exit ray; clearPastEdge: reach the board rim
+    // (parent Clip hides anything past the card — no phone-screen overflow).
     final exitLen = bodyLen + clearPastEdge;
     points.add(tip + unit * exitLen);
     return points;
@@ -519,8 +520,8 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
     final baseColor =
         isDark ? colors.arrowLight : ArrowTile.referenceArrowColor;
     final cell = widget.cellSize;
-    // Sleek line-art stroke (fixed 5px) + proportional head.
-    const strokeWidth = 5.0;
+    // Dense / large grids (daily ~100 arrows): thinner stroke so board stays readable.
+    final strokeWidth = (cell * 0.2).clamp(2.0, 5.0);
     final multi = widget.arrow.isMultiCell;
 
     return AnimatedBuilder(
@@ -568,8 +569,8 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
               : bumping
                   ? _wrongBumpPolylinePoints()
                   : _polylinePoints();
-          // Expand canvas while escaping so off-board stroke isn't clipped.
-          final escapePad = (_exitStarted || bumping) ? cell * 5.5 : 0.0;
+          // Small pad so the stroke can reach the rim before the board clip hides it.
+          final escapePad = (_exitStarted || bumping) ? cell * 0.85 : 0.0;
           final paintW = boardW + escapePad * 2;
           final paintH = boardH + escapePad * 2;
           final shifted = escapePad > 0
@@ -729,7 +730,7 @@ class ArrowPolylinePainter extends CustomPainter {
       ..isAntiAlias = true;
 
     final tip = points.last;
-    const headLen = 13.0;
+    final headLen = (strokeWidth * 2.6).clamp(7.0, 13.0);
     final unit = tip - points[points.length - 2];
     final len = unit.distance;
     final dir = len == 0 ? Offset.zero : unit / len;
@@ -741,13 +742,11 @@ class ArrowPolylinePainter extends CustomPainter {
     }
     path.lineTo(shaftEnd.dx, shaftEnd.dy);
     canvas.drawPath(path, stroke);
-    _drawHead(canvas, tip);
+    _drawHead(canvas, tip, headLen);
   }
 
-  void _drawHead(Canvas canvas, Offset tip) {
-    // ~12–14px wide triangular head for 5px stroke.
-    const headLen = 13.0;
-    const headHalf = 6.5;
+  void _drawHead(Canvas canvas, Offset tip, double headLen) {
+    final headHalf = headLen * 0.5;
 
     // Follow local tangent (L bends + escape slide) instead of fixed enum.
     final prev = points[points.length - 2];
@@ -822,18 +821,17 @@ class ArrowPathPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..isAntiAlias = true;
 
-    const headLen = 13.0;
+    final headLen = (strokeWidth * 2.6).clamp(7.0, 13.0);
     final unit = tip - tail;
     final len = unit.distance;
     final dir = len == 0 ? Offset.zero : unit / len;
     final shaftEnd = tip - dir * (headLen * 0.55);
     canvas.drawLine(tail, shaftEnd, stroke);
-    _drawHead(canvas);
+    _drawHead(canvas, headLen);
   }
 
-  void _drawHead(Canvas canvas) {
-    const headLen = 13.0;
-    const headHalf = 6.5;
+  void _drawHead(Canvas canvas, double headLen) {
+    final headHalf = headLen * 0.5;
 
     final angle = switch (direction) {
       ArrowDirection.up => -math.pi / 2,

@@ -22,6 +22,7 @@ class LevelCompletedOverlay extends StatefulWidget {
     this.heartsLeft,
     this.heartsAllowed,
     this.isCampaignComplete = false,
+    this.isDaily = false,
   });
 
   final int completedLevel;
@@ -34,6 +35,7 @@ class LevelCompletedOverlay extends StatefulWidget {
   final int? heartsLeft;
   final int? heartsAllowed;
   final bool isCampaignComplete;
+  final bool isDaily;
 
   @override
   State<LevelCompletedOverlay> createState() => _LevelCompletedOverlayState();
@@ -370,10 +372,12 @@ class _LevelCompletedOverlayState extends State<LevelCompletedOverlay>
                         );
                       },
                       child: Text(
-                        'Level Completed!',
+                        widget.isDaily
+                            ? 'Daily Challenge Completed'
+                            : 'Level Completed!',
                         textAlign: TextAlign.center,
                         style: AppTextStyles.heading(
-                          fontSize: 28,
+                          fontSize: widget.isDaily ? 24 : 28,
                           fontWeight: FontWeight.w700,
                           color: Colors.white,
                           letterSpacing: -0.4,

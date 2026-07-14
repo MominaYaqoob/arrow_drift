@@ -288,11 +288,11 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     AppFeedback.buttonTap(ref);
     final controller = ref.read(gameControllerProvider(_level).notifier);
 
-    // Hints left: use one. Hints at 0: watch rewarded ad → +1 hint → use it.
+    // Free hints first. At 0: Watch Ad → +2 hints, then use one.
     if (gameState.hintsLeft <= 0) {
       final earned = await AdsService.instance.showRewardedForHint(context);
       if (!earned || !mounted) return;
-      controller.grantExtraHint();
+      controller.grantExtraHint(count: 2);
     }
 
     final id = controller.useHint();
@@ -610,6 +610,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
               heartsLeft: gameState.heartsLeft,
               heartsAllowed: level.heartsAllowed,
               isCampaignComplete: isCampaignComplete,
+              isDaily: widget.isDaily,
               onNextGame: _onNextGame,
               onMain: _onMainFromComplete,
             ),
@@ -966,7 +967,6 @@ class _BottomActionsState extends State<_BottomActions>
   Widget build(BuildContext context) {
     final colors = context.appColors;
     final hintsEmpty = widget.hintsLeft <= 0;
-    final dimIcon = colors.border.withValues(alpha: 0.85);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
@@ -982,25 +982,53 @@ class _BottomActionsState extends State<_BottomActions>
             },
             child: _ActionFab(
               onTap: _onHintTap,
-              child: Badge(
-                isLabelVisible: true,
-                backgroundColor: hintsEmpty
-                    ? colors.border.withValues(alpha: 0.7)
-                    : colors.accentTealDeep,
-                label: Text(
-                  '${widget.hintsLeft}',
-                  style: AppTextStyles.label(
-                    fontSize: 10,
-                    color: hintsEmpty
-                        ? colors.secondaryText
-                        : Colors.white,
-                  ),
-                ),
-                child: Icon(
-                  Icons.lightbulb_rounded,
-                  color: hintsEmpty ? dimIcon : colors.primaryText,
-                ),
-              ),
+              child: hintsEmpty
+                  ? Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Icon(
+                          Icons.lightbulb_rounded,
+                          color: colors.primaryText,
+                        ),
+                        Positioned(
+                          right: -10,
+                          top: -8,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: colors.accentTealDeep,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'Ad',
+                              style: AppTextStyles.label(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : Badge(
+                      isLabelVisible: true,
+                      backgroundColor: colors.accentTealDeep,
+                      label: Text(
+                        '${widget.hintsLeft}',
+                        style: AppTextStyles.label(
+                          fontSize: 10,
+                          color: Colors.white,
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.lightbulb_rounded,
+                        color: colors.primaryText,
+                      ),
+                    ),
             ),
           ),
           const Spacer(),

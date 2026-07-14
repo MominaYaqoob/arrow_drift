@@ -89,13 +89,13 @@ class GameBoard extends StatelessWidget {
           }
         }
 
-        // Dots stay behind; escaping arrows slide along tip axis (teal) past the
-        // grid edge — no hard clip so the exit line is visible like the reference.
+        // Clip at the board edge so escapes slide to the rim then vanish —
+        // never continue onto the phone chrome past the white card.
         final arrowsLayer = SizedBox(
           width: boardWidth,
           height: boardHeight,
           child: Stack(
-            clipBehavior: Clip.none,
+            clipBehavior: Clip.hardEdge,
             children: [
               if (!plainTutorial)
                 Positioned.fill(
@@ -168,7 +168,7 @@ class GameBoard extends StatelessWidget {
             ),
             child: FittedBox(
               fit: BoxFit.contain,
-              clipBehavior: Clip.none,
+              clipBehavior: Clip.hardEdge,
               child: boardStack,
             ),
           );
@@ -184,8 +184,7 @@ class GameBoard extends StatelessWidget {
             );
           }
 
-          // Scale the whole white card (dots stay inside) — no separate
-          // background grid zooming behind the board.
+          // Scale the whole white card (dots stay inside).
           return Center(
             child: AnimatedScale(
               scale: zoom,
@@ -194,8 +193,7 @@ class GameBoard extends StatelessWidget {
               child: Container(
                 margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 padding: const EdgeInsets.all(14),
-                // Clip.none so escaping arrows can slide fully off the board.
-                clipBehavior: Clip.none,
+                clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
                   color: boardBg,
                   borderRadius: BorderRadius.circular(22),
@@ -240,7 +238,7 @@ class GameBoard extends StatelessWidget {
                 ),
               ],
             ),
-            clipBehavior: Clip.none,
+            clipBehavior: Clip.antiAlias,
             child: boardStack,
           ),
         );
@@ -249,11 +247,11 @@ class GameBoard extends StatelessWidget {
           minScale: 0.7,
           maxScale: 2.5,
           boundaryMargin: const EdgeInsets.all(160),
-          clipBehavior: Clip.none,
+          clipBehavior: Clip.hardEdge,
           child: Center(
             child: FittedBox(
               fit: BoxFit.contain,
-              clipBehavior: Clip.none,
+              clipBehavior: Clip.hardEdge,
               child: cardChild,
             ),
           ),
