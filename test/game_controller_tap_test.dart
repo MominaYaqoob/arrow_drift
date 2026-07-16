@@ -85,9 +85,9 @@ void main() {
           isTrue);
     });
 
-    test('levels 1-10 can be fully cleared by always tapping a free arrow', () {
+    test('levels 1-20 can be fully cleared by always tapping a free arrow', () {
       final repo = LevelRepository();
-      for (var n = 1; n <= 10; n++) {
+      for (var n = 1; n <= 20; n++) {
         final level = repo.getLevel(n);
         final controller = GameController(level);
         var safety = 0;
@@ -117,6 +117,32 @@ void main() {
         expect(controller.state.isWon, isTrue, reason: 'Level $n should be won');
         expect(controller.state.heartsLeft, level.heartsAllowed);
       }
+    });
+
+    test('one tap removes only the tapped arrow (no cascade)', () {
+      final level = LevelRepository().getLevel(19);
+      final controller = GameController(level);
+      final free = controller.state.arrows.where(
+        (arrow) =>
+            !arrow.isRemoved &&
+            !isArrowBlocked(
+              arrow: arrow,
+              arrows: controller.state.arrows,
+              gridRows: level.gridRows,
+              gridCols: level.gridCols,
+              shapeMask: level.shapeMask,
+            ),
+      );
+      expect(free, isNotEmpty);
+      final before = controller.state.arrows.where((a) => !a.isRemoved).length;
+      final id = free.first.id;
+      controller.tapArrow(id);
+      final after = controller.state.arrows.where((a) => !a.isRemoved).length;
+      expect(after, before - 1);
+      expect(
+        controller.state.arrows.firstWhere((a) => a.id == id).isRemoved,
+        isTrue,
+      );
     });
 
     test('retry via resetLevel restores the same level from scratch', () {

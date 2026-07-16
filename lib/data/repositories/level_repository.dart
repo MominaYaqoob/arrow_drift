@@ -1043,11 +1043,29 @@ SolvableLevelResult generateNestedSolvableLevel(
         r += dr;
         c += dc;
       }
-      // Straight seal leaves ≥5 empties ahead so the chain can continue.
+      // Straight seal: long first (5 cells), then short (3 cells) to densify.
       for (var tipIndex = 4; tipIndex <= cells.length - 6; tipIndex++) {
         final (tr, tc) = cells[tipIndex];
         if (!escapeClear(tr, tc, free.direction)) continue;
         final segment = cells.sublist(tipIndex - 4, tipIndex + 1);
+        final path = [
+          for (final cell in segment) GridCell(cell.$1, cell.$2),
+        ];
+        placeArrow(
+          ArrowModel(
+            id: allocArrowId(),
+            row: tr,
+            col: tc,
+            direction: free.direction,
+            path: path,
+          ),
+        );
+        return true;
+      }
+      for (var tipIndex = 2; tipIndex <= cells.length - 3; tipIndex++) {
+        final (tr, tc) = cells[tipIndex];
+        if (!escapeClear(tr, tc, free.direction)) continue;
+        final segment = cells.sublist(tipIndex - 2, tipIndex + 1);
         final path = [
           for (final cell in segment) GridCell(cell.$1, cell.$2),
         ];
@@ -1077,8 +1095,8 @@ SolvableLevelResult generateNestedSolvableLevel(
             tipR: tr,
             tipC: tc,
             direction: direction,
-            targetLen: max(minPathLen, 8),
-            minLen: minPathLen < 2 ? 2 : minPathLen,
+            targetLen: max(3, min(maxPathLen, max(minPathLen, 6))),
+            minLen: 3,
           );
           if (path == null) continue;
           placeArrow(
@@ -1250,27 +1268,19 @@ SolvableLevelResult generateNestedSolvableLevel(
       }
     }
 
-    // Optional fill toward targetCells with seal-required placements.
+    // Densify with seal-only placements (never open a second free tip).
     safety = 0;
     stall = 0;
-    while (occupied.length < targetCells && underArrowCap() && safety < 4000) {
+    while (occupied.length < targetCells && underArrowCap() && safety < 8000) {
       safety++;
       final before = occupied.length;
-      tryForceSealPlacement();
-      if (occupied.length == before) {
-        final tip = pickTip();
-        tryPlaceAt(
-          tipR: tip.$1,
-          tipC: tip.$2,
-          targetLen: pickPathLen().clamp(strictMin, maxPathLen),
-          minLen: strictMin < 2 ? 2 : strictMin,
-          preferInward: true,
-        );
+      if (!tryForceSealPlacement()) {
+        tryRetractAFreeTip();
+        tryForceSealPlacement();
       }
       if (occupied.length == before) {
         stall++;
-        if (stall > 40) tryRetractAFreeTip();
-        if (stall > 400) break;
+        if (stall > 900) break;
       } else {
         stall = 0;
       }
@@ -1590,7 +1600,7 @@ List<List<bool>> starMask(int rows, int cols) {
   });
 }
 
-/// Campaign levels 1–10. Daily / endless helpers stay separate.
+/// Campaign levels 1–20. Daily / endless helpers stay separate.
 class LevelRepository {
   LevelRepository({List<SolvableLevelResult>? prebuilt})
       : _prebuilt = prebuilt,
@@ -1600,9 +1610,8 @@ class LevelRepository {
   final List<SolvableLevelResult?> _lazy;
   final Map<int, LevelModel> _dailyCache = {};
 
-  /// Ship 10 now. Raise this single constant to 500–1000 later — boards are
-  /// formula-driven, lazy, and cached (no per-level hand tables).
-  static const int campaignLevelCount = 10;
+  /// Campaign pack size. Boards are formula-driven, lazy, and cached.
+  static const int campaignLevelCount = 20;
 
   SolvableLevelResult _resultAt(int index) {
     if (index < 0 || index >= campaignLevelCount) {
@@ -1612,7 +1621,7 @@ class LevelRepository {
     return _lazy[index] ??= _buildCampaignLevel(index + 1);
   }
 
-  /// Prefer [getLevel] — only 10 campaign levels are shipped.
+  /// Prefer [getLevel] — ships [campaignLevelCount] campaign levels.
   List<LevelModel> get levels => [
         for (var i = 0; i < campaignLevelCount; i++) _resultAt(i).level,
       ];
@@ -1895,7 +1904,10 @@ class LevelRepository {
   static SolvableLevelResult _buildCampaignLevel(int levelNumber) {
     if (levelNumber == 1) return _tutorialLevel1();
     if (levelNumber <= 5) return _earlyCampaignLevel(levelNumber);
-    return _shapedSnakeLevel(levelNumber);
+    if (levelNumber <= 10) return _shapedSnakeLevel(levelNumber);
+    if (levelNumber <= 15) return _mediumCampaignLevel(levelNumber);
+    if (levelNumber <= 18) return _complexHardCampaignLevel(levelNumber);
+    return _ultraDenseFinaleLevel(levelNumber); // L19–20
   }
 
   /// L2–L5: previous progressive nested boards on open rectangles (unchanged feel).
@@ -1971,15 +1983,10 @@ class LevelRepository {
     }
   }
 
-  /// L6+: bent-snake nests with rotating silhouettes. L6 is always a heart
-  /// (reference “Hard”); then every 8 levels the shape cycles.
+  /// L6–L10: bent-snake nests with rotating silhouettes (same boards as before).
+  /// All labeled Easy — challenge ramps at L11+.
   static SolvableLevelResult _shapedSnakeLevel(int levelNumber) {
-    final LevelDifficulty difficulty;
-    if (levelNumber <= 9) {
-      difficulty = LevelDifficulty.hard;
-    } else {
-      difficulty = LevelDifficulty.expert;
-    }
+    const difficulty = LevelDifficulty.easy;
 
     // Grid grows slowly, capped for phone performance.
     final baseSize = (10 + ((levelNumber - 6) ~/ 2)).clamp(10, 16);
@@ -2028,7 +2035,7 @@ class LevelRepository {
       }
     }
 
-    for (var attempt = 0; attempt < 60; attempt++) {
+    for (var attempt = 0; attempt < 20; attempt++) {
       final result = tryOnce(
         r: rows,
         c: cols,
@@ -2036,7 +2043,7 @@ class LevelRepository {
         seed: levelNumber * 9973 + attempt * 173 + baseSize * 19,
         arrows: (minArrows - (attempt ~/ 10) * 2).clamp(10, minArrows),
         fill: (fillTarget - (attempt ~/ 20) * 0.03).clamp(0.78, 0.94),
-        freeCap: maxFree + (attempt ~/ 15),
+        freeCap: maxFree + (attempt ~/ 8),
       );
       if (result != null) return result;
     }
@@ -2044,7 +2051,7 @@ class LevelRepository {
     // Fallback: slightly smaller square (still nested), then open rectangle.
     final fb = (baseSize - 2).clamp(8, baseSize);
     final fbMask = List.generate(fb, (_) => List<bool>.filled(fb, true));
-    for (var attempt = 0; attempt < 40; attempt++) {
+    for (var attempt = 0; attempt < 12; attempt++) {
       final result = tryOnce(
         r: fb,
         c: fb,
@@ -2052,7 +2059,7 @@ class LevelRepository {
         seed: levelNumber * 4243 + attempt * 97,
         arrows: (minArrows * 0.7).round().clamp(10, minArrows),
         fill: 0.82,
-        freeCap: maxFree + 2,
+        freeCap: maxFree + 2 + attempt,
       );
       if (result != null) return result;
     }
@@ -2070,6 +2077,257 @@ class LevelRepository {
 
     throw lastError ??
         StateError('Failed to build campaign level $levelNumber');
+  }
+
+  /// L11–L15: Medium pack — denser than Easy, built with few fast retries.
+  static SolvableLevelResult _mediumCampaignLevel(int levelNumber) {
+    final offset = levelNumber - 11; // 0..4
+    final baseSize = (12 + (offset ~/ 2)).clamp(12, 14);
+    final (rows, cols, mask) = _campaignShapeFor(levelNumber, baseSize);
+
+    final fillTarget = (0.88 + offset * 0.01).clamp(0.88, 0.92);
+    const minPath = 4;
+    final maxPath = (10 + (offset ~/ 2)).clamp(10, 12);
+    final minArrows = (22 + offset * 2).clamp(22, 30);
+    const hearts = 3;
+    const hints = 1;
+
+    StateError? lastError;
+
+    SolvableLevelResult? tryOnce({
+      required int r,
+      required int c,
+      required List<List<bool>> m,
+      required int seed,
+      required int arrows,
+      required double fill,
+      int? freeCap,
+    }) {
+      try {
+        return generateNestedSolvableLevel(
+          levelNumber,
+          r,
+          c,
+          hearts,
+          hints,
+          difficulty: LevelDifficulty.medium,
+          seed: seed,
+          shapeMask: m,
+          fillTarget: fill,
+          minPathLen: minPath,
+          maxPathLen: maxPath,
+          minArrows: arrows,
+          hardNest: true,
+          mixPathSizes: true,
+          maxFreeAtStart: freeCap,
+        );
+      } on StateError catch (e) {
+        lastError = e;
+        return null;
+      }
+    }
+
+    for (var attempt = 0; attempt < 16; attempt++) {
+      final result = tryOnce(
+        r: rows,
+        c: cols,
+        m: mask,
+        seed: levelNumber * 9973 + attempt * 173 + baseSize * 19,
+        arrows: (minArrows - (attempt ~/ 6) * 2).clamp(16, minArrows),
+        fill: (fillTarget - (attempt ~/ 8) * 0.02).clamp(0.84, 0.92),
+        freeCap: 3 + (attempt ~/ 5),
+      );
+      if (result != null) return result;
+    }
+
+    final fb = (baseSize - 1).clamp(11, baseSize);
+    final fbMask = List.generate(fb, (_) => List<bool>.filled(fb, true));
+    for (var attempt = 0; attempt < 10; attempt++) {
+      final result = tryOnce(
+        r: fb,
+        c: fb,
+        m: fbMask,
+        seed: levelNumber * 4243 + attempt * 97,
+        arrows: (minArrows * 0.75).round().clamp(14, minArrows),
+        fill: 0.86,
+        freeCap: null,
+      );
+      if (result != null) return result;
+    }
+
+    final soft = tryOnce(
+      r: 12,
+      c: 12,
+      m: List.generate(12, (_) => List<bool>.filled(12, true)),
+      seed: levelNumber * 1117,
+      arrows: 16,
+      fill: 0.84,
+      freeCap: null,
+    );
+    if (soft != null) return soft;
+
+    throw lastError ?? StateError('Failed to build campaign level $levelNumber');
+  }
+
+  /// L16–L18: Hard maze pack — long snakes, fast first-success build.
+  static SolvableLevelResult _complexHardCampaignLevel(int levelNumber) {
+    final offset = levelNumber - 16; // 0..2 for L16–18
+    const baseSize = 14;
+    final rows = baseSize;
+    final cols = baseSize;
+    final mask = List.generate(rows, (_) => List<bool>.filled(cols, true));
+
+    final fillTarget = (0.90 + offset * 0.01).clamp(0.90, 0.93);
+    const minPath = 4;
+    final maxPath = (11 + offset).clamp(11, 13);
+    final minArrows = (26 + offset * 2).clamp(26, 32);
+    const hearts = 3;
+    const hints = 1;
+
+    StateError? lastError;
+
+    SolvableLevelResult? tryOnce({
+      required int r,
+      required int c,
+      required List<List<bool>> m,
+      required int seed,
+      required int arrows,
+      required double fill,
+      required int pathFloor,
+      int? freeCap,
+    }) {
+      try {
+        return generateNestedSolvableLevel(
+          levelNumber,
+          r,
+          c,
+          hearts,
+          hints,
+          difficulty: LevelDifficulty.hard,
+          seed: seed,
+          shapeMask: m,
+          fillTarget: fill,
+          minPathLen: pathFloor,
+          maxPathLen: maxPath,
+          minArrows: arrows,
+          hardNest: true,
+          mixPathSizes: true,
+          maxFreeAtStart: freeCap,
+        );
+      } on StateError catch (e) {
+        lastError = e;
+        return null;
+      }
+    }
+
+    for (var attempt = 0; attempt < 16; attempt++) {
+      final result = tryOnce(
+        r: rows,
+        c: cols,
+        m: mask,
+        seed: levelNumber * 9973 + attempt * 173 + baseSize * 19,
+        arrows: (minArrows - (attempt ~/ 6) * 2).clamp(18, minArrows),
+        fill: (fillTarget - (attempt ~/ 8) * 0.02).clamp(0.86, 0.93),
+        pathFloor: attempt < 8 ? minPath : 3,
+        freeCap: 3 + (attempt ~/ 4),
+      );
+      if (result != null) return result;
+    }
+
+    for (var attempt = 0; attempt < 10; attempt++) {
+      final result = tryOnce(
+        r: 12,
+        c: 12,
+        m: List.generate(12, (_) => List<bool>.filled(12, true)),
+        seed: levelNumber * 4243 + attempt * 97,
+        arrows: 18,
+        fill: 0.86,
+        pathFloor: 3,
+        freeCap: null,
+      );
+      if (result != null) return result;
+    }
+
+    throw lastError ??
+        StateError('Failed to build campaign level $levelNumber');
+  }
+
+  /// L19–L20 finale: dense snakes, return first good board (no long search).
+  static SolvableLevelResult _ultraDenseFinaleLevel(int levelNumber) {
+    final isL20 = levelNumber >= 20;
+    final size = isL20 ? 15 : 14;
+    final minArrows = isL20 ? 34 : 30;
+    final fillTarget = isL20 ? 0.92 : 0.90;
+    const hearts = 3;
+    const hints = 1;
+
+    StateError? lastError;
+
+    SolvableLevelResult? tryOnce({
+      required int grid,
+      required int seed,
+      required int arrows,
+      required double fill,
+      required int pathFloor,
+    }) {
+      final mask = List.generate(grid, (_) => List<bool>.filled(grid, true));
+      try {
+        return generateNestedSolvableLevel(
+          levelNumber,
+          grid,
+          grid,
+          hearts,
+          hints,
+          difficulty: LevelDifficulty.hard,
+          seed: seed,
+          shapeMask: mask,
+          fillTarget: fill,
+          minPathLen: pathFloor,
+          maxPathLen: 12,
+          minArrows: arrows,
+          maxArrows: arrows + 16,
+          hardNest: true,
+          mixPathSizes: true,
+        );
+      } on StateError catch (e) {
+        lastError = e;
+        return null;
+      }
+    }
+
+    SolvableLevelResult? fallback;
+
+    for (var attempt = 0; attempt < 12; attempt++) {
+      final result = tryOnce(
+        grid: size,
+        seed: levelNumber * 12011 + attempt * 211 + size * 29,
+        arrows: (minArrows - (attempt ~/ 4) * 2).clamp(22, minArrows),
+        fill: (fillTarget - (attempt ~/ 6) * 0.02).clamp(0.86, 0.92),
+        pathFloor: attempt < 6 ? 4 : 3,
+      );
+      if (result == null) continue;
+      fallback ??= result;
+      final cells = size * size;
+      final occupied =
+          result.level.arrows.fold<int>(0, (s, a) => s + a.path.length);
+      if (occupied / cells >= 0.85) return result;
+    }
+
+    for (var attempt = 0; attempt < 8; attempt++) {
+      final result = tryOnce(
+        grid: 12,
+        seed: levelNumber * 4243 + attempt * 97,
+        arrows: 22,
+        fill: 0.88,
+        pathFloor: 3,
+      );
+      if (result != null) return result;
+    }
+
+    if (fallback != null) return fallback;
+
+    throw lastError ??
+        StateError('Failed to build ultra-dense level $levelNumber');
   }
 
   /// Shape rotation for L6+: heart, square, diamond, square, star, octagon,

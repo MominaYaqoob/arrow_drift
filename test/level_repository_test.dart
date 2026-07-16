@@ -110,9 +110,9 @@ void main() {
       }
     }
 
-    test('L1 tutorial; L2–5 prior nests; L6+ Mix snakes; all solvable', () {
+    test('L1–10 Easy; L11–15 Medium; L16–20 Hard long snakes; all solvable', () {
       final repo = LevelRepository();
-      expect(repo.levelCount, 10);
+      expect(repo.levelCount, 20);
 
       // L1 unchanged tutorial.
       expect(repo.getLevel(1).arrows, hasLength(3));
@@ -126,7 +126,6 @@ void main() {
       // L2–5: previous open-rectangle nested boards.
       expect(repo.getLevel(2).gridRows, 6);
       expect(repo.getLevel(2).gridCols, 6);
-      expect(repo.getLevel(2).difficulty, LevelDifficulty.easy);
       expect(repo.getLevel(3).gridRows, 6);
       expect(repo.getLevel(4).gridRows, 7);
       expect(repo.getLevel(5).gridRows, 12);
@@ -139,13 +138,20 @@ void main() {
         }
       }
 
+      // L1–10: all labeled Easy.
+      for (var n = 1; n <= 10; n++) {
+        expect(
+          repo.getLevel(n).difficulty,
+          LevelDifficulty.easy,
+          reason: 'L$n should be Easy',
+        );
+      }
+
       // L6: heart silhouette + nested snakes.
       final l6 = repo.getLevel(6);
       expect(l6.shapeMask, isNotNull);
-      expect(l6.difficulty, LevelDifficulty.hard);
       expectInMask(l6);
 
-      // L7–10: nested paths, in-mask when masked, solvable.
       for (var n = 7; n <= 10; n++) {
         final level = repo.getLevel(n);
         expect(level.arrows, isNotEmpty, reason: 'L$n');
@@ -154,14 +160,63 @@ void main() {
         }
         expectInMask(level);
       }
-      expect(repo.getLevel(10).difficulty, LevelDifficulty.expert);
 
-      for (var n = 1; n <= 10; n++) {
+      // L11–15: Medium.
+      for (var n = 11; n <= 15; n++) {
+        final level = repo.getLevel(n);
+        expect(level.levelNumber, n);
+        expect(level.difficulty, LevelDifficulty.medium, reason: 'L$n');
+        expect(level.gridRows, greaterThanOrEqualTo(11), reason: 'L$n');
+        expect(level.arrows.length, greaterThanOrEqualTo(14), reason: 'L$n');
+        for (final a in level.arrows) {
+          expect(a.path.length, greaterThanOrEqualTo(2), reason: 'L$n ${a.id}');
+        }
+        expectInMask(level);
+      }
+
+      // L16–18: Hard maze pack.
+      for (var n = 16; n <= 18; n++) {
+        final level = repo.getLevel(n);
+        expect(level.levelNumber, n);
+        expect(level.difficulty, LevelDifficulty.hard, reason: 'L$n');
+        expect(level.gridRows, greaterThanOrEqualTo(12), reason: 'L$n');
+        expect(level.arrows.length, greaterThanOrEqualTo(16), reason: 'L$n');
+        expectInMask(level);
+      }
+
+      // L19–20: dense space-fill, fast build.
+      for (var n = 19; n <= 20; n++) {
+        final level = repo.getLevel(n);
+        expect(level.levelNumber, n);
+        expect(level.difficulty, LevelDifficulty.hard, reason: 'L$n');
+        expect(level.gridRows, greaterThanOrEqualTo(12), reason: 'L$n');
+        expect(level.arrows.length, greaterThanOrEqualTo(18), reason: 'L$n');
+
+        var freeCount = 0;
+        for (final a in level.arrows) {
+          if (isArrowFree(
+            arrow: a,
+            arrows: level.arrows,
+            gridRows: level.gridRows,
+            gridCols: level.gridCols,
+            shapeMask: level.shapeMask,
+          )) {
+            freeCount++;
+          }
+        }
+        expect(freeCount, greaterThanOrEqualTo(1), reason: 'L$n ≥1 free');
+        final cells = level.gridRows * level.gridCols;
+        final occupied =
+            level.arrows.fold<int>(0, (s, a) => s + a.path.length);
+        expect(occupied / cells, greaterThanOrEqualTo(0.75), reason: 'L$n fill');
+        expectInMask(level);
+      }
+
+      for (var n = 1; n <= 20; n++) {
         expectSolvable(repo, repo.getLevel(n));
       }
 
-      // Beyond campaign pack clamps to level 10.
-      expect(repo.getLevel(11).levelNumber, 10);
+      expect(repo.getLevel(21).levelNumber, 20);
     });
   });
 }
