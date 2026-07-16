@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 
 import 'package:arrow_drift/core/theme/app_theme.dart';
 
-/// Timed fullscreen dummy ad (demo only — not a real ad network).
-Future<bool> showDummyFullscreenAd(
+/// Timed fullscreen ad space (placeholder until real AdMob is wired).
+Future<bool> showFullscreenAdSpace(
   BuildContext context, {
   required Duration duration,
   required String title,
-  String subtitle = 'Demo advertisement',
+  String subtitle = 'Advertisement space',
 }) async {
   if (!context.mounted) return false;
   final result = await showGeneralDialog<bool>(
@@ -19,7 +19,7 @@ Future<bool> showDummyFullscreenAd(
     barrierColor: Colors.black.withValues(alpha: 0.9),
     transitionDuration: const Duration(milliseconds: 220),
     pageBuilder: (context, animation, secondaryAnimation) {
-      return _DummyFullscreenAd(
+      return _FullscreenAdSpace(
         duration: duration,
         title: title,
         subtitle: subtitle,
@@ -29,8 +29,8 @@ Future<bool> showDummyFullscreenAd(
   return result ?? false;
 }
 
-class _DummyFullscreenAd extends StatefulWidget {
-  const _DummyFullscreenAd({
+class _FullscreenAdSpace extends StatefulWidget {
+  const _FullscreenAdSpace({
     required this.duration,
     required this.title,
     required this.subtitle,
@@ -41,10 +41,10 @@ class _DummyFullscreenAd extends StatefulWidget {
   final String subtitle;
 
   @override
-  State<_DummyFullscreenAd> createState() => _DummyFullscreenAdState();
+  State<_FullscreenAdSpace> createState() => _FullscreenAdSpaceState();
 }
 
-class _DummyFullscreenAdState extends State<_DummyFullscreenAd> {
+class _FullscreenAdSpaceState extends State<_FullscreenAdSpace> {
   late int _secondsLeft;
   Timer? _timer;
 
@@ -190,7 +190,7 @@ class _DummyFullscreenAdState extends State<_DummyFullscreenAd> {
               ),
               const Spacer(),
               Text(
-                'Demo ad — replace with AdMob later',
+                'Ad space — replace with AdMob later',
                 style: AppTextStyles.label(
                   fontSize: 11,
                   color: Colors.white.withValues(alpha: 0.5),

@@ -139,7 +139,7 @@ class _SplashLogoScreenState extends State<SplashLogoScreen>
                       );
                     },
                     child: Text(
-                      AppConstants.appName,
+                      AppConstants.appShortName,
                       style: AppTextStyles.heading(
                         fontSize: 20,
                         fontWeight: FontWeight.w700,

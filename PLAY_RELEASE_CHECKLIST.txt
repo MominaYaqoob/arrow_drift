@@ -1,0 +1,33 @@
+# Play Console — closed testing & live (manual)
+
+Code-side live prep is done. Complete these in Play Console (you own the account):
+
+## Before closed testing
+1. Confirm package id: `com.sid.arrowdrift.puzzlegame`
+2. Create app in Play Console with that application id
+3. Wire real AdMob in `lib/services/ads_service_impl.dart` + manifest `APPLICATION_ID` when ready for live ads
+4. Host a public Privacy Policy URL and put it in Play Console + optionally `AppConstants.privacyPolicyUrl`
+5. Create upload keystore locally:
+   ```
+   keytool -genkey -v -keystore android/upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+   ```
+   Copy `android/key.properties.example` → `android/key.properties` and fill passwords.
+6. Build: `flutter build appbundle --release`
+7. Upload AAB to Internal / Closed testing track
+
+## Listing checklist
+- [ ] Short & full description
+- [ ] Screenshots (phone)
+- [ ] Feature graphic
+- [ ] App icon (already generated)
+- [ ] Content rating questionnaire
+- [ ] Data safety (ads + local prefs; no login)
+- [ ] Ads declaration: Yes
+- [ ] Support email
+
+## Live (last)
+- Promote closed release to Production after QA passes
+- Monitor crashes & ad fill for several days
+
+## Friends QA
+- Cold start, Level 1 tutorial, Level 11+ shape, Daily, hints ad, lives ad, theme toggle, rate dialog

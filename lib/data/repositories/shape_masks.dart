@@ -234,6 +234,142 @@ List<List<bool>> infinityMask(int rows, int cols) {
   });
 }
 
+/// Axis-aligned oval / ellipse (connected).
+List<List<bool>> ovalMask(int rows, int cols) {
+  final cy = (rows - 1) / 2.0;
+  final cx = (cols - 1) / 2.0;
+  final ry = cy == 0 ? 1.0 : cy * 0.98;
+  final rx = cx == 0 ? 1.0 : cx * 0.78;
+  return List.generate(rows, (r) {
+    return List.generate(cols, (c) {
+      final ny = (r - cy) / ry;
+      final nx = (c - cx) / rx;
+      return ny * ny + nx * nx <= 1.0;
+    });
+  });
+}
+
+/// Stylized fish facing right (body ellipse + triangle tail, connected).
+List<List<bool>> fishMask(int rows, int cols) {
+  final cy = (rows - 1) / 2.0;
+  final cx = (cols - 1) / 2.0;
+  final ry = cy == 0 ? 1.0 : cy;
+  final rx = cx == 0 ? 1.0 : cx;
+  return List.generate(rows, (r) {
+    return List.generate(cols, (c) {
+      final ny = (r - cy) / ry;
+      final nx = (c - cx) / rx;
+      // Body: horizontal ellipse shifted left of center.
+      final by = ny / 0.55;
+      final bx = (nx + 0.08) / 0.62;
+      final inBody = by * by + bx * bx <= 1.0 && nx > -0.72 && nx < 0.55;
+      // Tail: V pointing left.
+      final inTail = nx <= -0.45 &&
+          nx >= -1.02 &&
+          ny.abs() <= 0.55 * (-0.35 - nx).clamp(0.15, 0.7);
+      // Dorsal bump (connected).
+      final inFin = nx > -0.15 &&
+          nx < 0.25 &&
+          ny < -0.25 &&
+          ny > -0.72 &&
+          (nx + 0.05).abs() * 2.2 + (-0.35 - ny) < 0.55;
+      return inBody || inTail || inFin;
+    });
+  });
+}
+
+/// Butterfly — two wing lobes + center body (center glue keeps connected).
+List<List<bool>> butterflyMask(int rows, int cols) {
+  final cy = (rows - 1) / 2.0;
+  final cx = (cols - 1) / 2.0;
+  final ry = cy == 0 ? 1.0 : cy * 0.95;
+  final rx = cx == 0 ? 1.0 : cx * 0.95;
+  return List.generate(rows, (r) {
+    return List.generate(cols, (c) {
+      final ny = (r - cy) / ry;
+      final nx = (c - cx) / rx;
+      // Upper wings.
+      final ulx = (nx + 0.38) / 0.42;
+      final uly = (ny + 0.22) / 0.38;
+      final urx = (nx - 0.38) / 0.42;
+      final ury = (ny + 0.22) / 0.38;
+      final upper =
+          (ulx * ulx + uly * uly <= 1.0) || (urx * urx + ury * ury <= 1.0);
+      // Lower wings (slightly smaller).
+      final llx = (nx + 0.32) / 0.36;
+      final lly = (ny - 0.32) / 0.34;
+      final lrx = (nx - 0.32) / 0.36;
+      final lry = (ny - 0.32) / 0.34;
+      final lower =
+          (llx * llx + lly * lly <= 1.0) || (lrx * lrx + lry * lry <= 1.0);
+      // Body strip.
+      final body = nx.abs() <= 0.1 && ny.abs() <= 0.72;
+      return upper || lower || body;
+    });
+  });
+}
+
+/// Simple bird outline facing right (round body + beak + head, connected).
+List<List<bool>> birdOutlineMask(int rows, int cols) {
+  final cy = (rows - 1) / 2.0;
+  final cx = (cols - 1) / 2.0;
+  final ry = cy == 0 ? 1.0 : cy;
+  final rx = cx == 0 ? 1.0 : cx;
+  return List.generate(rows, (r) {
+    return List.generate(cols, (c) {
+      final ny = (r - cy) / ry;
+      final nx = (c - cx) / rx;
+      // Body oval.
+      final bodyY = (ny - 0.08) / 0.48;
+      final bodyX = (nx + 0.05) / 0.55;
+      final inBody = bodyY * bodyY + bodyX * bodyX <= 1.0;
+      // Head.
+      final headY = (ny + 0.28) / 0.28;
+      final headX = (nx - 0.38) / 0.28;
+      final inHead = headY * headY + headX * headX <= 1.0;
+      // Beak triangle.
+      final inBeak = nx >= 0.55 &&
+          nx <= 0.98 &&
+          (ny + 0.28).abs() <= 0.22 * (1.0 - (nx - 0.55) / 0.45);
+      // Wing lobe on top-left of body.
+      final wingY = (ny + 0.15) / 0.28;
+      final wingX = (nx + 0.15) / 0.35;
+      final inWing = wingY * wingY + wingX * wingX <= 1.0 && ny < 0.05;
+      return inBody || inHead || inBeak || inWing;
+    });
+  });
+}
+
+/// Simple cat-face silhouette (round head + ears, connected).
+List<List<bool>> catFaceMask(int rows, int cols) {
+  final cy = (rows - 1) / 2.0;
+  final cx = (cols - 1) / 2.0;
+  final ry = cy == 0 ? 1.0 : cy * 0.92;
+  final rx = cx == 0 ? 1.0 : cx * 0.92;
+  return List.generate(rows, (r) {
+    return List.generate(cols, (c) {
+      final ny = (r - cy) / ry;
+      final nx = (c - cx) / rx;
+      // Round face.
+      final inFace = nx * nx + (ny - 0.08) * (ny - 0.08) / 0.95 <= 0.85;
+      // Left / right ears (triangles glued to top of head).
+      final inLeftEar = nx >= -0.72 &&
+          nx <= -0.12 &&
+          ny <= -0.35 &&
+          ny >= -1.02 &&
+          (ny + 1.0) <= 1.35 * (-0.12 - nx).abs().clamp(0.05, 0.7);
+      final inRightEar = nx <= 0.72 &&
+          nx >= 0.12 &&
+          ny <= -0.35 &&
+          ny >= -1.02 &&
+          (ny + 1.0) <= 1.35 * (nx - 0.12).abs().clamp(0.05, 0.7);
+      // Chin glue.
+      final inChin = nx.abs() <= 0.35 && ny >= 0.55 && ny <= 0.92;
+      return inFace || inLeftEar || inRightEar || inChin;
+    });
+  });
+}
+
 void debugPrintHeartMask(int gridSize) {
   final mask = generateHeartShapeMask(gridSize);
   for (final row in mask) {

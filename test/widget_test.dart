@@ -33,7 +33,7 @@ void main() {
 
     expect(router.state.uri.path, SplashLogoScreen.routePath);
     expect(find.byType(AppLogoMark), findsOneWidget);
-    expect(find.text(AppConstants.appName), findsOneWidget);
+    expect(find.text(AppConstants.appShortName), findsOneWidget);
     expect(find.textContaining('THINK'), findsOneWidget);
 
     await tester.pump(const Duration(milliseconds: 1500));

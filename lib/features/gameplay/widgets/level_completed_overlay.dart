@@ -236,12 +236,13 @@ class _LevelCompletedOverlayState extends State<LevelCompletedOverlay>
     )..repeat();
 
     final rng = math.Random(42);
-    _particles = List.generate(64, (i) {
+    _particles = List.generate(72, (i) {
       const colors = [
         Color(0xFF2EC4A6),
         Color(0xFFE0B13A),
         Color(0xFF7DE2C8),
         Color(0xFFF0C86B),
+        Color(0xFFB8F0E4),
         Colors.white,
       ];
       final circle = i.isEven;
@@ -326,18 +327,42 @@ class _LevelCompletedOverlayState extends State<LevelCompletedOverlay>
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // Dark navy / teal radial (HTML .s-win / reference screenshot).
+            // Dark navy / teal radial win backdrop.
             const DecoratedBox(
               decoration: BoxDecoration(
                 gradient: RadialGradient(
-                  center: Alignment(0, -0.35),
-                  radius: 1.15,
+                  center: Alignment(0, -0.32),
+                  radius: 1.2,
                   colors: [
-                    Color(0xFF18463F),
+                    Color(0xFF1C554C),
+                    Color(0xFF123A40),
                     Color(0xFF0E1726),
                     Color(0xFF090F18),
                   ],
-                  stops: [0.0, 0.55, 1.0],
+                  stops: [0.0, 0.28, 0.62, 1.0],
+                ),
+              ),
+            ),
+            // Soft spotlight behind logo / title.
+            Positioned(
+              top: MediaQuery.sizeOf(context).height * 0.18,
+              left: 0,
+              right: 0,
+              child: IgnorePointer(
+                child: Center(
+                  child: Container(
+                    width: 220,
+                    height: 220,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          const Color(0xFF2EC4A6).withValues(alpha: 0.22),
+                          const Color(0xFF2EC4A6).withValues(alpha: 0.0),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -371,20 +396,56 @@ class _LevelCompletedOverlayState extends State<LevelCompletedOverlay>
                           ),
                         );
                       },
-                      child: Text(
-                        widget.isDaily
-                            ? 'Daily Challenge Completed'
-                            : 'Level Completed!',
-                        textAlign: TextAlign.center,
-                        style: AppTextStyles.heading(
-                          fontSize: widget.isDaily ? 24 : 28,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                          letterSpacing: -0.4,
-                        ),
+                      child: Column(
+                        children: [
+                          Text(
+                            widget.isDaily
+                                ? 'Daily Challenge Completed'
+                                : 'Level Completed!',
+                            textAlign: TextAlign.center,
+                            style: AppTextStyles.heading(
+                              fontSize: widget.isDaily ? 24 : 30,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                              letterSpacing: -0.4,
+                            ).copyWith(
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black.withValues(alpha: 0.35),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (!widget.isDaily && !widget.isCampaignComplete) ...[
+                            const SizedBox(height: 10),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.14),
+                                ),
+                              ),
+                              child: Text(
+                                'Level ${widget.completedLevel}',
+                                style: AppTextStyles.label(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white.withValues(alpha: 0.78),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 16),
                     AnimatedBuilder(
                       animation: Listenable.merge([
                         _praiseController,
@@ -403,7 +464,7 @@ class _LevelCompletedOverlayState extends State<LevelCompletedOverlay>
                                   offset: Offset(0, _emojiBounce.value),
                                   child: Text(
                                     _praise.emoji,
-                                    style: const TextStyle(fontSize: 36),
+                                    style: const TextStyle(fontSize: 34),
                                   ),
                                 ),
                                 const SizedBox(width: 10),
@@ -412,8 +473,16 @@ class _LevelCompletedOverlayState extends State<LevelCompletedOverlay>
                                   style: AppTextStyles.heading(
                                     fontSize: 26,
                                     fontWeight: FontWeight.w800,
-                                    color: const Color(0xFF2EC4A6),
+                                    color: const Color(0xFF3DDCB8),
                                     letterSpacing: -0.3,
+                                  ).copyWith(
+                                    shadows: [
+                                      Shadow(
+                                        color: const Color(0xFF2EC4A6)
+                                            .withValues(alpha: 0.45),
+                                        blurRadius: 16,
+                                      ),
+                                    ],
                                   ),
                                 ),
                                 const SizedBox(width: 10),
@@ -421,7 +490,7 @@ class _LevelCompletedOverlayState extends State<LevelCompletedOverlay>
                                   offset: Offset(0, _emojiBounce.value),
                                   child: Text(
                                     _praise.emoji,
-                                    style: const TextStyle(fontSize: 36),
+                                    style: const TextStyle(fontSize: 34),
                                   ),
                                 ),
                               ],
@@ -430,7 +499,7 @@ class _LevelCompletedOverlayState extends State<LevelCompletedOverlay>
                         );
                       },
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 28),
                     AnimatedBuilder(
                       animation: Listenable.merge([
                         _cardController,
@@ -441,7 +510,20 @@ class _LevelCompletedOverlayState extends State<LevelCompletedOverlay>
                           scale: _cardScale.value,
                           child: Transform.scale(
                             scale: _logoPulse?.value ?? 1.0,
-                            child: const AppLogoMark(size: 112),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(28),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFF2EC4A6)
+                                        .withValues(alpha: 0.28),
+                                    blurRadius: 28,
+                                    spreadRadius: 2,
+                                  ),
+                                ],
+                              ),
+                              child: const AppLogoMark(size: 118),
+                            ),
                           ),
                         );
                       },
@@ -465,14 +547,29 @@ class _LevelCompletedOverlayState extends State<LevelCompletedOverlay>
                                 child: Transform.scale(
                                   scale: _pressScale.value *
                                       (0.97 + 0.03 * pulse),
-                                  child: SizedBox(
+                                  child: Container(
                                     width: double.infinity,
                                     height: 56,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(999),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(0xFF2EC4A6)
+                                              .withValues(alpha: 0.28),
+                                          blurRadius: 18,
+                                          offset: const Offset(0, 6),
+                                        ),
+                                        BoxShadow(
+                                          color: Colors.black
+                                              .withValues(alpha: 0.25),
+                                          blurRadius: 10,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ],
+                                    ),
                                     child: Material(
                                       color: Colors.white,
                                       borderRadius: BorderRadius.circular(999),
-                                      elevation: 2,
-                                      shadowColor: Colors.black38,
                                       child: InkWell(
                                         onTap: widget.isCampaignComplete
                                             ? widget.onMain
@@ -498,21 +595,38 @@ class _LevelCompletedOverlayState extends State<LevelCompletedOverlay>
                               ),
                             ),
                             if (!widget.isCampaignComplete) ...[
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 14),
                               Opacity(
                                 opacity: _mainOpacity.value,
-                                child: TextButton(
-                                  onPressed: widget.onMain,
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: Colors.white,
-                                  ),
-                                  child: Text(
-                                    'Main',
-                                    style: AppTextStyles.body(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.white
-                                          .withValues(alpha: 0.9),
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: widget.onMain,
+                                    borderRadius: BorderRadius.circular(999),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 22,
+                                        vertical: 10,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        borderRadius:
+                                            BorderRadius.circular(999),
+                                        border: Border.all(
+                                          color: Colors.white
+                                              .withValues(alpha: 0.22),
+                                        ),
+                                        color: Colors.white
+                                            .withValues(alpha: 0.06),
+                                      ),
+                                      child: Text(
+                                        'Main',
+                                        style: AppTextStyles.body(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.white
+                                              .withValues(alpha: 0.92),
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -523,7 +637,6 @@ class _LevelCompletedOverlayState extends State<LevelCompletedOverlay>
                       },
                     ),
                     const SizedBox(height: 16),
-                    // Task 3: bottom ad slot on complete screen
                     AdsService.instance.bannerPlaceholder(height: 60),
                     const SizedBox(height: 12),
                   ],

@@ -4,7 +4,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import 'package:arrow_drift/core/constants/app_constants.dart';
 import 'package:arrow_drift/core/services/app_feedback.dart';
 import 'package:arrow_drift/core/theme/app_theme.dart';
 import 'package:arrow_drift/data/models/arrow_model.dart';
@@ -598,7 +600,10 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
             RateGameDialog(
               onDismiss: _finishRatePrompt,
               onLowStars: _finishRatePrompt,
-              onFiveStars: _finishRatePrompt,
+              onFiveStars: () async {
+                await _openPlayStoreListing();
+                await _finishRatePrompt();
+              },
             )
           else if (gameState.isWon && _showWinOverlay)
             LevelCompletedOverlay(
@@ -617,6 +622,22 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
         ],
       ),
     );
+  }
+
+  Future<void> _openPlayStoreListing() async {
+    final market = Uri.parse(
+      'market://details?id=${AppConstants.applicationId}',
+    );
+    final https = Uri.parse(AppConstants.playStoreListingUrl);
+    try {
+      if (await canLaunchUrl(market)) {
+        await launchUrl(market, mode: LaunchMode.externalApplication);
+        return;
+      }
+    } catch (_) {}
+    if (await canLaunchUrl(https)) {
+      await launchUrl(https, mode: LaunchMode.externalApplication);
+    }
   }
 
   Future<void> _finishRatePrompt() async {

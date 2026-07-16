@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:arrow_drift/core/constants/app_constants.dart';
 import 'package:arrow_drift/core/theme/app_theme.dart';
 import 'package:arrow_drift/core/widgets/app_logo.dart';
 import 'package:arrow_drift/data/repositories/level_repository.dart';
@@ -51,13 +50,14 @@ class HomeScreen extends ConsumerWidget {
                           isDark: isDark,
                           onToggleTheme: () => _toggleTheme(ref, context),
                         ),
-                        SizedBox(height: tight ? 16 : 36),
+                        SizedBox(height: tight ? 12 : 22),
                         const _BrandBlock(),
-                        SizedBox(height: tight ? 16 : 28),
+                        SizedBox(height: tight ? 14 : 22),
                         _DailyChallengeCard(
                           onPlay: () =>
                               context.go(DailyChallengeScreen.routePath),
                         ),
+                        SizedBox(height: tight ? 18 : 28),
                         const Spacer(),
                         currentLevelAsync.when(
                           data: (level) {
@@ -85,6 +85,7 @@ class HomeScreen extends ConsumerWidget {
                             ),
                           ),
                         ),
+                        const SizedBox(height: 4),
                       ],
                     ),
                   ),
@@ -181,19 +182,42 @@ class _BrandBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Column(
       children: [
-        const AppLogoMark(size: 96),
-        const SizedBox(height: 18),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: [
+              BoxShadow(
+                color: colors.accentTeal.withValues(alpha: isDark ? 0.22 : 0.14),
+                blurRadius: 24,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: const AppLogoMark(size: 88),
+        ),
+        const SizedBox(height: 16),
         Text(
-          AppConstants.appName,
+          'Arrow Drift:',
           textAlign: TextAlign.center,
           style: AppTextStyles.heading(
-            fontSize: 32,
+            fontSize: 28,
             fontWeight: FontWeight.w700,
             color: colors.primaryText,
-            letterSpacing: -0.5,
+            letterSpacing: -0.4,
+          ),
+        ),
+        Text(
+          'Puzzle Game',
+          textAlign: TextAlign.center,
+          style: AppTextStyles.heading(
+            fontSize: 28,
+            fontWeight: FontWeight.w700,
+            color: colors.primaryText,
+            letterSpacing: -0.4,
           ),
         ),
         const SizedBox(height: 8),
@@ -201,7 +225,7 @@ class _BrandBlock extends StatelessWidget {
           'Tap free arrows. Clear the board.',
           textAlign: TextAlign.center,
           style: AppTextStyles.body(
-            fontSize: 14,
+            fontSize: 13,
             fontWeight: FontWeight.w500,
             color: colors.secondaryText,
           ),
@@ -228,19 +252,22 @@ class _DailyChallengeCard extends ConsumerWidget {
         borderRadius: BorderRadius.circular(18),
         child: Ink(
           width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(16, 16, 14, 16),
+          padding: const EdgeInsets.fromLTRB(18, 16, 14, 16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
             gradient: const LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xFF128F7A), Color(0xFF0B5E52)],
+              colors: [Color(0xFF14A08A), Color(0xFF0B5E52)],
+            ),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.12),
             ),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF0B5E52).withValues(alpha: 0.28),
-                blurRadius: 22,
-                offset: const Offset(0, 12),
+                color: const Color(0xFF0B5E52).withValues(alpha: 0.3),
+                blurRadius: 18,
+                offset: const Offset(0, 10),
               ),
             ],
           ),
@@ -255,19 +282,19 @@ class _DailyChallengeCard extends ConsumerWidget {
                       style: AppTextStyles.label(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
-                        color: Colors.white.withValues(alpha: 0.85),
-                      ),
+                        color: Colors.white.withValues(alpha: 0.82),
+                      ).copyWith(letterSpacing: 0.8),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 5),
                     Text(
                       today,
                       style: AppTextStyles.body(
-                        fontSize: 17,
+                        fontSize: 18,
                         fontWeight: FontWeight.w800,
                         color: Colors.white,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 10,
@@ -277,7 +304,7 @@ class _DailyChallengeCard extends ConsumerWidget {
                         color: Colors.white.withValues(alpha: 0.14),
                         borderRadius: BorderRadius.circular(999),
                         border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.22),
+                          color: Colors.white.withValues(alpha: 0.2),
                         ),
                       ),
                       child: Row(
@@ -309,19 +336,19 @@ class _DailyChallengeCard extends ConsumerWidget {
               ),
               Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.16),
+                  color: Colors.white.withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(999),
                   border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.28),
+                    color: Colors.white.withValues(alpha: 0.3),
                   ),
                 ),
                 child: Text(
                   'Play',
                   style: AppTextStyles.button(
                     fontSize: 13,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
                     color: Colors.white,
                   ),
                 ),
@@ -367,7 +394,7 @@ class _ContinueButton extends StatelessWidget {
 
     return SizedBox(
       width: double.infinity,
-      height: 56,
+      height: 54,
       child: Material(
         borderRadius: BorderRadius.circular(16),
         elevation: 0,
@@ -388,10 +415,12 @@ class _ContinueButton extends StatelessWidget {
                   : null,
               boxShadow: [
                 BoxShadow(
-                  color: (isDark ? AppColors.accentTealDeep : AppColors.lightPrimaryText)
-                      .withValues(alpha: isDark ? 0.28 : 0.18),
-                  blurRadius: 20,
-                  offset: const Offset(0, 12),
+                  color: (isDark
+                          ? AppColors.accentTealDeep
+                          : AppColors.lightPrimaryText)
+                      .withValues(alpha: isDark ? 0.3 : 0.16),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8),
                 ),
               ],
             ),

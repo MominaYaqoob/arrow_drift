@@ -75,7 +75,7 @@ class SettingsScreen extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 20),
-              const _SectionLabel('APPEARANCE & SECURITY'),
+              const _SectionLabel('APPEARANCE'),
               _SettingsCard(
                 children: [
                   _ToggleRow(
@@ -84,14 +84,6 @@ class SettingsScreen extends ConsumerWidget {
                     label: 'Dark Theme',
                     value: isDarkThemeToggleOn(context, themeMode),
                     onChanged: notifier.setDarkTheme,
-                    showDivider: true,
-                  ),
-                  _ToggleRow(
-                    icon: Icons.lock_outline_rounded,
-                    iconColor: colors.secondaryText,
-                    label: 'Auto-Lock',
-                    value: settings.autoLock,
-                    onChanged: notifier.setAutoLock,
                   ),
                 ],
               ),

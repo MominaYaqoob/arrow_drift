@@ -11,7 +11,6 @@ import 'package:arrow_drift/features/awards/awards_screen.dart';
 import 'package:arrow_drift/features/daily_challenge/daily_challenge_screen.dart';
 import 'package:arrow_drift/features/gameplay/gameplay_screen.dart';
 import 'package:arrow_drift/features/home/home_screen.dart';
-import 'package:arrow_drift/features/lock/lock_screen.dart';
 import 'package:arrow_drift/features/home/main_shell.dart';
 import 'package:arrow_drift/features/profile/me_screen.dart';
 import 'package:arrow_drift/features/settings/settings_screen.dart';
@@ -30,10 +29,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: SplashLoadingScreen.routePath,
         builder: (context, state) => const SplashLoadingScreen(),
-      ),
-      GoRoute(
-        path: LockScreen.routePath,
-        builder: (context, state) => const LockScreen(),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {

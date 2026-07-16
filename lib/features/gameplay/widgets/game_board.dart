@@ -7,7 +7,7 @@ import 'package:arrow_drift/data/models/arrow_model.dart';
 import 'package:arrow_drift/data/models/game_state.dart';
 import 'package:arrow_drift/features/gameplay/widgets/arrow_tile.dart';
 
-/// Zoomable board with cream card / plain white, dotted grid, and arrows.
+/// Zoomable board (pinch 2-finger + Grid Booster) with cream/white card, dots, arrows.
 class GameBoard extends StatelessWidget {
   const GameBoard({
     super.key,
@@ -174,41 +174,61 @@ class GameBoard extends StatelessWidget {
           );
 
           if (plainTutorial) {
-            return Center(
-              child: AnimatedScale(
-                scale: zoom,
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOutCubic,
-                child: fitted,
+            return InteractiveViewer(
+              minScale: 0.4,
+              maxScale: 5.0,
+              boundaryMargin: const EdgeInsets.all(220),
+              clipBehavior: Clip.hardEdge,
+              panEnabled: true,
+              scaleEnabled: true,
+              child: Center(
+                child: AnimatedScale(
+                  scale: zoom,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOutCubic,
+                  child: fitted,
+                ),
               ),
             );
           }
 
           // Scale the whole white card (dots stay inside).
-          return Center(
-            child: AnimatedScale(
-              scale: zoom,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOutCubic,
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                padding: const EdgeInsets.all(14),
-                clipBehavior: Clip.antiAlias,
-                decoration: BoxDecoration(
-                  color: boardBg,
-                  borderRadius: BorderRadius.circular(22),
-                  border: isDark
-                      ? Border.all(color: colors.border.withValues(alpha: 0.6))
-                      : null,
-                  boxShadow: [
-                    BoxShadow(
-                      color: boardShadow,
-                      blurRadius: 24,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
+          // Pinch (2-finger) zoom + pan; Grid Booster still uses [boardZoomed].
+          return InteractiveViewer(
+            minScale: 0.4,
+            maxScale: 5.0,
+            boundaryMargin: const EdgeInsets.all(220),
+            clipBehavior: Clip.hardEdge,
+            panEnabled: true,
+            scaleEnabled: true,
+            child: Center(
+              child: AnimatedScale(
+                scale: zoom,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
+                child: Container(
+                  margin:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  padding: const EdgeInsets.all(14),
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    color: boardBg,
+                    borderRadius: BorderRadius.circular(22),
+                    border: isDark
+                        ? Border.all(
+                            color: colors.border.withValues(alpha: 0.6),
+                          )
+                        : null,
+                    boxShadow: [
+                      BoxShadow(
+                        color: boardShadow,
+                        blurRadius: 24,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: fitted,
                 ),
-                child: fitted,
               ),
             ),
           );
@@ -244,10 +264,12 @@ class GameBoard extends StatelessWidget {
         );
 
         return InteractiveViewer(
-          minScale: 0.7,
-          maxScale: 2.5,
-          boundaryMargin: const EdgeInsets.all(160),
+          minScale: 0.4,
+          maxScale: 5.0,
+          boundaryMargin: const EdgeInsets.all(220),
           clipBehavior: Clip.hardEdge,
+          panEnabled: true,
+          scaleEnabled: true,
           child: Center(
             child: FittedBox(
               fit: BoxFit.contain,

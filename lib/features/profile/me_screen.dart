@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:arrow_drift/core/theme/app_theme.dart';
+import 'package:arrow_drift/core/utils/external_links.dart';
 import 'package:arrow_drift/data/repositories/progress_repository.dart';
 import 'package:arrow_drift/features/about/about_screen.dart';
 import 'package:arrow_drift/features/about/help_center_screen.dart';
-import 'package:arrow_drift/features/about/privacy_policy_screen.dart';
 import 'package:arrow_drift/features/awards/awards_screen.dart';
 import 'package:arrow_drift/features/profile/nickname_dialog.dart';
 import 'package:arrow_drift/features/profile/player_avatars.dart';
@@ -137,46 +137,33 @@ class MeScreen extends ConsumerWidget {
                   children: [
                     _MeRow(
                       icon: Icons.help_outline_rounded,
-                      iconBg: Colors.transparent,
-                      iconColor: colors.secondaryText,
+                      iconBg: const Color(0xFFD4F5EE),
+                      iconColor: const Color(0xFF1B8F7A),
                       label: 'Help',
                       onTap: () => context.push(HelpCenterScreen.routePath),
                       showDivider: true,
-                      plainIcon: true,
+                      circleIcon: true,
                     ),
                     _MeRow(
                       icon: Icons.info_outline_rounded,
-                      iconBg: Colors.transparent,
-                      iconColor: colors.secondaryText,
+                      iconBg: const Color(0xFFFFF0D6),
+                      iconColor: const Color(0xFFC9941A),
                       label: 'About Game',
                       onTap: () => context.push(AboutScreen.routePath),
                       showDivider: true,
-                      plainIcon: true,
+                      circleIcon: true,
                     ),
                     _MeRow(
-                      icon: Icons.privacy_tip_outlined,
-                      iconBg: Colors.transparent,
-                      iconColor: colors.secondaryText,
+                      icon: Icons.shield_outlined,
+                      iconBg: const Color(0xFFFFE4E6),
+                      iconColor: const Color(0xFFD96B6B),
                       label: 'Privacy',
-                      onTap: () =>
-                          context.push(PrivacyPolicyScreen.routePath),
-                      plainIcon: true,
+                      onTap: openPrivacyPolicyUrl,
+                      circleIcon: true,
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
-                _RemoveAdsCard(
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Remove Ads coming soon'),
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 12),
-                // Task 5: ad slot under Remove Ads
                 AdsService.instance.nativeAdPlaceholder(height: 70),
               ],
             ),
@@ -517,7 +504,7 @@ class _MeRow extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.showDivider = false,
-    this.plainIcon = false,
+    this.circleIcon = false,
   });
 
   final IconData icon;
@@ -526,7 +513,7 @@ class _MeRow extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
   final bool showDivider;
-  final bool plainIcon;
+  final bool circleIcon;
 
   @override
   Widget build(BuildContext context) {
@@ -539,22 +526,17 @@ class _MeRow extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
             child: Row(
               children: [
-                if (plainIcon)
-                  SizedBox(
-                    width: 34,
-                    height: 34,
-                    child: Icon(icon, size: 22, color: iconColor),
-                  )
-                else
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: iconBg,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(icon, size: 20, color: iconColor),
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: iconBg,
+                    shape: circleIcon ? BoxShape.circle : BoxShape.rectangle,
+                    borderRadius:
+                        circleIcon ? null : BorderRadius.circular(8),
                   ),
+                  child: Icon(icon, size: 20, color: iconColor),
+                ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Text(
@@ -577,7 +559,7 @@ class _MeRow extends StatelessWidget {
         ),
         if (showDivider)
           Padding(
-            padding: EdgeInsets.only(left: plainIcon ? 48 : 62),
+            padding: const EdgeInsets.only(left: 62),
             child: Divider(
               height: 1,
               thickness: 0.5,
@@ -589,81 +571,3 @@ class _MeRow extends StatelessWidget {
   }
 }
 
-class _RemoveAdsCard extends StatelessWidget {
-  const _RemoveAdsCard({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Ink(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: isDark
-                  ? const [Color(0xFF2A2418), Color(0xFF3A3020)]
-                  : const [Color(0xFFFFF4E0), Color(0xFFFDECC8)],
-            ),
-            border: isDark ? Border.all(color: colors.border) : null,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            child: Row(
-              children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? colors.surface2
-                        : Colors.white.withValues(alpha: 0.7),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    Icons.block_rounded,
-                    size: 20,
-                    color: isDark
-                        ? colors.gold
-                        : const Color(0xFFC49A3C),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Text(
-                    'Remove Ads',
-                    style: AppTextStyles.body(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: colors.primaryText,
-                    ),
-                  ),
-                ),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  color: isDark ? colors.gold : const Color(0xFFC49A3C),
-                  size: 22,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}

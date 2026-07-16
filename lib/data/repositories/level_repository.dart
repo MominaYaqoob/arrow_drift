@@ -230,6 +230,97 @@ bool _polylineSelfHugs(List<GridCell> path) {
   return false;
 }
 
+/// Path must be a single orthogonally-adjacent chain (no gaps / diagonals /
+/// duplicates), tip must match last cell, and tip direction must match the
+/// last step. Broken paths look like floating fragments on the board.
+bool _pathIsConnectedPolyline(ArrowModel arrow) {
+  final path = arrow.path;
+  if (path.length < 2) return false;
+  final seen = <String>{};
+  for (var i = 0; i < path.length; i++) {
+    final key = '${path[i].row}:${path[i].col}';
+    if (!seen.add(key)) return false;
+    if (i == 0) continue;
+    final prev = path[i - 1];
+    final cur = path[i];
+    final dist =
+        (cur.row - prev.row).abs() + (cur.col - prev.col).abs();
+    if (dist != 1) return false;
+  }
+  final tip = path.last;
+  if (tip.row != arrow.row || tip.col != arrow.col) return false;
+  final prev = path[path.length - 2];
+  final (dr, dc) = _dirDelta(arrow.direction);
+  if (tip.row - prev.row != dr || tip.col - prev.col != dc) return false;
+  return true;
+}
+
+/// Throws [StateError] listing the first bad arrow (level + id).
+void _assertNestedPathsValid(int levelNumber, List<ArrowModel> arrows) {
+  final occupied = <String, String>{};
+  for (final arrow in arrows) {
+    if (!_pathIsConnectedPolyline(arrow)) {
+      throw StateError(
+        'Broken arrow path L$levelNumber/${arrow.id} '
+        '(len=${arrow.path.length}, tip=${arrow.row},${arrow.col} '
+        '${arrow.direction.name})',
+      );
+    }
+    for (final cell in arrow.path) {
+      final key = '${cell.row}:${cell.col}';
+      final other = occupied[key];
+      if (other != null) {
+        throw StateError(
+          'Overlapping arrow cells L$levelNumber: $other & ${arrow.id} at $key',
+        );
+      }
+      occupied[key] = arrow.id;
+    }
+  }
+}
+
+int _pathTurnCount(List<GridCell> path) {
+  var turns = 0;
+  for (var i = 2; i < path.length; i++) {
+    final a = path[i - 2];
+    final b = path[i - 1];
+    final c = path[i];
+    final d1r = b.row - a.row;
+    final d1c = b.col - a.col;
+    final d2r = c.row - b.row;
+    final d2c = c.col - b.col;
+    if (d1r != d2r || d1c != d2c) turns++;
+  }
+  return turns;
+}
+
+/// Count occupied neighbors sitting in the "inside corner" of path bends
+/// (U/C hooks wrapping around another arrow — reference style).
+int _cupWrapBonus(List<GridCell> path, Set<String> occupied) {
+  if (path.length < 3 || occupied.isEmpty) return 0;
+  var bonus = 0;
+  for (var i = 1; i < path.length - 1; i++) {
+    final a = path[i - 1];
+    final b = path[i];
+    final c = path[i + 1];
+    final d1r = b.row - a.row;
+    final d1c = b.col - a.col;
+    final d2r = c.row - b.row;
+    final d2c = c.col - b.col;
+    if (d1r == d2r && d1c == d2c) continue; // straight — no pocket
+    // Inside corner cell of the 90° bend.
+    final ir = b.row - d1r + d2r;
+    final ic = b.col - d1c + d2c;
+    // Prefer the diagonal inward pocket from the bend.
+    final pocketR = a.row + d2r;
+    final pocketC = a.col + d2c;
+    for (final (pr, pc) in [(ir, ic), (pocketR, pocketC), (c.row - d1r, c.col - d1c)]) {
+      if (occupied.contains('$pr:$pc')) bonus++;
+    }
+  }
+  return bonus;
+}
+
 /// Tips on one row/col aiming at each other (▸ … ◂) confuse escape reading.
 /// Only nearby pairs (≤4 cells apart) are rejected so dense packs still fill.
 bool _tipsFaceEachOtherOnLine({
@@ -295,6 +386,8 @@ SolvableLevelResult generateNestedSolvableLevel(
   bool hardNest = false,
   /// Retry if too many tips are free at start (easy first moves).
   int? maxFreeAtStart,
+  /// When true with [maxFreeAtStart], require free count == that value.
+  bool exactFreeAtStart = false,
   /// Daily-style mix: long + medium + small arrow lengths interleaved.
   bool mixPathSizes = false,
 }) {
@@ -304,6 +397,8 @@ SolvableLevelResult generateNestedSolvableLevel(
   final occupied = <String>{};
   final arrows = <ArrowModel>[];
   final placementOrder = <String>[];
+  var nextArrowSeq = 0;
+  String allocArrowId() => '$levelNumber-${nextArrowSeq++}';
 
   String cellKey(int r, int c) => '$r:$c';
 
@@ -432,7 +527,34 @@ SolvableLevelResult generateNestedSolvableLevel(
   }
 
   (int tipR, int tipC) pickTip() {
-    if (hardNest && occupied.isNotEmpty && random.nextDouble() < 0.78) {
+    // Exact-one-free: prefer empty cells on a currently-free tip's escape ray
+    // so the next snake can seal and keep free count at 1.
+    if (exactFreeAtStart && maxFreeAtStart == 1 && arrows.isNotEmpty) {
+      final rayCells = <(int, int)>[];
+      for (final other in arrows) {
+        if (!escapeClear(other.row, other.col, other.direction)) continue;
+        final (dr, dc) = _dirDelta(other.direction);
+        var r = other.row + dr;
+        var c = other.col + dc;
+        while (inBounds(r, c)) {
+          if (!inMask(r, c)) {
+            if (!playableAheadOnRay(r, c, dr, dc)) break;
+            r += dr;
+            c += dc;
+            continue;
+          }
+          if (occupied.contains(cellKey(r, c))) break;
+          if (isEmpty(r, c)) rayCells.add((r, c));
+          r += dr;
+          c += dc;
+        }
+      }
+      if (rayCells.isNotEmpty) {
+        return rayCells[random.nextInt(rayCells.length)];
+      }
+    }
+    // Hard nests: tips almost always grow beside existing snakes (hooks around).
+    if (hardNest && occupied.isNotEmpty && random.nextDouble() < 0.92) {
       final pocket = samplePocketTip();
       if (pocket != null) return pocket;
     }
@@ -518,11 +640,12 @@ SolvableLevelResult generateNestedSolvableLevel(
           for (final c in hugging)
             if (!(c.$3 == growDr && c.$4 == growDc)) c,
         ];
-        if (nestTurns.isNotEmpty && random.nextDouble() < 0.8) {
+        // Bias hard toward bend-into-neighbor growth (U/C hooks like reference).
+        if (nestTurns.isNotEmpty && random.nextDouble() < 0.94) {
           pick = nestTurns[random.nextInt(nestTurns.length)];
-        } else if (hugging.isNotEmpty && random.nextDouble() < 0.7) {
+        } else if (hugging.isNotEmpty && random.nextDouble() < 0.85) {
           pick = hugging[random.nextInt(hugging.length)];
-        } else if (turns.isNotEmpty && random.nextDouble() < 0.88) {
+        } else if (turns.isNotEmpty && random.nextDouble() < 0.95) {
           pick = turns[random.nextInt(turns.length)];
         } else {
           pick = candidates[random.nextInt(candidates.length)];
@@ -559,6 +682,64 @@ SolvableLevelResult generateNestedSolvableLevel(
     for (final cell in arrow.path) {
       occupied.add(cellKey(cell.row, cell.col));
     }
+  }
+
+  /// Pull a free tip back one cell so its escape ray gains a sealable empty.
+  bool tryRetractAFreeTip() {
+    if (!(exactFreeAtStart && maxFreeAtStart == 1)) return false;
+    int countFree() {
+      var n = 0;
+      for (final a in arrows) {
+        if (isArrowFree(
+          arrow: a,
+          arrows: arrows,
+          gridRows: rows,
+          gridCols: cols,
+          shapeMask: shapeMask,
+        )) {
+          n++;
+        }
+      }
+      return n;
+    }
+
+    for (var i = 0; i < arrows.length; i++) {
+      final arrow = arrows[i];
+      if (!escapeClear(arrow.row, arrow.col, arrow.direction)) continue;
+      if (arrow.path.length <= (minPathLen < 2 ? 2 : minPathLen)) continue;
+      final oldTip = arrow.path.last;
+      final newPath = arrow.path.sublist(0, arrow.path.length - 1);
+      final newTip = newPath.last;
+      if (newPath.length < 2) continue;
+      final prev = newPath[newPath.length - 2];
+      final dr = newTip.row - prev.row;
+      final dc = newTip.col - prev.col;
+      ArrowDirection? newDir;
+      for (final d in ArrowDirection.values) {
+        final (ddr, ddc) = _dirDelta(d);
+        if (ddr == dr && ddc == dc) {
+          newDir = d;
+          break;
+        }
+      }
+      if (newDir == null) continue;
+      occupied.remove(cellKey(oldTip.row, oldTip.col));
+      arrows[i] = ArrowModel(
+        id: arrow.id,
+        row: newTip.row,
+        col: newTip.col,
+        direction: newDir,
+        path: newPath,
+      );
+      // Retract must not reopen a second free tip.
+      if (countFree() != 1) {
+        occupied.add(cellKey(oldTip.row, oldTip.col));
+        arrows[i] = arrow;
+        continue;
+      }
+      return true;
+    }
+    return false;
   }
 
   /// Tip steps toward board center (tail will grow toward the rim).
@@ -616,7 +797,59 @@ SolvableLevelResult generateNestedSolvableLevel(
       );
       if (path == null) continue;
 
-      var score = 0;
+      // Count how many currently-free tips this path would seal.
+      var sealedFrees = 0;
+      for (final other in arrows) {
+        if (!escapeClear(other.row, other.col, other.direction)) continue;
+        final (odr, odc) = _dirDelta(other.direction);
+        var rr = other.row + odr;
+        var cc = other.col + odc;
+        while (inBounds(rr, cc)) {
+          if (!inMask(rr, cc)) {
+            if (!playableAheadOnRay(rr, cc, odr, odc)) break;
+            rr += odr;
+            cc += odc;
+            continue;
+          }
+          final hit = path.any((cell) => cell.row == rr && cell.col == cc);
+          if (hit) {
+            sealedFrees++;
+            break;
+          }
+          if (occupied.contains(cellKey(rr, cc))) break;
+          rr += odr;
+          cc += odc;
+        }
+      }
+      // Exact-one-free: after the first tip, every new snake must seal ≥1
+      // free tip so free-at-start stays exactly 1 (new free replaces sealed).
+      if (exactFreeAtStart &&
+          maxFreeAtStart == 1 &&
+          arrows.isNotEmpty &&
+          sealedFrees < 1) {
+        continue;
+      }
+      // First tip must leave ≥2 empty ray cells so later seals can land.
+      if (exactFreeAtStart && maxFreeAtStart == 1 && arrows.isEmpty) {
+        final (dr, dc) = _dirDelta(direction);
+        var empties = 0;
+        var r = tipR + dr;
+        var c = tipC + dc;
+        while (inBounds(r, c) && empties < 3) {
+          if (!inMask(r, c)) {
+            if (!playableAheadOnRay(r, c, dr, dc)) break;
+            r += dr;
+            c += dc;
+            continue;
+          }
+          empties++;
+          r += dr;
+          c += dc;
+        }
+        if (empties < 5) continue;
+      }
+
+      var score = sealedFrees * (exactFreeAtStart && maxFreeAtStart == 1 ? 40 : 14);
       if (preferInward) {
         if (pointsInward(tipR, tipC, direction)) score += 8;
         if (easyOutwardRim(tipR, tipC, direction)) {
@@ -636,7 +869,7 @@ SolvableLevelResult generateNestedSolvableLevel(
           score += hardNest ? 6 : 3;
         }
         if (hardNest) {
-          // Reward bends / hooks (Escape Puzzle style interlocking).
+          // Reward bends / U-hooks (reference: wrap around another arrow).
           var turns = 0;
           for (var i = 2; i < path.length; i++) {
             final a = path[i - 2];
@@ -648,40 +881,20 @@ SolvableLevelResult generateNestedSolvableLevel(
             final d2c = c.col - b.col;
             if (d1r != d2r || d1c != d2c) turns++;
           }
-          score += turns * 4;
-          if (path.length >= 5 && turns == 0) score -= 6;
+          score += turns * 7;
+          if (turns >= 2) score += 10; // real hook / zigzag, not a single L
+          if (turns >= 3) score += 6;
+          if (path.length >= 5 && turns == 0) score -= 14;
 
           // Nest against neighbors — floating separated snakes score poorly.
           final contacts = nestContactScore(path);
-          score += contacts * 4;
-          if (arrows.isNotEmpty && contacts == 0) score -= 18;
-          if (contacts >= 3) score += 6;
+          score += contacts * 6;
+          if (arrows.isNotEmpty && contacts == 0) score -= 28;
+          if (contacts >= 3) score += 10;
+          if (contacts >= 5) score += 6;
 
-          // Prefer placements that seal currently-free tips (deep dependency chains).
-          for (final other in arrows) {
-            if (!escapeClear(other.row, other.col, other.direction)) continue;
-            final (odr, odc) = _dirDelta(other.direction);
-            var rr = other.row + odr;
-            var cc = other.col + odc;
-            var sealed = false;
-            while (inBounds(rr, cc) && !sealed) {
-              if (!inMask(rr, cc)) {
-                if (!playableAheadOnRay(rr, cc, odr, odc)) break;
-                rr += odr;
-                cc += odc;
-                continue;
-              }
-              for (final cell in path) {
-                if (cell.row == rr && cell.col == cc) {
-                  score += 7;
-                  sealed = true;
-                  break;
-                }
-              }
-              rr += odr;
-              cc += odc;
-            }
-          }
+          // Occupied cells cupped in bend pockets (hooks around neighbors).
+          score += _cupWrapBonus(path, occupied) * 5;
         }
       } else if (hardNest && arrows.isNotEmpty) {
         // Late fill: still prefer nesting against existing paths.
@@ -710,6 +923,12 @@ SolvableLevelResult generateNestedSolvableLevel(
           if (nestContactScore(o.path) > 0) o,
       ];
       if (nested.isNotEmpty) pool = nested;
+      // Prefer multi-bend hooks when available (reference U/C wraps).
+      final hooked = [
+        for (final o in pool)
+          if (_pathTurnCount(o.path) >= 2) o,
+      ];
+      if (hooked.isNotEmpty) pool = hooked;
     }
 
     pool.sort((a, b) => b.score.compareTo(a.score));
@@ -722,7 +941,7 @@ SolvableLevelResult generateNestedSolvableLevel(
 
     placeArrow(
       ArrowModel(
-        id: '$levelNumber-${arrows.length}',
+        id: allocArrowId(),
         row: tipR,
         col: tipC,
         direction: pick.dir,
@@ -740,6 +959,44 @@ SolvableLevelResult generateNestedSolvableLevel(
       final span = (maxPathLen - minPathLen).clamp(0, 99);
       return minPathLen + (span == 0 ? 0 : random.nextInt(span + 1));
     }
+    // Hard nests (L11+ style): mostly mid/long serpentine; few min-length decoys.
+    if (hardNest && minPathLen >= 5) {
+      final roll = random.nextDouble();
+      if (roll < 0.35) {
+        // Long winding 10–max (~35%+)
+        final tallMin = max(10, minPathLen + 3).clamp(minPathLen, maxPathLen);
+        return tallMin +
+            random.nextInt((maxPathLen - tallMin).clamp(0, 99) + 1);
+      }
+      if (roll < 0.88) {
+        final mid =
+            ((minPathLen + maxPathLen) / 2).round().clamp(minPathLen, maxPathLen);
+        final lo = max(minPathLen, mid - 1);
+        final hi = min(maxPathLen, mid + 2);
+        return lo + random.nextInt((hi - lo).clamp(0, 99) + 1);
+      }
+      // Decoy: min length only (still continuous — never 1–3 cell stubs)
+      return minPathLen;
+    }
+    // Hard nests: mostly mid/long serpentine; few short decoys (~10%).
+    if (hardNest && minPathLen >= 4) {
+      final roll = random.nextDouble();
+      if (roll < 0.30) {
+        // Long winding 8–max (25–30%+ of pack)
+        final tallMin = max(8, minPathLen + 2).clamp(minPathLen, maxPathLen);
+        return tallMin +
+            random.nextInt((maxPathLen - tallMin).clamp(0, 99) + 1);
+      }
+      if (roll < 0.90) {
+        final mid =
+            ((minPathLen + maxPathLen) / 2).round().clamp(minPathLen, maxPathLen);
+        final lo = (mid - 1).clamp(minPathLen, maxPathLen);
+        final hi = (mid + 2).clamp(minPathLen, maxPathLen);
+        return lo + random.nextInt((hi - lo).clamp(0, 99) + 1);
+      }
+      // Decoy shorts (visually simple, still placed deep via pocket tips)
+      return max(2, minPathLen - 1);
+    }
     // Length mix tuned so ~100 arrows nearly fill a dense silhouette (avg ~6).
     final roll = random.nextDouble();
     if (roll < 0.25) {
@@ -755,23 +1012,298 @@ SolvableLevelResult generateNestedSolvableLevel(
     return 2 + random.nextInt(2); // small 2–3
   }
 
+  final growFloor = hardNest && minPathLen >= 4 ? minPathLen : 2;
+  // L11+ strict: never place stub fragments below minPathLen.
+  final strictMin = minPathLen >= 5 ? minPathLen : growFloor;
+  /// Dedicated seal: tip on a free escape ray (guarantees sealedFrees ≥ 1).
+  bool tryForceSealPlacement() {
+    if (!(exactFreeAtStart && maxFreeAtStart == 1) || arrows.isEmpty) {
+      return false;
+    }
+    final frees = <ArrowModel>[
+      for (final a in arrows)
+        if (escapeClear(a.row, a.col, a.direction)) a,
+    ];
+    if (frees.isEmpty) return false;
+    frees.shuffle(random);
+    for (final free in frees) {
+      final (dr, dc) = _dirDelta(free.direction);
+      final cells = <(int, int)>[];
+      var r = free.row + dr;
+      var c = free.col + dc;
+      while (inBounds(r, c)) {
+        if (!inMask(r, c)) {
+          if (!playableAheadOnRay(r, c, dr, dc)) break;
+          r += dr;
+          c += dc;
+          continue;
+        }
+        if (occupied.contains(cellKey(r, c))) break;
+        if (isEmpty(r, c)) cells.add((r, c));
+        r += dr;
+        c += dc;
+      }
+      // Straight seal leaves ≥5 empties ahead so the chain can continue.
+      for (var tipIndex = 4; tipIndex <= cells.length - 6; tipIndex++) {
+        final (tr, tc) = cells[tipIndex];
+        if (!escapeClear(tr, tc, free.direction)) continue;
+        final segment = cells.sublist(tipIndex - 4, tipIndex + 1);
+        final path = [
+          for (final cell in segment) GridCell(cell.$1, cell.$2),
+        ];
+        placeArrow(
+          ArrowModel(
+            id: allocArrowId(),
+            row: tr,
+            col: tc,
+            direction: free.direction,
+            path: path,
+          ),
+        );
+        return true;
+      }
+
+      // Short ray: tip on ray, grow sideways (still seals via tip cell).
+      cells.shuffle(random);
+      for (var idx = 0; idx < cells.length; idx++) {
+        final (tr, tc) = cells[idx];
+        final dirs = [
+          for (final d in ArrowDirection.values)
+            if (d != free.direction) d,
+        ]..shuffle(random);
+        for (final direction in dirs) {
+          if (!escapeClear(tr, tc, direction)) continue;
+          final path = growPath(
+            tipR: tr,
+            tipC: tc,
+            direction: direction,
+            targetLen: max(minPathLen, 8),
+            minLen: minPathLen < 2 ? 2 : minPathLen,
+          );
+          if (path == null) continue;
+          placeArrow(
+            ArrowModel(
+              id: allocArrowId(),
+              row: tr,
+              col: tc,
+              direction: direction,
+              path: path,
+            ),
+          );
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  if (exactFreeAtStart && maxFreeAtStart == 1) {
+    // Chain seals: each new tip sits on the current free tip's ray.
+    // Guarantees free-at-start == 1 and reverse-solvable packing.
+    var keeperOk = false;
+    // Systematic keeper near center pointing at a long clear ray to the rim.
+    for (final direction in ArrowDirection.values) {
+      if (keeperOk) break;
+      final (dr, dc) = _dirDelta(direction);
+      final tipR = rows ~/ 2;
+      final tipC = cols ~/ 2;
+      // Walk tip toward opposite of direction so shaft fits + ray is long.
+      for (var back = 4; back <= 10 && !keeperOk; back++) {
+        final tr = tipR + (-dr) * 0; // keep center tip, check shaft/ray
+        final tc = tipC;
+        // Try tip positions along the center line.
+        for (var shift = -3; shift <= 3 && !keeperOk; shift++) {
+          final pr = (tipR + (dr == 0 ? shift : 0)).clamp(0, rows - 1);
+          final pc = (tipC + (dc == 0 ? shift : 0)).clamp(0, cols - 1);
+          // Tip inset `back` cells from the far rim along -direction.
+          final farR = dr > 0
+              ? rows - 1
+              : dr < 0
+                  ? 0
+                  : pr;
+          final farC = dc > 0
+              ? cols - 1
+              : dc < 0
+                  ? 0
+                  : pc;
+          // Place tip `back` cells before the rim along direction... 
+          // Simpler: tip at center-ish, require ahead>=5 and shaft 4.
+          if (!isEmpty(pr, pc)) continue;
+          var ahead = 0;
+          var r = pr + dr;
+          var c = pc + dc;
+          while (inBounds(r, c) && ahead < 8) {
+            if (!inMask(r, c)) {
+              if (!playableAheadOnRay(r, c, dr, dc)) break;
+              r += dr;
+              c += dc;
+              continue;
+            }
+            if (!isEmpty(r, c)) break;
+            ahead++;
+            r += dr;
+            c += dc;
+          }
+          if (ahead < 5) continue;
+          final path = <GridCell>[];
+          var ok = true;
+          for (var i = 4; i >= 0; i--) {
+            final sr = pr - dr * i;
+            final sc = pc - dc * i;
+            if (!isEmpty(sr, sc)) {
+              ok = false;
+              break;
+            }
+            path.add(GridCell(sr, sc));
+          }
+          if (!ok) continue;
+          placeArrow(
+            ArrowModel(
+              id: allocArrowId(),
+              row: pr,
+              col: pc,
+              direction: direction,
+              path: path,
+            ),
+          );
+          keeperOk = true;
+        }
+      }
+    }
+    // Random fallback.
+    for (var attempt = 0; attempt < 2000 && !keeperOk; attempt++) {
+      final direction =
+          ArrowDirection.values[random.nextInt(ArrowDirection.values.length)];
+      final (dr, dc) = _dirDelta(direction);
+      final tipR = random.nextInt(rows);
+      final tipC = random.nextInt(cols);
+      if (!isEmpty(tipR, tipC)) continue;
+      var ahead = 0;
+      var r = tipR + dr;
+      var c = tipC + dc;
+      while (inBounds(r, c) && ahead < 5) {
+        if (!inMask(r, c)) {
+          if (!playableAheadOnRay(r, c, dr, dc)) break;
+          r += dr;
+          c += dc;
+          continue;
+        }
+        if (!isEmpty(r, c)) break;
+        ahead++;
+        r += dr;
+        c += dc;
+      }
+      if (ahead < 5) continue;
+      final path = <GridCell>[];
+      var ok = true;
+      for (var i = 4; i >= 0; i--) {
+        final pr = tipR - dr * i;
+        final pc = tipC - dc * i;
+        if (!isEmpty(pr, pc)) {
+          ok = false;
+          break;
+        }
+        path.add(GridCell(pr, pc));
+      }
+      if (!ok) continue;
+      placeArrow(
+        ArrowModel(
+          id: allocArrowId(),
+          row: tipR,
+          col: tipC,
+          direction: direction,
+          path: path,
+        ),
+      );
+      keeperOk = true;
+    }
+    if (!keeperOk) {
+      throw StateError('Nested nest failed to place free keeper tip');
+    }
+
+    var safety = 0;
+    var stall = 0;
+    while (arrows.length < max(minArrows, 15) && underArrowCap() && safety < 8000) {
+      safety++;
+      final before = arrows.length;
+      if (!tryForceSealPlacement()) {
+        tryRetractAFreeTip();
+        tryForceSealPlacement();
+      }
+      // Extra densify once past minArrows floor.
+      if (arrows.length == before) {
+        final tip = pickTip();
+        final len = pickPathLen();
+        tryPlaceAt(
+          tipR: tip.$1,
+          tipC: tip.$2,
+          targetLen: len < strictMin ? strictMin : len,
+          minLen: strictMin < 2 ? 2 : strictMin,
+          preferInward: true,
+        );
+      }
+      if (arrows.length == before) {
+        stall++;
+        if (stall > 600) break;
+      } else {
+        stall = 0;
+      }
+    }
+
+    // Optional fill toward targetCells with seal-required placements.
+    safety = 0;
+    stall = 0;
+    while (occupied.length < targetCells && underArrowCap() && safety < 4000) {
+      safety++;
+      final before = occupied.length;
+      tryForceSealPlacement();
+      if (occupied.length == before) {
+        final tip = pickTip();
+        tryPlaceAt(
+          tipR: tip.$1,
+          tipC: tip.$2,
+          targetLen: pickPathLen().clamp(strictMin, maxPathLen),
+          minLen: strictMin < 2 ? 2 : strictMin,
+          preferInward: true,
+        );
+      }
+      if (occupied.length == before) {
+        stall++;
+        if (stall > 40) tryRetractAFreeTip();
+        if (stall > 400) break;
+      } else {
+        stall = 0;
+      }
+    }
+  } else {
   // Phase 1: woven snakes — tips biased into nesting pockets.
   var safety = 0;
   var stall = 0;
   while (occupied.length < targetCells && underArrowCap() && safety < 5000) {
     safety++;
     final before = occupied.length;
-    final tip = pickTip();
-    final len = pickPathLen();
-    tryPlaceAt(
-      tipR: tip.$1,
-      tipC: tip.$2,
-      targetLen: len < 2 ? 2 : len,
-      minLen: mixPathSizes ? 2 : (minPathLen < 2 ? 2 : minPathLen),
-      preferInward: true,
-    );
+    if (exactFreeAtStart && maxFreeAtStart == 1 && arrows.isNotEmpty) {
+      tryForceSealPlacement();
+    }
+    if (occupied.length == before) {
+      final tip = pickTip();
+      final len = pickPathLen();
+      tryPlaceAt(
+        tipR: tip.$1,
+        tipC: tip.$2,
+        targetLen: len < strictMin ? strictMin : len,
+        minLen: strictMin < 2 ? 2 : strictMin,
+        preferInward: true,
+      );
+    }
     if (occupied.length == before) {
       stall++;
+      if (exactFreeAtStart &&
+          maxFreeAtStart == 1 &&
+          stall > 20 &&
+          stall % 10 == 0) {
+        tryRetractAFreeTip();
+      }
       if (stall > 400) break;
     } else {
       stall = 0;
@@ -784,17 +1316,28 @@ SolvableLevelResult generateNestedSolvableLevel(
   while (occupied.length < targetCells && underArrowCap() && safety < 3000) {
     safety++;
     final before = occupied.length;
-    final tip = pickTip();
-    final len = mixPathSizes ? pickPathLen() : (2 + random.nextInt(3));
-    tryPlaceAt(
-      tipR: tip.$1,
-      tipC: tip.$2,
-      targetLen: len < 2 ? 2 : len,
-      minLen: 2,
-      preferInward: true,
-    );
+    if (exactFreeAtStart && maxFreeAtStart == 1 && arrows.isNotEmpty) {
+      tryForceSealPlacement();
+    }
+    if (occupied.length == before) {
+      final tip = pickTip();
+      final len = mixPathSizes ? pickPathLen() : (strictMin + random.nextInt(3));
+      tryPlaceAt(
+        tipR: tip.$1,
+        tipC: tip.$2,
+        targetLen: len < strictMin ? strictMin : len,
+        minLen: strictMin < 2 ? 2 : strictMin,
+        preferInward: true,
+      );
+    }
     if (occupied.length == before) {
       stall++;
+      if (exactFreeAtStart &&
+          maxFreeAtStart == 1 &&
+          stall > 20 &&
+          stall % 10 == 0) {
+        tryRetractAFreeTip();
+      }
       if (stall > 300) break;
     } else {
       stall = 0;
@@ -802,6 +1345,8 @@ SolvableLevelResult generateNestedSolvableLevel(
   }
 
   // Phase 3: leftovers — hard nests still bury tips (refs); soft allow any tip.
+  // Never place stub fragments when minPathLen is strict (L11+).
+  final mopMin = hardNest && minPathLen >= 5 ? minPathLen : 2;
   for (var r = 0; r < rows && underArrowCap(); r++) {
     for (var c = 0; c < cols && underArrowCap(); c++) {
       if (!isEmpty(r, c)) continue;
@@ -810,25 +1355,29 @@ SolvableLevelResult generateNestedSolvableLevel(
         tipC: c,
         targetLen: mixPathSizes
             ? pickPathLen()
-            : (hardNest ? 4 : 3),
-        minLen: 2,
+            : (hardNest ? max(4, mopMin) : 3),
+        minLen: mopMin,
         preferInward: hardNest || mixPathSizes,
       );
     }
   }
 
   // Phase 4: hard nests mop remaining corridors — keep inward bias.
+  // Skip ultra-short (2–3) fills when minPathLen >= 5 — those look like
+  // broken floating fragments on the board.
   if (hardNest) {
     for (var pass = 0; pass < 5 && underArrowCap(); pass++) {
       var placed = false;
       for (var r = 0; r < rows && underArrowCap(); r++) {
         for (var c = 0; c < cols && underArrowCap(); c++) {
           if (!isEmpty(r, c)) continue;
+          final len =
+              mopMin >= 5 ? mopMin + (pass % 3) : 2 + (pass % 3);
           if (tryPlaceAt(
             tipR: r,
             tipC: c,
-            targetLen: 2 + (pass % 3),
-            minLen: 2,
+            targetLen: len,
+            minLen: mopMin,
             preferInward: true,
             allowFacingTips: pass >= 3,
           )) {
@@ -841,7 +1390,8 @@ SolvableLevelResult generateNestedSolvableLevel(
   }
 
   // Phase 5: pack leftover gaps with short shafts (esp. daily size-mix packs).
-  if (mixPathSizes || maxArrows != null) {
+  // Disabled for strict hard nests — short stubs are the broken-arrow look.
+  if ((mixPathSizes || maxArrows != null) && mopMin < 5) {
     for (var pass = 0; pass < 20 && underArrowCap(); pass++) {
       var placed = false;
       for (var r = 0; r < rows && underArrowCap(); r++) {
@@ -863,6 +1413,8 @@ SolvableLevelResult generateNestedSolvableLevel(
     }
   }
 
+  } // end non-exactOne reverse pack
+
   if (arrows.length < minArrows) {
     throw StateError(
       'Nested daily only placed ${arrows.length}/$minArrows arrows '
@@ -883,24 +1435,77 @@ SolvableLevelResult generateNestedSolvableLevel(
         free++;
       }
     }
-    if (free > maxFreeAtStart) {
+    if (exactFreeAtStart) {
+      if (free != maxFreeAtStart) {
+        throw StateError(
+          'Nested nest free-at-start $free != exact $maxFreeAtStart',
+        );
+      }
+    } else if (free > maxFreeAtStart) {
       throw StateError(
         'Nested nest too open at start ($free free > $maxFreeAtStart)',
       );
     }
   }
 
+  _assertNestedPathsValid(levelNumber, arrows);
+
+  // Retracts / seal-required packs can desync reverse placement order —
+  // rebuild from a wave-clear solve so hints stay valid.
+  if (exactFreeAtStart && maxFreeAtStart == 1) {
+    final live = cloneArrows(arrows);
+    final solve = <String>[];
+    var clearSafety = 0;
+    while (live.any((a) => !a.isRemoved) && clearSafety < 5000) {
+      clearSafety++;
+      ArrowModel? pick;
+      for (final a in live) {
+        if (a.isRemoved) continue;
+        if (!isArrowFree(
+          arrow: a,
+          arrows: live,
+          gridRows: rows,
+          gridCols: cols,
+          shapeMask: shapeMask,
+        )) {
+          continue;
+        }
+        if (pick == null || a.id.compareTo(pick.id) < 0) pick = a;
+      }
+      if (pick == null) {
+        throw StateError(
+          'Nested nest unsolvable (cleared ${solve.length}/${arrows.length})',
+        );
+      }
+      solve.add(pick.id);
+      final idx = live.indexWhere((a) => a.id == pick!.id);
+      live[idx] = live[idx].copyWith(isRemoved: true);
+    }
+    placementOrder
+      ..clear()
+      ..addAll(solve.reversed);
+  }
+
+  final built = LevelModel(
+    levelNumber: levelNumber,
+    gridRows: rows,
+    gridCols: cols,
+    arrows: arrows,
+    heartsAllowed: hearts,
+    hintsAllowed: hints,
+    difficulty: difficulty,
+    shapeMask: shapeMask,
+  );
+  final depths = arrowClearDepths(built);
+  if (depths.length != arrows.length) {
+    throw StateError(
+      'Nested nest unsolvable after free-cap (cleared ${depths.length}/'
+      '${arrows.length})',
+    );
+  }
+
   return SolvableLevelResult(
-    level: LevelModel(
-      levelNumber: levelNumber,
-      gridRows: rows,
-      gridCols: cols,
-      arrows: arrows,
-      heartsAllowed: hearts,
-      hintsAllowed: hints,
-      difficulty: difficulty,
-      shapeMask: shapeMask,
-    ),
+    level: built,
     placementOrder: List<String>.unmodifiable(placementOrder),
   );
 }
@@ -985,19 +1590,17 @@ List<List<bool>> starMask(int rows, int cols) {
   });
 }
 
-/// Campaign levels 1–30. Dense late levels are built lazily so app start
-/// does not freeze the UI (~20s+ if every nest were generated up front).
+/// Campaign levels 1–10. Daily / endless helpers stay separate.
 class LevelRepository {
   LevelRepository({List<SolvableLevelResult>? prebuilt})
       : _prebuilt = prebuilt,
-        _lazy = List<SolvableLevelResult?>.filled(30, null);
+        _lazy = List<SolvableLevelResult?>.filled(campaignLevelCount, null);
 
   final List<SolvableLevelResult>? _prebuilt;
   final List<SolvableLevelResult?> _lazy;
   final Map<int, LevelModel> _dailyCache = {};
-  final Map<int, LevelModel> _endlessCache = {};
 
-  static const int campaignLevelCount = 30;
+  static const int campaignLevelCount = 10;
 
   SolvableLevelResult _resultAt(int index) {
     if (index < 0 || index >= campaignLevelCount) {
@@ -1007,6 +1610,7 @@ class LevelRepository {
     return _lazy[index] ??= _buildCampaignLevel(index + 1);
   }
 
+  /// Prefer [getLevel] — only 10 campaign levels are shipped.
   List<LevelModel> get levels => [
         for (var i = 0; i < campaignLevelCount; i++) _resultAt(i).level,
       ];
@@ -1023,50 +1627,10 @@ class LevelRepository {
 
   LevelModel getLevel(int levelNumber) {
     final key = levelNumber < 1 ? 1 : levelNumber;
-    if (key <= campaignLevelCount) {
-      return _resultAt(key - 1).level;
+    if (key > campaignLevelCount) {
+      return _resultAt(campaignLevelCount - 1).level;
     }
-
-    return _endlessCache.putIfAbsent(key, () {
-      // Endless Expert nests after the curated pack (auto-grows harder).
-      final size = (18 + ((key - 30) % 8)).clamp(18, 24);
-      final minArrows = (66 + (key - 30) * 2).clamp(66, 100);
-      final maxFree = (3 - ((key - 30) ~/ 8)).clamp(2, 3);
-      try {
-        return generateNestedSolvableLevel(
-          key,
-          size,
-          size + (key.isEven ? 1 : 0),
-          3,
-          1,
-          difficulty: LevelDifficulty.expert,
-          seed: key * 9973 + size * 19,
-          fillTarget: 0.98,
-          minPathLen: 2,
-          maxPathLen: 12,
-          minArrows: minArrows,
-          hardNest: true,
-          mixPathSizes: true,
-          maxFreeAtStart: maxFree,
-        ).level;
-      } on StateError {
-        return generateNestedSolvableLevel(
-          key,
-          18,
-          18,
-          3,
-          1,
-          difficulty: LevelDifficulty.expert,
-          seed: key,
-          fillTarget: 0.92,
-          minPathLen: 2,
-          maxPathLen: 10,
-          minArrows: 50,
-          hardNest: true,
-          mixPathSizes: true,
-        ).level;
-      }
-    });
+    return _resultAt(key - 1).level;
   }
 
   LevelModel nextLevel(int currentLevelNumber) =>
@@ -1083,145 +1647,113 @@ class LevelRepository {
   }
 
   /// Daily puzzles are calendar-seeded (one unique board per day).
-  /// Dense shaped nest (~100 arrows): no free space, mixed small/medium/tall.
+  /// Large nested silhouette (~120–150 arrows), mixed sizes, hardNest.
   static LevelModel _buildDailyChallengeLevel(DateTime day, int levelNumber) {
     final dayOfYear = day.difference(DateTime(day.year)).inDays;
-    final shapeIndex = (dayOfYear + day.year * 5 + day.month * 3) % 16;
+    final shapeIndex = (dayOfYear + day.year * 5 + day.month * 3) % 12;
 
-    // Shrink primary boards so 100 mixed arrows pack nearly solid.
+    // Large primary boards so 120–150 mixed arrows pack tightly.
     final config = switch (shapeIndex) {
       0 => (
-          rows: 22,
-          cols: 22,
-          mask: circleMask(22, 22),
-          fbRows: 22,
-          fbCols: 22,
-          fbMask: circleMask(22, 22),
+          rows: 26,
+          cols: 26,
+          mask: generateHeartShapeMask(26),
+          fbRows: 24,
+          fbCols: 24,
+          fbMask: generateHeartShapeMask(24),
         ),
       1 => (
-          rows: 22,
-          cols: 22,
-          mask: octagonMask(22, 22),
-          fbRows: 22,
-          fbCols: 22,
-          fbMask: octagonMask(22, 22),
+          rows: 26,
+          cols: 26,
+          mask: ovalMask(26, 26),
+          fbRows: 24,
+          fbCols: 24,
+          fbMask: ovalMask(24, 24),
         ),
       2 => (
-          rows: 22,
-          cols: 22,
-          mask: diamondMask(22, 22),
-          fbRows: 22,
-          fbCols: 22,
-          fbMask: diamondMask(22, 22),
+          rows: 26,
+          cols: 26,
+          mask: starMask(26, 26),
+          fbRows: 24,
+          fbCols: 24,
+          fbMask: cloverMask(24, 24),
         ),
       3 => (
-          rows: 23,
-          cols: 25,
-          mask: hexagonMask(23, 25),
-          fbRows: 21,
-          fbCols: 23,
-          fbMask: hexagonMask(21, 23),
+          rows: 26,
+          cols: 26,
+          mask: crescentMask(26, 26),
+          fbRows: 24,
+          fbCols: 24,
+          fbMask: circleMask(24, 24),
         ),
       4 => (
-          rows: 22,
-          cols: 22,
-          mask: generateHeartShapeMask(22),
-          fbRows: 22,
-          fbCols: 22,
-          fbMask: generateHeartShapeMask(22),
+          rows: 26,
+          cols: 26,
+          mask: cloverMask(26, 26),
+          fbRows: 24,
+          fbCols: 24,
+          fbMask: octagonMask(24, 24),
         ),
       5 => (
-          rows: 22,
-          cols: 22,
-          mask: circleMask(22, 22),
-          fbRows: 22,
+          rows: 27,
+          cols: 25,
+          mask: shieldMask(27, 25),
+          fbRows: 24,
           fbCols: 22,
-          fbMask: octagonMask(22, 22),
+          fbMask: shieldMask(24, 22),
         ),
       6 => (
-          rows: 25,
-          cols: 25,
-          mask: octagonMask(25, 25),
-          fbRows: 23,
-          fbCols: 23,
-          fbMask: circleMask(23, 23),
+          rows: 24,
+          cols: 28,
+          mask: fishMask(24, 28),
+          fbRows: 22,
+          fbCols: 26,
+          fbMask: fishMask(22, 26),
         ),
       7 => (
-          rows: 23,
-          cols: 25,
-          mask: stadiumMask(23, 25),
-          fbRows: 21,
-          fbCols: 23,
-          fbMask: stadiumMask(21, 23),
+          rows: 26,
+          cols: 26,
+          mask: butterflyMask(26, 26),
+          fbRows: 24,
+          fbCols: 24,
+          fbMask: flowerMask(24, 24),
         ),
       8 => (
-          rows: 22,
-          cols: 22,
-          mask: cloverMask(22, 22),
-          fbRows: 22,
-          fbCols: 22,
-          fbMask: octagonMask(22, 22),
+          rows: 25,
+          cols: 27,
+          mask: birdOutlineMask(25, 27),
+          fbRows: 23,
+          fbCols: 25,
+          fbMask: birdOutlineMask(23, 25),
         ),
       9 => (
-          rows: 25,
-          cols: 25,
-          mask: circleMask(25, 25),
-          fbRows: 23,
-          fbCols: 23,
-          fbMask: circleMask(23, 23),
+          rows: 26,
+          cols: 26,
+          mask: catFaceMask(26, 26),
+          fbRows: 24,
+          fbCols: 24,
+          fbMask: catFaceMask(24, 24),
         ),
       10 => (
-          rows: 22,
-          cols: 22,
-          mask: flowerMask(22, 22),
-          fbRows: 22,
-          fbCols: 22,
-          fbMask: diamondMask(22, 22),
-        ),
-      11 => (
-          rows: 24,
-          cols: 22,
-          mask: shieldMask(24, 22),
-          fbRows: 22,
-          fbCols: 20,
-          fbMask: octagonMask(22, 20),
-        ),
-      12 => (
-          rows: 22,
-          cols: 22,
-          mask: octagonMask(22, 22),
-          fbRows: 22,
-          fbCols: 22,
-          fbMask: diamondMask(22, 22),
-        ),
-      13 => (
-          rows: 22,
-          cols: 26,
-          mask: stadiumMask(22, 26),
-          fbRows: 20,
-          fbCols: 24,
-          fbMask: stadiumMask(20, 24),
-        ),
-      14 => (
-          rows: 25,
-          cols: 25,
-          mask: diamondMask(25, 25),
-          fbRows: 23,
-          fbCols: 23,
-          fbMask: circleMask(23, 23),
+          rows: 26,
+          cols: 28,
+          mask: stadiumMask(26, 28),
+          fbRows: 24,
+          fbCols: 26,
+          fbMask: stadiumMask(24, 26),
         ),
       _ => (
-          rows: 22,
-          cols: 22,
-          mask: circleMask(22, 22),
-          fbRows: 22,
-          fbCols: 22,
-          fbMask: octagonMask(22, 22),
+          rows: 27,
+          cols: 27,
+          mask: octagonMask(27, 27),
+          fbRows: 24,
+          fbCols: 24,
+          fbMask: diamondMask(24, 24),
         ),
     };
 
     const minArrows = 100;
-    const maxArrows = 100;
+    const maxArrows = 150;
     StateError? lastError;
 
     LevelModel? tryBuild({
@@ -1230,8 +1762,11 @@ class LevelRepository {
       required List<List<bool>> mask,
       required int seed,
       required double fill,
-      int? freeCap,
+      required int arrows,
+      int maxPath = 10,
+      bool nest = true,
     }) {
+      final want = arrows.clamp(minArrows, maxArrows);
       try {
         return generateNestedSolvableLevel(
           levelNumber,
@@ -1244,12 +1779,12 @@ class LevelRepository {
           shapeMask: mask,
           fillTarget: fill,
           minPathLen: 2,
-          maxPathLen: 11,
-          minArrows: minArrows,
+          maxPathLen: maxPath,
+          minArrows: want,
           maxArrows: maxArrows,
-          hardNest: true,
+          hardNest: nest,
           mixPathSizes: true,
-          maxFreeAtStart: freeCap,
+          maxFreeAtStart: null,
         ).level;
       } on StateError catch (e) {
         lastError = e;
@@ -1257,173 +1792,232 @@ class LevelRepository {
       }
     }
 
-    // Near-solid fill — keep placing until 100 arrows pack the silhouette.
+    // Dense nest pack: always ≥100 arrows, fill white gaps in the silhouette.
     for (var attempt = 0; attempt < 28; attempt++) {
+      final target = (145 - (attempt ~/ 4) * 5).clamp(minArrows, maxArrows);
       final level = tryBuild(
         rows: config.rows,
         cols: config.cols,
         mask: config.mask,
         seed: levelNumber + attempt * 211 + shapeIndex * 47,
         fill: 0.995,
-        freeCap: attempt < 18 ? 12 : 16,
+        arrows: target,
+        maxPath: attempt < 12 ? 9 : 7,
+        nest: true,
       );
       if (level != null) return level;
     }
 
-    for (var attempt = 0; attempt < 18; attempt++) {
+    for (var attempt = 0; attempt < 20; attempt++) {
       final level = tryBuild(
         rows: config.fbRows,
         cols: config.fbCols,
         mask: config.fbMask,
         seed: levelNumber + 9000 + attempt * 131,
         fill: 0.99,
-        freeCap: attempt < 10 ? 14 : null,
+        arrows: (130 - attempt).clamp(minArrows, maxArrows),
+        maxPath: 7,
+        nest: true,
       );
       if (level != null) return level;
     }
 
-    for (var attempt = 0; attempt < 20; attempt++) {
-      final size = 21 + (attempt % 3); // 21–23 dense circles
+    // Pack with shorter shafts so empty mask cells get arrows (still nested mix).
+    for (var attempt = 0; attempt < 24; attempt++) {
+      final level = tryBuild(
+        rows: config.rows,
+        cols: config.cols,
+        mask: config.mask,
+        seed: levelNumber + 17000 + attempt * 97,
+        fill: 0.995,
+        arrows: (120 - (attempt ~/ 3) * 2).clamp(minArrows, maxArrows),
+        maxPath: 6,
+        nest: false,
+      );
+      if (level != null) return level;
+    }
+
+    for (var attempt = 0; attempt < 24; attempt++) {
+      final size = 26 + (attempt % 4); // 26–29 large enough for 100+ arrows
+      final mask = switch ((shapeIndex + attempt) % 5) {
+        0 => circleMask(size, size),
+        1 => ovalMask(size, size),
+        2 => generateHeartShapeMask(size),
+        3 => cloverMask(size, size),
+        _ => octagonMask(size, size),
+      };
+      final level = tryBuild(
+        rows: size,
+        cols: size,
+        mask: mask,
+        seed: levelNumber + 29000 + attempt * 37,
+        fill: 0.99,
+        arrows: (125 - attempt).clamp(minArrows, maxArrows),
+        maxPath: 6,
+        nest: attempt.isEven,
+      );
+      if (level != null) return level;
+    }
+
+    // Last resort: big circle, short pieces, must still hit 100.
+    for (var attempt = 0; attempt < 40; attempt++) {
+      final size = 28 + (attempt % 3);
       final level = tryBuild(
         rows: size,
         cols: size,
         mask: circleMask(size, size),
-        seed: levelNumber + 17000 + attempt * 97,
+        seed: levelNumber + 41000 + attempt * 19,
         fill: 0.98,
-        freeCap: null,
+        arrows: minArrows,
+        maxPath: 5,
+        nest: false,
       );
       if (level != null) return level;
     }
 
-    // Rectangles sized so 100 mixed arrows pack nearly solid.
-    for (var attempt = 0; attempt < 36; attempt++) {
-      final size = 20 + (attempt % 4); // 20–23
-      try {
-        return generateNestedSolvableLevel(
-          levelNumber,
-          size,
-          size,
-          3,
-          2,
-          difficulty: LevelDifficulty.expert,
-          seed: levelNumber + 29000 + attempt * 37,
-          fillTarget: 0.98,
-          minPathLen: 2,
-          maxPathLen: 10,
-          minArrows: minArrows,
-          maxArrows: maxArrows,
-          hardNest: true,
-          mixPathSizes: true,
-        ).level;
-      } on StateError catch (e) {
-        lastError = e;
-      }
-    }
-
-    // Soft hardNest off — still bent paths via mix sizes, pack 20–22 boards solid.
-    for (var attempt = 0; attempt < 28; attempt++) {
-      final size = 20 + (attempt % 3); // 20–22
-      try {
-        return generateNestedSolvableLevel(
-          levelNumber,
-          size,
-          size,
-          3,
-          2,
-          difficulty: LevelDifficulty.expert,
-          seed: levelNumber + 41000 + attempt * 19,
-          fillTarget: 0.97,
-          minPathLen: 2,
-          maxPathLen: 10,
-          minArrows: 90,
-          maxArrows: maxArrows,
-          hardNest: attempt.isEven,
-          mixPathSizes: true,
-        ).level;
-      } on StateError catch (e) {
-        lastError = e;
-      }
-    }
-
-    for (var attempt = 0; attempt < 24; attempt++) {
-      try {
-        return generateNestedSolvableLevel(
-          levelNumber,
-          24,
-          24,
-          3,
-          2,
-          difficulty: LevelDifficulty.expert,
-          seed: levelNumber + 52000 + attempt * 23,
-          fillTarget: 0.92,
-          minPathLen: 2,
-          maxPathLen: 9,
-          minArrows: 80,
-          maxArrows: maxArrows,
-          hardNest: false,
-          mixPathSizes: true,
-        ).level;
-      } on StateError catch (e) {
-        lastError = e;
-      }
-    }
-
-    try {
-      return generateNestedSolvableLevel(
-        levelNumber,
-        24,
-        24,
-        3,
-        2,
-        difficulty: LevelDifficulty.expert,
-        seed: levelNumber + 99,
-        fillTarget: 0.9,
-        minPathLen: 2,
-        maxPathLen: 8,
-        minArrows: 70,
-        maxArrows: maxArrows,
-        hardNest: false,
-        mixPathSizes: true,
-      ).level;
-    } on StateError catch (e) {
-      throw lastError ?? e;
-    }
+    final last = tryBuild(
+      rows: 30,
+      cols: 30,
+      mask: ovalMask(30, 30),
+      seed: levelNumber + 99,
+      fill: 0.97,
+      arrows: minArrows,
+      maxPath: 5,
+      nest: false,
+    );
+    if (last != null) return last;
+    throw lastError ??
+        StateError('Failed to build dense daily (≥$minArrows) for $levelNumber');
   }
 
   static SolvableLevelResult _buildCampaignLevel(int levelNumber) {
     return switch (levelNumber) {
       1 => _tutorialLevel1(),
-      2 => _nestedLevel2(),
-      3 => _nestedLevel3(),
-      4 => _nestedLevel4(),
-      5 => _nestedLevel5(),
-      6 => _nestedLevel6(),
-      7 => _nestedLevel7(),
-      8 => _nestedLevel8(),
-      9 => _nestedLevel9(),
-      10 => _nestedLevel10(),
-      11 => _nestedLevel11(),
-      12 => _nestedLevel12(),
-      13 => _nestedLevel13(),
-      14 => _nestedLevel14(),
-      15 => _nestedLevel15(),
-      16 => _nestedLevel16(),
-      17 => _nestedLevel17(),
-      18 => _nestedLevel18(),
-      19 => _nestedLevel19(),
-      20 => _nestedLevel20(),
-      21 => _nestedLevel21(),
-      22 => _nestedLevel22(),
-      23 => _nestedLevel23(),
-      24 => _nestedLevel24(),
-      25 => _nestedLevel25(),
-      26 => _nestedLevel26(),
-      27 => _nestedLevel27(),
-      28 => _nestedLevel28(),
-      29 => _nestedLevel29(),
-      30 => _nestedLevel30(),
-      _ => throw RangeError('No campaign builder for level $levelNumber'),
+      >= 2 && <= 10 => _earlyCampaignLevel(levelNumber),
+      _ => throw RangeError('Campaign only ships levels 1–10 (got $levelNumber)'),
     };
+  }
+
+  /// Progressive early campaign on fixed rectangular boards (no shape mask).
+  /// Keeps historical grid sizes for L2–10; only arrows/placement change.
+  static SolvableLevelResult _earlyCampaignLevel(int levelNumber) {
+    final (rows, cols) = switch (levelNumber) {
+      2 => (6, 6),
+      3 => (6, 6),
+      4 => (7, 7),
+      5 => (12, 12),
+      6 => (9, 9),
+      7 => (10, 10),
+      8 => (11, 11),
+      9 => (14, 14),
+      _ => (11, 11), // 10
+    };
+
+    final LevelDifficulty difficulty;
+    final double fillTarget;
+    final int minPath;
+    final int maxPath;
+    final int minArrows;
+    final int maxFree;
+    final int hearts;
+    final int hints;
+    final bool nest;
+
+    if (levelNumber <= 5) {
+      // Easy: short→mid paths, several free starts, light nesting.
+      difficulty = LevelDifficulty.easy;
+      fillTarget = switch (levelNumber) {
+        2 || 3 => 0.82,
+        4 => 0.86,
+        _ => 0.84, // L5 is a large 12×12 — keep lighter than Hard
+      };
+      minPath = 3;
+      maxPath = levelNumber <= 3 ? 7 : (levelNumber == 4 ? 8 : 9);
+      minArrows = switch (levelNumber) {
+        2 => 5,
+        3 => 6,
+        4 => 8,
+        _ => 16,
+      };
+      maxFree = levelNumber <= 3 ? 5 : 4;
+      hearts = 3;
+      hints = 2;
+      nest = levelNumber >= 5; // L2–4: soft; L5: light hardNest
+    } else if (levelNumber <= 9) {
+      // Medium: longer woven paths, 2–3 free starts, onion nesting.
+      difficulty =
+          levelNumber <= 7 ? LevelDifficulty.medium : LevelDifficulty.hard;
+      fillTarget = 0.90 + (levelNumber - 6) * 0.01;
+      minPath = 4;
+      maxPath = 10 + (levelNumber - 6);
+      minArrows = switch (levelNumber) {
+        6 => 12,
+        7 => 14,
+        8 => 16,
+        _ => 22,
+      };
+      maxFree = levelNumber <= 7 ? 3 : 2;
+      hearts = 3;
+      hints = 1;
+      nest = true;
+    } else {
+      // Hard entry (L10): deep nest on same 11×11 frame.
+      difficulty = LevelDifficulty.expert;
+      fillTarget = 0.94;
+      minPath = 4;
+      maxPath = 12;
+      minArrows = 18;
+      maxFree = 2;
+      hearts = 3;
+      hints = 1;
+      nest = true;
+    }
+
+    StateError? lastError;
+    for (var attempt = 0; attempt < 48; attempt++) {
+      try {
+        return generateNestedSolvableLevel(
+          levelNumber,
+          rows,
+          cols,
+          hearts,
+          hints,
+          difficulty: difficulty,
+          seed: levelNumber * 7919 + attempt * 131 + rows * 17,
+          fillTarget: (fillTarget - (attempt > 24 ? 0.04 : 0)).clamp(0.78, 0.96),
+          minPathLen: minPath,
+          maxPathLen: maxPath,
+          minArrows: (minArrows - (attempt ~/ 10) * 2).clamp(4, minArrows),
+          hardNest: nest,
+          mixPathSizes: nest,
+          maxFreeAtStart: maxFree + (attempt ~/ 8),
+        );
+      } on StateError catch (e) {
+        lastError = e;
+      }
+    }
+
+    // Soft last resort — same grid size; drop free-cap gate so level always builds.
+    try {
+      return generateNestedSolvableLevel(
+        levelNumber,
+        rows,
+        cols,
+        hearts,
+        hints,
+        difficulty: difficulty,
+        seed: levelNumber * 4243,
+        fillTarget: 0.78,
+        minPathLen: 2,
+        maxPathLen: maxPath,
+        minArrows: max(4, minArrows ~/ 2),
+        hardNest: nest,
+        mixPathSizes: true,
+        maxFreeAtStart: null,
+      );
+    } on StateError catch (e) {
+      throw lastError ?? e;
+    }
   }
 
   /// Fixed Level 1: three vertical arrows — UP, UP, DOWN (left → right).
@@ -1466,2030 +2060,6 @@ class LevelRepository {
     );
   }
 
-  /// Fixed Level 2: nested paths matching reference screenshot directions.
-  ///
-  /// 1) Outer L: left↑ then top→ tip RIGHT
-  /// 2) Outer right: vertical tip DOWN
-  /// 3) Inner top L: tip LEFT
-  /// 4) Inner left L: tip UP
-  /// 5) Center inverted-U tip DOWN
-  /// 6) Bottom short tip RIGHT
-  ///
-  /// Solve e.g. A → C → D, B → F → E
-  static SolvableLevelResult _nestedLevel2() {
-    ArrowModel pathArrow(
-      String id,
-      List<(int, int)> cells,
-      ArrowDirection direction,
-    ) {
-      final path = [for (final c in cells) GridCell(c.$1, c.$2)];
-      final tip = path.last;
-      return ArrowModel(
-        id: id,
-        row: tip.row,
-        col: tip.col,
-        direction: direction,
-        path: path,
-      );
-    }
-
-    final arrows = [
-      // Outer L: bottom-left → up left side → across top → tip RIGHT
-      pathArrow(
-        '2-A',
-        [
-          (5, 0),
-          (4, 0),
-          (3, 0),
-          (2, 0),
-          (1, 0),
-          (0, 0),
-          (0, 1),
-          (0, 2),
-          (0, 3),
-          (0, 4),
-          (0, 5),
-        ],
-        ArrowDirection.right,
-      ),
-      // Outer right edge: tip DOWN
-      pathArrow(
-        '2-B',
-        [(1, 5), (2, 5), (3, 5), (4, 5), (5, 5)],
-        ArrowDirection.down,
-      ),
-      // Inner top: vertical then left → tip LEFT
-      pathArrow(
-        '2-C',
-        [(2, 4), (1, 4), (1, 3), (1, 2), (1, 1)],
-        ArrowDirection.left,
-      ),
-      // Inner left: bottom hook then up → tip UP
-      pathArrow(
-        '2-D',
-        [(4, 2), (4, 1), (3, 1), (2, 1)],
-        ArrowDirection.up,
-      ),
-      // Center inverted U → tip DOWN
-      pathArrow(
-        '2-E',
-        [(3, 2), (2, 2), (2, 3), (3, 3)],
-        ArrowDirection.down,
-      ),
-      // Inner bottom short → tip RIGHT
-      pathArrow(
-        '2-F',
-        [(5, 2), (5, 3), (5, 4)],
-        ArrowDirection.right,
-      ),
-    ];
-
-    return SolvableLevelResult(
-      level: LevelModel(
-        levelNumber: 2,
-        gridRows: 6,
-        gridCols: 6,
-        arrows: arrows,
-        heartsAllowed: 3,
-        hintsAllowed: 2,
-        difficulty: LevelDifficulty.easy,
-      ),
-      // Placement order: solve order is reverse (A,C,D,B,F,E).
-      placementOrder: const ['2-E', '2-F', '2-B', '2-D', '2-C', '2-A'],
-    );
-  }
-
-  /// Fixed Level 3: denser L2-style nesting (more hooks / dependencies).
-  static SolvableLevelResult _nestedLevel3() {
-    ArrowModel pathArrow(
-      String id,
-      List<(int, int)> cells,
-      ArrowDirection direction,
-    ) {
-      final path = [for (final c in cells) GridCell(c.$1, c.$2)];
-      final tip = path.last;
-      return ArrowModel(
-        id: id,
-        row: tip.row,
-        col: tip.col,
-        direction: direction,
-        path: path,
-      );
-    }
-
-    // Clustered nest with more bends than Level 2 (same 6×6).
-    final arrows = [
-      // A: outer L tip RIGHT — free
-      pathArrow(
-        '3-A',
-        [
-          (5, 0),
-          (4, 0),
-          (3, 0),
-          (2, 0),
-          (1, 0),
-          (0, 0),
-          (0, 1),
-          (0, 2),
-          (0, 3),
-          (0, 4),
-          (0, 5),
-        ],
-        ArrowDirection.right,
-      ),
-      // B: outer right tip DOWN — free
-      pathArrow(
-        '3-B',
-        [(1, 5), (2, 5), (3, 5), (4, 5), (5, 5)],
-        ArrowDirection.down,
-      ),
-      // C: top-inner → down left-inner tip DOWN (blocked by E)
-      pathArrow(
-        '3-C',
-        [(1, 4), (1, 3), (1, 2), (1, 1), (2, 1), (3, 1), (4, 1)],
-        ArrowDirection.down,
-      ),
-      // D: mid-right bar tip RIGHT (blocked by B)
-      pathArrow(
-        '3-D',
-        [(4, 2), (4, 3), (4, 4)],
-        ArrowDirection.right,
-      ),
-      // E: bottom bar tip RIGHT (blocked by B)
-      pathArrow(
-        '3-E',
-        [(5, 1), (5, 2), (5, 3), (5, 4)],
-        ArrowDirection.right,
-      ),
-      // F: small center bar tip RIGHT (blocked by G/B)
-      pathArrow(
-        '3-F',
-        [(2, 2), (2, 3)],
-        ArrowDirection.right,
-      ),
-      // G: upper-mid vertical tip UP (blocked by C)
-      pathArrow(
-        '3-G',
-        [(3, 4), (2, 4)],
-        ArrowDirection.up,
-      ),
-      // H: center stub tip RIGHT (blocked by G/B) — axis-aligned with path
-      pathArrow(
-        '3-H',
-        [(3, 2), (3, 3)],
-        ArrowDirection.right,
-      ),
-    ];
-
-    return SolvableLevelResult(
-      level: LevelModel(
-        levelNumber: 3,
-        gridRows: 6,
-        gridCols: 6,
-        arrows: arrows,
-        heartsAllowed: 3,
-        hintsAllowed: 2,
-        difficulty: LevelDifficulty.easy,
-      ),
-      // Solve: A,B,E,C,G,D,F,H (placement = reverse).
-      placementOrder: const [
-        '3-H',
-        '3-F',
-        '3-D',
-        '3-G',
-        '3-C',
-        '3-E',
-        '3-B',
-        '3-A',
-      ],
-    );
-  }
-
-  /// Fixed Level 4: dense nested polylines (validated design).
-  static SolvableLevelResult _nestedLevel4() {
-    ArrowModel pathArrow(
-      String id,
-      List<(int, int)> cells,
-      ArrowDirection direction,
-    ) {
-      final path = [for (final c in cells) GridCell(c.$1, c.$2)];
-      final tip = path.last;
-      return ArrowModel(
-        id: id,
-        row: tip.row,
-        col: tip.col,
-        direction: direction,
-        path: path,
-      );
-    }
-
-    // 7×7 nest — 9 arrows.
-    final arrows = [
-      pathArrow(
-        '4-A',
-        [
-          (6, 0),
-          (5, 0),
-          (4, 0),
-          (3, 0),
-          (2, 0),
-          (1, 0),
-          (0, 0),
-          (0, 1),
-          (0, 2),
-          (0, 3),
-          (0, 4),
-          (0, 5),
-          (0, 6),
-        ],
-        ArrowDirection.right,
-      ),
-      pathArrow(
-        '4-B',
-        [(1, 6), (2, 6), (3, 6), (4, 6), (5, 6), (6, 6)],
-        ArrowDirection.down,
-      ),
-      pathArrow(
-        '4-C',
-        [(6, 5), (6, 4), (6, 3), (6, 2), (6, 1)],
-        ArrowDirection.left,
-      ),
-      pathArrow(
-        '4-D',
-        [(1, 5), (2, 5), (3, 5), (4, 5), (5, 5)],
-        ArrowDirection.down,
-      ),
-      pathArrow(
-        '4-E',
-        [(1, 1), (1, 2), (1, 3), (1, 4)],
-        ArrowDirection.right,
-      ),
-      // Stop short of 4-D tip — avoids head/tail clash on row 5.
-      pathArrow(
-        '4-F',
-        [(5, 1), (5, 2), (5, 3)],
-        ArrowDirection.right,
-      ),
-      // Stop short of former 4-F tip cell.
-      pathArrow(
-        '4-G',
-        [(2, 4), (3, 4)],
-        ArrowDirection.down,
-      ),
-      pathArrow(
-        '4-H',
-        [
-          (2, 1),
-          (3, 1),
-          (4, 1),
-          (4, 2),
-          (4, 3),
-          (3, 3),
-          (2, 3),
-        ],
-        ArrowDirection.up,
-      ),
-      // Tip RIGHT — not UP into H's tip row (was confusing head/tail align).
-      pathArrow('4-I', [(3, 2)], ArrowDirection.right),
-    ];
-
-    return SolvableLevelResult(
-      level: LevelModel(
-        levelNumber: 4,
-        gridRows: 7,
-        gridCols: 7,
-        arrows: arrows,
-        heartsAllowed: 3,
-        hintsAllowed: 2,
-        difficulty: LevelDifficulty.medium,
-      ),
-      // Solve: A,B,C,D,E,H,F,G,I (H waits for E; I waits for H)
-      placementOrder: const [
-        '4-I',
-        '4-G',
-        '4-F',
-        '4-H',
-        '4-E',
-        '4-D',
-        '4-C',
-        '4-B',
-        '4-A',
-      ],
-    );
-  }
-
-  /// Fixed Level 5: dense nested maze (validated design).
-  static SolvableLevelResult _nestedLevel5() {
-    ArrowModel pathArrow(
-      String id,
-      List<(int, int)> cells,
-      ArrowDirection direction,
-    ) {
-      final path = [for (final c in cells) GridCell(c.$1, c.$2)];
-      final tip = path.last;
-      return ArrowModel(
-        id: id,
-        row: tip.row,
-        col: tip.col,
-        direction: direction,
-        path: path,
-      );
-    }
-
-    // 12×12 nest with 1-cell empty margin — tips stop short so heads
-    // never stab the next ring (clean on mobile).
-    final arrows = [
-      pathArrow(
-        '5-A',
-        [for (var c = 1; c <= 10; c++) (1, c)],
-        ArrowDirection.right,
-      ),
-      pathArrow(
-        '5-B',
-        [for (var r = 2; r <= 10; r++) (r, 10)],
-        ArrowDirection.down,
-      ),
-      pathArrow(
-        '5-C',
-        [for (var c = 9; c >= 1; c--) (10, c)],
-        ArrowDirection.left,
-      ),
-      // Stop short of A — gaps at (2,1)/(3,1) so D tip and I tip stay clear.
-      pathArrow(
-        '5-D',
-        [for (var r = 9; r >= 4; r--) (r, 1)],
-        ArrowDirection.up,
-      ),
-      // Stop short of B — gap at (2,9).
-      pathArrow(
-        '5-E',
-        [(2, 2), (2, 3), (2, 4), (2, 5), (2, 6), (2, 7), (2, 8)],
-        ArrowDirection.right,
-      ),
-      // Stop short of D — gap at (9,2).
-      pathArrow(
-        '5-F',
-        [(9, 9), (9, 8), (9, 7), (9, 6), (9, 5), (9, 4), (9, 3)],
-        ArrowDirection.left,
-      ),
-      // Stop short of F — gap at (8,9).
-      pathArrow(
-        '5-G',
-        [(3, 9), (4, 9), (5, 9), (6, 9), (7, 9)],
-        ArrowDirection.down,
-      ),
-      // Stop short so tip UP has empty cells before E (no tip-into-shaft).
-      pathArrow(
-        '5-H',
-        [(8, 2), (7, 2), (6, 2)],
-        ArrowDirection.up,
-      ),
-      // Open C on the LEFT — path never climbs back under its own top bar,
-      // so tip cannot sit under / into its own head-tail corner.
-      pathArrow(
-        '5-I',
-        [
-          (3, 3),
-          (3, 4),
-          (3, 5),
-          (3, 6),
-          (3, 7),
-          (3, 8),
-          (4, 8),
-          (5, 8),
-          (6, 8),
-          (7, 8),
-          (8, 8),
-          (8, 7),
-          (8, 6),
-          (8, 5),
-          (8, 4),
-          (8, 3),
-        ],
-        ArrowDirection.left,
-      ),
-      // Small L — tip DOWN into empty center, away from own top bar.
-      pathArrow(
-        '5-J',
-        [
-          (4, 5),
-          (4, 6),
-          (5, 6),
-          (6, 6),
-        ],
-        ArrowDirection.down,
-      ),
-      // Fill open pocket left of the C — tip DOWN with gap before I.
-      pathArrow(
-        '5-K',
-        [(4, 3), (5, 3), (6, 3)],
-        ArrowDirection.down,
-      ),
-    ];
-
-    return SolvableLevelResult(
-      level: LevelModel(
-        levelNumber: 5,
-        gridRows: 12,
-        gridCols: 12,
-        arrows: arrows,
-        heartsAllowed: 3,
-        hintsAllowed: 1,
-        difficulty: LevelDifficulty.medium,
-      ),
-      placementOrder: const [
-        '5-J',
-        '5-K',
-        '5-I',
-        '5-H',
-        '5-G',
-        '5-F',
-        '5-E',
-        '5-D',
-        '5-C',
-        '5-B',
-        '5-A',
-      ],
-    );
-  }
-
-  /// Fixed Level 6: nested Hard maze (validated vertical-first design).
-  static SolvableLevelResult _nestedLevel6() {
-    ArrowModel pathArrow(
-      String id,
-      List<(int, int)> cells,
-      ArrowDirection direction,
-    ) {
-      final path = [for (final c in cells) GridCell(c.$1, c.$2)];
-      final tip = path.last;
-      return ArrowModel(
-        id: id,
-        row: tip.row,
-        col: tip.col,
-        direction: direction,
-        path: path,
-      );
-    }
-
-    // 9×9 nest — 12 arrows.
-    final arrows = [
-      pathArrow(
-        '6-A',
-        [for (var r = 8; r >= 0; r--) (r, 0)],
-        ArrowDirection.up,
-      ),
-      pathArrow(
-        '6-B',
-        [for (var c = 1; c <= 8; c++) (0, c)],
-        ArrowDirection.right,
-      ),
-      pathArrow(
-        '6-C',
-        [for (var r = 1; r <= 8; r++) (r, 8)],
-        ArrowDirection.down,
-      ),
-      pathArrow(
-        '6-D',
-        [for (var c = 7; c >= 1; c--) (8, c)],
-        ArrowDirection.left,
-      ),
-      // Stop one cell short of 6-D tip to avoid head/tail clash.
-      pathArrow(
-        '6-E',
-        [(1, 1), (2, 1), (3, 1), (4, 1), (5, 1), (6, 1)],
-        ArrowDirection.down,
-      ),
-      pathArrow(
-        '6-F',
-        [(1, 7), (2, 7), (3, 7), (4, 7), (5, 7), (6, 7), (7, 7)],
-        ArrowDirection.down,
-      ),
-      pathArrow(
-        '6-G',
-        [
-          (1, 2),
-          (1, 3),
-          (2, 3),
-          (2, 4),
-          (1, 4),
-          (1, 5),
-          (1, 6),
-        ],
-        ArrowDirection.right,
-      ),
-      // Tip stops short of 6-F tip (was tip-into-tip on row 7).
-      pathArrow(
-        '6-H',
-        [
-          (7, 2),
-          (7, 3),
-          (6, 3),
-          (6, 4),
-          (7, 4),
-          (7, 5),
-        ],
-        ArrowDirection.right,
-      ),
-      pathArrow(
-        '6-I',
-        [(2, 2), (3, 2), (4, 2), (5, 2), (6, 2)],
-        ArrowDirection.down,
-      ),
-      pathArrow(
-        '6-J',
-        [(2, 6), (3, 6), (4, 6), (5, 6)],
-        ArrowDirection.down,
-      ),
-      // Open U — last step UP matches tip UP (was tip UP after LEFT approach =
-      // broken L-shaped head). Tip into empty (2,5), not into own start.
-      pathArrow(
-        '6-K',
-        [
-          (4, 3),
-          (5, 3),
-          (5, 4),
-          (5, 5),
-          (4, 5),
-          (3, 5),
-        ],
-        ArrowDirection.up,
-      ),
-      // Tip DOWN — center of open U.
-      pathArrow('6-L', [(4, 4)], ArrowDirection.down),
-    ];
-
-    return SolvableLevelResult(
-      level: LevelModel(
-        levelNumber: 6,
-        gridRows: 9,
-        gridCols: 9,
-        arrows: arrows,
-        heartsAllowed: 3,
-        hintsAllowed: 2,
-        difficulty: LevelDifficulty.hard,
-      ),
-      placementOrder: const [
-        '6-L',
-        '6-K',
-        '6-J',
-        '6-I',
-        '6-H',
-        '6-G',
-        '6-F',
-        '6-E',
-        '6-D',
-        '6-C',
-        '6-B',
-        '6-A',
-      ],
-    );
-  }
-
-  /// Fixed Level 7: mid horizontal separator (validated design).
-  static SolvableLevelResult _nestedLevel7() {
-    ArrowModel pathArrow(
-      String id,
-      List<(int, int)> cells,
-      ArrowDirection direction,
-    ) {
-      final path = [for (final c in cells) GridCell(c.$1, c.$2)];
-      final tip = path.last;
-      return ArrowModel(
-        id: id,
-        row: tip.row,
-        col: tip.col,
-        direction: direction,
-        path: path,
-      );
-    }
-
-    // 10×10 nest — 14 arrows.
-    final arrows = [
-      pathArrow(
-        '7-A',
-        [for (var c = 0; c <= 9; c++) (0, c)],
-        ArrowDirection.right,
-      ),
-      pathArrow(
-        '7-B',
-        [(1, 9), (2, 9), (3, 9)],
-        ArrowDirection.down,
-      ),
-      pathArrow(
-        '7-C',
-        [for (var c = 8; c >= 0; c--) (4, c)],
-        ArrowDirection.left,
-      ),
-      pathArrow(
-        '7-D',
-        [for (var r = 5; r <= 9; r++) (r, 0)],
-        ArrowDirection.down,
-      ),
-      pathArrow(
-        '7-E',
-        [for (var c = 1; c <= 9; c++) (9, c)],
-        ArrowDirection.right,
-      ),
-      // Tip one cell above 7-E tip — avoids head/tail clash, still blocked by E.
-      pathArrow(
-        '7-F',
-        [(5, 9), (6, 9), (7, 9)],
-        ArrowDirection.down,
-      ),
-      // Tip one cell above 7-C tip — avoids head/tail clash.
-      pathArrow(
-        '7-G',
-        [(1, 0), (2, 0)],
-        ArrowDirection.down,
-      ),
-      pathArrow(
-        '7-H',
-        [
-          (1, 1),
-          (1, 2),
-          (2, 2),
-          (2, 3),
-          (1, 3),
-          (1, 4),
-          (1, 5),
-          (1, 6),
-          (1, 7),
-          (1, 8),
-        ],
-        ArrowDirection.right,
-      ),
-      pathArrow(
-        '7-I',
-        [
-          (3, 1),
-          (3, 2),
-          (3, 3),
-          (3, 4),
-          (3, 5),
-          (3, 6),
-          (3, 7),
-          (3, 8),
-          (2, 8),
-          (2, 7),
-          (2, 6),
-          (2, 5),
-          (2, 4),
-        ],
-        ArrowDirection.left,
-      ),
-      pathArrow(
-        '7-J',
-        [
-          (5, 1),
-          (5, 2),
-          (5, 3),
-          (5, 4),
-          (5, 5),
-          (5, 6),
-          (5, 7),
-          (5, 8),
-        ],
-        ArrowDirection.right,
-      ),
-      pathArrow(
-        '7-K',
-        [
-          (8, 1),
-          (8, 2),
-          (7, 2),
-          (7, 3),
-          (8, 3),
-          (8, 4),
-          (8, 5),
-          (8, 6),
-          (8, 7),
-          (8, 8),
-        ],
-        ArrowDirection.right,
-      ),
-      pathArrow('7-L', [(6, 1), (7, 1)], ArrowDirection.down),
-      // Single cell — gap above 7-K tip avoids head/tail clash.
-      pathArrow('7-M', [(6, 8)], ArrowDirection.down),
-      pathArrow(
-        '7-N',
-        [(6, 4), (6, 5), (7, 5), (7, 4)],
-        ArrowDirection.left,
-      ),
-    ];
-
-    return SolvableLevelResult(
-      level: LevelModel(
-        levelNumber: 7,
-        gridRows: 10,
-        gridCols: 10,
-        arrows: arrows,
-        heartsAllowed: 3,
-        hintsAllowed: 2,
-        difficulty: LevelDifficulty.hard,
-      ),
-      // K no longer waits on F body at (8,9); solve K before F is fine.
-      placementOrder: const [
-        '7-N',
-        '7-I',
-        '7-M',
-        '7-L',
-        '7-H',
-        '7-J',
-        '7-B',
-        '7-G',
-        '7-F',
-        '7-K',
-        '7-E',
-        '7-D',
-        '7-C',
-        '7-A',
-      ],
-    );
-  }
-
-  /// Fixed Level 8: mixed-direction Hard nest (opposing tips + zigzags).
-  static SolvableLevelResult _nestedLevel8() {
-    ArrowModel pathArrow(
-      String id,
-      List<(int, int)> cells,
-      ArrowDirection direction,
-    ) {
-      final path = [for (final c in cells) GridCell(c.$1, c.$2)];
-      final tip = path.last;
-      return ArrowModel(
-        id: id,
-        row: tip.row,
-        col: tip.col,
-        direction: direction,
-        path: path,
-      );
-    }
-
-    // 11×11 — 12 arrows. Not a pure clockwise spiral: left/right
-    // columns oppose the outer frame, mid rings zigzag.
-    final arrows = [
-      pathArrow(
-        '8-A',
-        [for (var r = 10; r >= 0; r--) (r, 0)],
-        ArrowDirection.up,
-      ),
-      pathArrow(
-        '8-B',
-        [for (var c = 1; c <= 10; c++) (0, c)],
-        ArrowDirection.right,
-      ),
-      pathArrow(
-        '8-C',
-        [for (var r = 1; r <= 10; r++) (r, 10)],
-        ArrowDirection.down,
-      ),
-      pathArrow(
-        '8-D',
-        [for (var c = 9; c >= 1; c--) (10, c)],
-        ArrowDirection.left,
-      ),
-      // Tip DOWN — opposes outer left UP (harder read).
-      pathArrow(
-        '8-E',
-        [(1, 1), (2, 1), (3, 1), (4, 1), (5, 1), (6, 1), (7, 1), (8, 1)],
-        ArrowDirection.down,
-      ),
-      // Tip UP — opposes outer right DOWN.
-      pathArrow(
-        '8-F',
-        [(9, 9), (8, 9), (7, 9), (6, 9), (5, 9), (4, 9), (3, 9), (2, 9)],
-        ArrowDirection.up,
-      ),
-      // Top serpentine tip RIGHT.
-      pathArrow(
-        '8-G',
-        [
-          (1, 2),
-          (1, 3),
-          (2, 3),
-          (2, 4),
-          (1, 4),
-          (1, 5),
-          (1, 6),
-          (1, 7),
-          (1, 8),
-        ],
-        ArrowDirection.right,
-      ),
-      // Bottom serpentine tip RIGHT — stop short of 8-F tip cell.
-      pathArrow(
-        '8-H',
-        [
-          (9, 2),
-          (9, 3),
-          (8, 3),
-          (8, 4),
-          (9, 4),
-          (9, 5),
-          (9, 6),
-          (9, 7),
-        ],
-        ArrowDirection.right,
-      ),
-      pathArrow(
-        '8-I',
-        [(2, 2), (3, 2), (4, 2), (5, 2), (6, 2), (7, 2), (8, 2)],
-        ArrowDirection.down,
-      ),
-      pathArrow(
-        '8-J',
-        [(2, 8), (3, 8), (4, 8), (5, 8), (6, 8), (7, 8)],
-        ArrowDirection.down,
-      ),
-      // Open U — last step UP matches tip UP (clear head).
-      pathArrow(
-        '8-K',
-        [
-          (3, 3),
-          (4, 3),
-          (5, 3),
-          (5, 4),
-          (5, 5),
-          (5, 6),
-          (5, 7),
-          (4, 7),
-          (3, 7),
-        ],
-        ArrowDirection.up,
-      ),
-      // Center bar tip LEFT into empty.
-      pathArrow(
-        '8-L',
-        [(3, 4), (3, 5), (3, 6), (4, 6), (4, 5), (4, 4)],
-        ArrowDirection.left,
-      ),
-      // Upper mid gap (below G, above K) — tip RIGHT.
-      pathArrow(
-        '8-M',
-        [(2, 5), (2, 6)],
-        ArrowDirection.right,
-      ),
-      // Lower mid gap (below K, above H) — tip LEFT (opposes M).
-      pathArrow(
-        '8-N',
-        [(6, 7), (6, 6), (6, 5), (6, 4)],
-        ArrowDirection.left,
-      ),
-    ];
-
-    return SolvableLevelResult(
-      level: LevelModel(
-        levelNumber: 8,
-        gridRows: 11,
-        gridCols: 11,
-        arrows: arrows,
-        heartsAllowed: 3,
-        hintsAllowed: 2,
-        difficulty: LevelDifficulty.hard,
-      ),
-      placementOrder: const [
-        '8-L',
-        '8-M',
-        '8-N',
-        '8-K',
-        '8-J',
-        '8-I',
-        '8-H',
-        '8-G',
-        '8-F',
-        '8-E',
-        '8-D',
-        '8-C',
-        '8-B',
-        '8-A',
-      ],
-    );
-  }
-
-  /// Fixed Level 9: dense bent Hard nest — 20 complex arrows (L11 reference).
-  static SolvableLevelResult _nestedLevel9() {
-    ArrowModel pathArrow(
-      String id,
-      List<(int, int)> cells,
-      ArrowDirection direction,
-    ) {
-      final path = [for (final c in cells) GridCell(c.$1, c.$2)];
-      final tip = path.last;
-      return ArrowModel(
-        id: id,
-        row: tip.row,
-        col: tip.col,
-        direction: direction,
-        path: path,
-      );
-    }
-
-    // 14×14 — 20 bent arrows (L / U / S / jogs — not plain straights).
-    final arrows = [
-      // Outer L: top → right tip DOWN.
-      pathArrow('9-A', [
-        for (var c = 0; c <= 13; c++) (0, c),
-        for (var r = 1; r <= 13; r++) (r, 13),
-      ], ArrowDirection.down),
-      // Outer L: bottom → left tip UP.
-      pathArrow('9-B', [
-        for (var c = 12; c >= 0; c--) (13, c),
-        for (var r = 12; r >= 1; r--) (r, 0),
-      ], ArrowDirection.up),
-      // Right spine tip DOWN.
-      pathArrow('9-C', [
-        (1, 12), (2, 12), (3, 12), (4, 12), (5, 12), (6, 12), (7, 12), (8, 12),
-        (9, 12), (10, 12), (11, 12),
-      ], ArrowDirection.down),
-      // Bottom tip RIGHT (stay on row 12 — clear of 9-H jog).
-      pathArrow('9-D', [
-        (12, 1), (12, 2), (12, 3), (12, 4), (12, 5), (12, 6), (12, 7), (12, 8),
-        (12, 9), (12, 10), (12, 11),
-      ], ArrowDirection.right),
-      // Left spine tip DOWN.
-      pathArrow('9-E', [
-        (1, 1), (2, 1), (3, 1), (4, 1), (5, 1), (6, 1), (7, 1), (8, 1), (9, 1),
-        (10, 1), (11, 1),
-      ], ArrowDirection.down),
-      // Top serpentine tip LEFT.
-      pathArrow('9-F', [
-        (1, 11), (1, 10), (2, 10), (2, 9), (1, 9), (1, 8), (1, 7), (1, 6),
-        (1, 5), (1, 4), (1, 3), (1, 2),
-      ], ArrowDirection.left),
-      // Right-inner tip UP.
-      pathArrow('9-G', [
-        (11, 11), (10, 11), (9, 11), (8, 11), (7, 11), (6, 11), (5, 11),
-        (4, 11), (3, 11), (2, 11),
-      ], ArrowDirection.up),
-      // Bottom serpentine tip RIGHT.
-      pathArrow('9-H', [
-        (11, 2), (11, 3), (10, 3), (10, 4), (11, 4), (11, 5), (11, 6), (11, 7),
-        (11, 8), (11, 9), (11, 10),
-      ], ArrowDirection.right),
-      // Left-inner tip DOWN.
-      pathArrow('9-I', [
-        (2, 2), (3, 2), (4, 2), (5, 2), (6, 2), (7, 2), (8, 2), (9, 2), (10, 2),
-      ], ArrowDirection.down),
-      // Upper mid S tip RIGHT.
-      pathArrow('9-J', [
-        (2, 3), (2, 4), (3, 4), (3, 5), (2, 5), (2, 6), (2, 7), (2, 8),
-      ], ArrowDirection.right),
-      // Mid-left tip DOWN.
-      pathArrow('9-K', [
-        (3, 3), (4, 3), (5, 3), (6, 3), (7, 3), (8, 3), (9, 3),
-      ], ArrowDirection.down),
-      // Mid-right L tip DOWN.
-      pathArrow('9-L', [
-        (3, 8), (3, 9), (3, 10), (4, 10), (5, 10), (6, 10), (7, 10), (8, 10),
-        (9, 10),
-      ], ArrowDirection.down),
-      // Lower mid S tip LEFT.
-      pathArrow('9-M', [
-        (10, 10), (10, 9), (9, 9), (9, 8), (10, 8), (10, 7), (10, 6), (10, 5),
-      ], ArrowDirection.left),
-      // Mid hook tip RIGHT (above the three).
-      pathArrow('9-N', [
-        (3, 6), (3, 7),
-      ], ArrowDirection.right),
-      // 1) Outer C tip LEFT — top→right, right→down, bottom→left (ref).
-      pathArrow('9-O', [
-        (4, 4), (4, 5), (4, 6), (4, 7), (4, 8),
-        (5, 8), (6, 8), (7, 8),
-        (7, 7), (7, 6), (7, 5), (7, 4),
-      ], ArrowDirection.left),
-      // 2) Inner U tip UP — down, right, up (ref).
-      pathArrow('9-P', [
-        (5, 5), (6, 5), (6, 6), (6, 7), (5, 7),
-      ], ArrowDirection.up),
-      // Mid-right tip DOWN.
-      pathArrow('9-Q', [
-        (4, 9), (5, 9), (6, 9), (7, 9), (8, 9),
-      ], ArrowDirection.down),
-      // Small filler tip DOWN (outside the three).
-      pathArrow('9-R', [
-        (8, 8),
-      ], ArrowDirection.down),
-      // 3) Bottom bar tip RIGHT (ref).
-      pathArrow('9-S', [
-        (8, 5), (8, 6), (8, 7),
-      ], ArrowDirection.right),
-      // Lower mid tip RIGHT.
-      pathArrow('9-T', [
-        (9, 4), (9, 5), (9, 6), (9, 7),
-      ], ArrowDirection.right),
-    ];
-
-    return SolvableLevelResult(
-      level: LevelModel(
-        levelNumber: 9,
-        gridRows: 14,
-        gridCols: 14,
-        arrows: arrows,
-        heartsAllowed: 3,
-        hintsAllowed: 2,
-        difficulty: LevelDifficulty.hard,
-      ),
-      placementOrder: const [
-        '9-T',
-        '9-S',
-        '9-R',
-        '9-Q',
-        '9-P',
-        '9-O',
-        '9-N',
-        '9-L',
-        '9-M',
-        '9-K',
-        '9-J',
-        '9-I',
-        '9-H',
-        '9-G',
-        '9-F',
-        '9-E',
-        '9-D',
-        '9-C',
-        '9-B',
-        '9-A',
-      ],
-    );
-  }
-
-  /// Fixed Level 10: two-zone mid bar on 11×11 (validated design).
-  static SolvableLevelResult _nestedLevel10() {
-    ArrowModel pathArrow(
-      String id,
-      List<(int, int)> cells,
-      ArrowDirection direction,
-    ) {
-      final path = [for (final c in cells) GridCell(c.$1, c.$2)];
-      final tip = path.last;
-      return ArrowModel(
-        id: id,
-        row: tip.row,
-        col: tip.col,
-        direction: direction,
-        path: path,
-      );
-    }
-
-    // 11×11 nest — 16 arrows.
-    final arrows = [
-      pathArrow(
-        '10-A',
-        [for (var c = 0; c <= 10; c++) (0, c)],
-        ArrowDirection.right,
-      ),
-      pathArrow(
-        '10-B',
-        [(1, 10), (2, 10), (3, 10), (4, 10)],
-        ArrowDirection.down,
-      ),
-      pathArrow(
-        '10-C',
-        [for (var c = 9; c >= 0; c--) (5, c)],
-        ArrowDirection.left,
-      ),
-      pathArrow(
-        '10-D',
-        [for (var r = 6; r <= 10; r++) (r, 0)],
-        ArrowDirection.down,
-      ),
-      pathArrow(
-        '10-E',
-        [for (var c = 1; c <= 10; c++) (10, c)],
-        ArrowDirection.right,
-      ),
-      // Tip one cell above 10-E tip — avoids head/tail clash.
-      pathArrow(
-        '10-F',
-        [(6, 10), (7, 10), (8, 10)],
-        ArrowDirection.down,
-      ),
-      // Tip one cell above 10-C tip — avoids head/tail clash.
-      pathArrow(
-        '10-G',
-        [(1, 0), (2, 0), (3, 0)],
-        ArrowDirection.down,
-      ),
-      pathArrow(
-        '10-H',
-        [
-          (1, 1),
-          (1, 2),
-          (2, 2),
-          (2, 3),
-          (1, 3),
-          (1, 4),
-          (1, 5),
-          (1, 6),
-          (1, 7),
-          (1, 8),
-          (1, 9),
-        ],
-        ArrowDirection.right,
-      ),
-      pathArrow(
-        '10-I',
-        [
-          (4, 1),
-          (4, 2),
-          (4, 3),
-          (4, 4),
-          (4, 5),
-          (4, 6),
-          (4, 7),
-          (4, 8),
-          (4, 9),
-          (3, 9),
-          (3, 8),
-          (3, 7),
-          (3, 6),
-          (3, 5),
-          (3, 4),
-          (3, 3),
-        ],
-        ArrowDirection.left,
-      ),
-      pathArrow(
-        '10-J',
-        [(2, 4), (2, 5), (2, 6), (2, 7), (2, 8), (2, 9)],
-        ArrowDirection.right,
-      ),
-      pathArrow(
-        '10-K',
-        [
-          (6, 1),
-          (6, 2),
-          (6, 3),
-          (6, 4),
-          (6, 5),
-          (6, 6),
-          (6, 7),
-          (6, 8),
-          (6, 9),
-        ],
-        ArrowDirection.right,
-      ),
-      pathArrow(
-        '10-L',
-        [
-          (9, 1),
-          (9, 2),
-          (8, 2),
-          (8, 3),
-          (9, 3),
-          (9, 4),
-          (9, 5),
-          (9, 6),
-          (9, 7),
-          (9, 8),
-          (9, 9),
-        ],
-        ArrowDirection.right,
-      ),
-      pathArrow('10-M', [(7, 1), (8, 1)], ArrowDirection.down),
-      // Single cell — gap above 10-L tip avoids head/tail clash.
-      pathArrow('10-N', [(7, 9)], ArrowDirection.down),
-      // Stop short of 10-N tip — avoids head/tail clash on row 7.
-      pathArrow(
-        '10-O',
-        [
-          (7, 3),
-          (7, 4),
-          (8, 4),
-          (8, 5),
-          (7, 5),
-          (7, 6),
-          (7, 7),
-        ],
-        ArrowDirection.right,
-      ),
-      pathArrow('10-P', [(8, 6), (8, 7)], ArrowDirection.right),
-    ];
-
-    return SolvableLevelResult(
-      level: LevelModel(
-        levelNumber: 10,
-        gridRows: 11,
-        gridCols: 11,
-        arrows: arrows,
-        heartsAllowed: 3,
-        hintsAllowed: 1,
-        difficulty: LevelDifficulty.expert,
-      ),
-      placementOrder: const [
-        '10-P',
-        '10-O',
-        '10-N',
-        '10-M',
-        '10-J',
-        '10-H',
-        '10-L',
-        '10-K',
-        '10-I',
-        '10-B',
-        '10-G',
-        '10-F',
-        '10-E',
-        '10-D',
-        '10-C',
-        '10-A',
-      ],
-    );
-  }
-
-  /// Fixed Level 11: dense interlocking nest (reference SS style).
-  static SolvableLevelResult _nestedLevel11() {
-    ArrowModel pathArrow(
-      String id,
-      List<(int, int)> cells,
-      ArrowDirection direction,
-    ) {
-      final path = [for (final c in cells) GridCell(c.$1, c.$2)];
-      final tip = path.last;
-      return ArrowModel(
-        id: id,
-        row: tip.row,
-        col: tip.col,
-        direction: direction,
-        path: path,
-      );
-    }
-
-    final arrows = [
-      pathArrow('11-A', [
-        for (var c = 0; c <= 11; c++) (0, c),
-        for (var r = 1; r <= 11; r++) (r, 11),
-      ], ArrowDirection.down),
-      pathArrow('11-B', [
-        for (var c = 10; c >= 0; c--) (11, c),
-        for (var r = 10; r >= 1; r--) (r, 0),
-      ], ArrowDirection.up),
-      pathArrow('11-C', [for (var r = 1; r <= 9; r++) (r, 10)], ArrowDirection.down),
-      pathArrow('11-D', [for (var c = 1; c <= 9; c++) (10, c)], ArrowDirection.right),
-      pathArrow('11-E', [for (var r = 1; r <= 9; r++) (r, 1)], ArrowDirection.down),
-      pathArrow('11-F', [
-        (1, 9), (1, 8), (2, 8), (2, 7), (1, 7), (1, 6), (1, 5), (1, 4), (1, 3),
-        (1, 2),
-      ], ArrowDirection.left),
-      pathArrow('11-G', [
-        (9, 9), (8, 9), (7, 9), (6, 9), (5, 9), (4, 9), (3, 9), (2, 9),
-      ], ArrowDirection.up),
-      pathArrow('11-H', [
-        (9, 2), (9, 3), (8, 3), (8, 4), (9, 4), (9, 5), (9, 6), (9, 7), (9, 8),
-      ], ArrowDirection.right),
-      pathArrow('11-I', [
-        (2, 2), (3, 2), (4, 2), (5, 2), (6, 2), (7, 2), (8, 2),
-      ], ArrowDirection.down),
-      pathArrow('11-J', [
-        (2, 3), (2, 4), (3, 4), (3, 5), (2, 5), (2, 6),
-      ], ArrowDirection.right),
-      pathArrow('11-K', [
-        (3, 3), (4, 3), (5, 3), (6, 3), (7, 3),
-      ], ArrowDirection.down),
-      // Stop short of 11-H tip to avoid head/tail clash.
-      pathArrow('11-L', [
-        (3, 6), (3, 7), (3, 8), (4, 8), (5, 8), (6, 8), (7, 8),
-      ], ArrowDirection.down),
-      // Outer C: last segment left → tip LEFT (ref).
-      pathArrow('11-M', [
-        (5, 4), (6, 4), (7, 4), (7, 5), (7, 6), (7, 7), (6, 7), (5, 7),
-        (4, 7), (4, 6), (4, 5), (4, 4),
-      ], ArrowDirection.left),
-      // Inner U: last segment up → tip UP (ref).
-      pathArrow('11-N', [
-        (5, 5), (6, 5), (6, 6), (5, 6),
-      ], ArrowDirection.up),
-      // Bottom bar: last segment right → tip RIGHT (ref).
-      pathArrow('11-O', [
-        (8, 5), (8, 6), (8, 7),
-      ], ArrowDirection.right),
-    ];
-
-    return SolvableLevelResult(
-      level: LevelModel(
-        levelNumber: 11,
-        gridRows: 12,
-        gridCols: 12,
-        arrows: arrows,
-        heartsAllowed: 3,
-        hintsAllowed: 1,
-        difficulty: LevelDifficulty.expert,
-      ),
-      placementOrder: const [
-        '11-N', '11-O', '11-M', '11-L', '11-K', '11-I', '11-J', '11-H', '11-G',
-        '11-F', '11-E', '11-C', '11-D', '11-B', '11-A',
-      ],
-    );
-  }
-
-  /// Level 12 — Expert nested maze (full board, L11-style outer frame + woven center).
-  static SolvableLevelResult _nestedLevel12() {
-    ArrowModel pathArrow(
-      String id,
-      List<(int, int)> cells,
-      ArrowDirection direction,
-    ) {
-      final path = [for (final c in cells) GridCell(c.$1, c.$2)];
-      final tip = path.last;
-      return ArrowModel(
-        id: id,
-        row: tip.row,
-        col: tip.col,
-        direction: direction,
-        path: path,
-      );
-    }
-
-    final arrows = [
-      // Outer frame (split L for readable Expert density)
-      pathArrow('12-A', [for (var c = 0; c <= 14; c++) (0, c)], ArrowDirection.right),
-      pathArrow('12-B', [for (var r = 1; r <= 15; r++) (r, 14)], ArrowDirection.down),
-      pathArrow('12-C', [for (var c = 13; c >= 0; c--) (15, c)], ArrowDirection.left),
-      pathArrow('12-D', [for (var r = 14; r >= 1; r--) (r, 0)], ArrowDirection.up),
-      // Inner rails
-      pathArrow('12-E', [for (var r = 1; r <= 7; r++) (r, 13)], ArrowDirection.down),
-      pathArrow('12-F', [for (var r = 8; r <= 13; r++) (r, 13)], ArrowDirection.down),
-      pathArrow('12-G', [for (var c = 1; c <= 12; c++) (14, c)], ArrowDirection.right),
-      pathArrow('12-H', [(14, 13)], ArrowDirection.right),
-      pathArrow('12-I', [for (var r = 1; r <= 7; r++) (r, 1)], ArrowDirection.down),
-      pathArrow('12-J', [for (var r = 8; r <= 13; r++) (r, 1)], ArrowDirection.down),
-      // Top serpentine
-      pathArrow('12-K', [
-        (1, 12), (1, 11), (2, 11), (2, 10), (1, 10), (1, 9), (1, 8), (1, 7),
-      ], ArrowDirection.left),
-      pathArrow('12-L', [(1, 6), (1, 5), (1, 4), (1, 3), (1, 2)], ArrowDirection.left),
-      // Right / bottom / left serpentine
-      pathArrow('12-M', [for (var r = 13; r >= 8; r--) (r, 12)], ArrowDirection.up),
-      pathArrow('12-N', [for (var r = 7; r >= 2; r--) (r, 12)], ArrowDirection.up),
-      pathArrow('12-O', [
-        (13, 2), (13, 3), (12, 3), (12, 4), (13, 4), (13, 5), (13, 6),
-      ], ArrowDirection.right),
-      pathArrow('12-P', [(13, 7), (13, 8), (13, 9), (13, 10), (13, 11)], ArrowDirection.right),
-      pathArrow('12-Q', [for (var r = 2; r <= 7; r++) (r, 2)], ArrowDirection.down),
-      pathArrow('12-R', [for (var r = 8; r <= 12; r++) (r, 2)], ArrowDirection.down),
-      // Upper mid weave
-      pathArrow('12-S', [
-        (2, 3), (2, 4), (3, 4), (3, 5), (2, 5), (2, 6),
-      ], ArrowDirection.right),
-      pathArrow('12-T', [(2, 7), (2, 8), (2, 9)], ArrowDirection.right),
-      pathArrow('12-U', [(3, 3), (4, 3), (5, 3), (6, 3), (7, 3)], ArrowDirection.down),
-      pathArrow('12-V', [(8, 3), (9, 3), (10, 3), (11, 3)], ArrowDirection.down),
-      pathArrow('12-W', [
-        (3, 9), (3, 10), (3, 11), (4, 11), (5, 11), (6, 11),
-      ], ArrowDirection.down),
-      pathArrow('12-X', [(7, 11), (8, 11), (9, 11), (10, 11), (11, 11)], ArrowDirection.down),
-      pathArrow('12-Y', [
-        (12, 11), (12, 10), (11, 10), (11, 9), (12, 9), (12, 8),
-      ], ArrowDirection.left),
-      pathArrow('12-Z', [(12, 7), (12, 6), (12, 5)], ArrowDirection.left),
-      pathArrow('12-AA', [
-        (3, 6), (3, 7), (3, 8), (4, 8), (5, 8),
-      ], ArrowDirection.down),
-      pathArrow('12-AB', [(8, 8), (9, 8), (10, 8)], ArrowDirection.down),
-      pathArrow('12-AN', [(6, 8), (7, 8)], ArrowDirection.down),
-      // Nested center C / U / bar
-      pathArrow('12-AC', [
-        (5, 4), (6, 4), (7, 4), (8, 4), (9, 4), (10, 4),
-      ], ArrowDirection.down),
-      pathArrow('12-AD', [(10, 5), (10, 6), (10, 7)], ArrowDirection.right),
-      pathArrow('12-AE', [
-        (9, 7), (8, 7), (7, 7), (6, 7), (5, 7), (5, 6), (5, 5),
-      ], ArrowDirection.left),
-      pathArrow('12-AF', [
-        (6, 5), (7, 5), (8, 5), (9, 5), (9, 6), (8, 6), (7, 6), (6, 6),
-      ], ArrowDirection.up),
-      pathArrow('12-AG', [(4, 4), (4, 5), (4, 6), (4, 7)], ArrowDirection.right),
-      pathArrow('12-AH', [(4, 9), (4, 10), (5, 10), (6, 10)], ArrowDirection.down),
-      pathArrow('12-AI', [(7, 10), (8, 10), (9, 10)], ArrowDirection.down),
-      pathArrow('12-AJ', [(11, 4), (11, 5), (11, 6), (11, 7), (11, 8)], ArrowDirection.right),
-      pathArrow('12-AK', [(5, 9), (6, 9), (7, 9)], ArrowDirection.down),
-      pathArrow('12-AL', [(8, 9), (9, 9), (10, 9)], ArrowDirection.down),
-      pathArrow('12-AM', [(10, 10)], ArrowDirection.down),
-    ];
-
-    return SolvableLevelResult(
-      level: LevelModel(
-        levelNumber: 12,
-        gridRows: 16,
-        gridCols: 15,
-        arrows: arrows,
-        heartsAllowed: 3,
-        hintsAllowed: 1,
-        difficulty: LevelDifficulty.expert,
-      ),
-      placementOrder: const [
-        '12-AF', '12-AG', '12-AH', '12-AI', '12-AD', '12-AM', '12-AK', '12-AL',
-        '12-AE', '12-AC', '12-AA', '12-AN', '12-AB', '12-AJ', '12-W', '12-X',
-        '12-Y', '12-Z', '12-U', '12-V', '12-S', '12-T', '12-Q', '12-R', '12-O',
-        '12-P', '12-M', '12-N', '12-K', '12-L', '12-I', '12-J', '12-G', '12-E',
-        '12-F', '12-H', '12-D', '12-C', '12-B', '12-A',
-      ],
-    );
-  }
-
-  /// Level 13 — Expert nest: L12 core + outermost ring on 18×17.
-  static SolvableLevelResult _nestedLevel13() {
-    ArrowModel pathArrow(
-      String id,
-      List<(int, int)> cells,
-      ArrowDirection direction,
-    ) {
-      final path = [for (final c in cells) GridCell(c.$1, c.$2)];
-      final tip = path.last;
-      return ArrowModel(
-        id: id,
-        row: tip.row,
-        col: tip.col,
-        direction: direction,
-        path: path,
-      );
-    }
-
-    final arrows = [
-      // Outermost ring
-      pathArrow('13-OUTA', [for (var c = 0; c <= 16; c++) (0, c)], ArrowDirection.right),
-      pathArrow('13-OUTB', [for (var r = 1; r <= 17; r++) (r, 16)], ArrowDirection.down),
-      pathArrow('13-OUTC', [for (var c = 15; c >= 0; c--) (17, c)], ArrowDirection.left),
-      pathArrow('13-OUTD', [for (var r = 16; r >= 1; r--) (r, 0)], ArrowDirection.up),
-
-      // Second-layer outer frame
-      pathArrow('13-A', [for (var c = 1; c <= 15; c++) (1, c)], ArrowDirection.right),
-      pathArrow('13-B', [for (var r = 2; r <= 16; r++) (r, 15)], ArrowDirection.down),
-      pathArrow('13-C', [for (var c = 14; c >= 1; c--) (16, c)], ArrowDirection.left),
-      pathArrow('13-D', [for (var r = 15; r >= 2; r--) (r, 1)], ArrowDirection.up),
-
-      // Inner rails
-      pathArrow('13-E', [for (var r = 2; r <= 8; r++) (r, 14)], ArrowDirection.down),
-      pathArrow('13-F', [for (var r = 9; r <= 14; r++) (r, 14)], ArrowDirection.down),
-      pathArrow('13-G', [for (var c = 2; c <= 13; c++) (15, c)], ArrowDirection.right),
-      pathArrow('13-H', [(15, 14)], ArrowDirection.right),
-      pathArrow('13-I', [for (var r = 2; r <= 8; r++) (r, 2)], ArrowDirection.down),
-      pathArrow('13-J', [for (var r = 9; r <= 14; r++) (r, 2)], ArrowDirection.down),
-
-      // Top serpentine
-      pathArrow('13-K', [
-        (2, 13), (2, 12), (3, 12), (3, 11), (2, 11), (2, 10), (2, 9), (2, 8),
-      ], ArrowDirection.left),
-      pathArrow('13-L', [(2, 7), (2, 6), (2, 5), (2, 4), (2, 3)], ArrowDirection.left),
-
-      // Right / bottom / left serpentine
-      pathArrow('13-M', [for (var r = 14; r >= 9; r--) (r, 13)], ArrowDirection.up),
-      pathArrow('13-N', [for (var r = 8; r >= 3; r--) (r, 13)], ArrowDirection.up),
-      pathArrow('13-O', [
-        (14, 3), (14, 4), (13, 4), (13, 5), (14, 5), (14, 6), (14, 7),
-      ], ArrowDirection.right),
-      pathArrow('13-P', [(14, 8), (14, 9), (14, 10), (14, 11), (14, 12)], ArrowDirection.right),
-      pathArrow('13-Q', [for (var r = 3; r <= 8; r++) (r, 3)], ArrowDirection.down),
-      pathArrow('13-R', [for (var r = 9; r <= 13; r++) (r, 3)], ArrowDirection.down),
-
-      // Upper mid weave
-      pathArrow('13-S', [
-        (3, 4), (3, 5), (4, 5), (4, 6), (3, 6), (3, 7),
-      ], ArrowDirection.right),
-      pathArrow('13-T', [(3, 8), (3, 9), (3, 10)], ArrowDirection.right),
-      pathArrow('13-U', [(4, 4), (5, 4), (6, 4), (7, 4), (8, 4)], ArrowDirection.down),
-      pathArrow('13-V', [(9, 4), (10, 4), (11, 4), (12, 4)], ArrowDirection.down),
-      pathArrow('13-W', [
-        (4, 10), (4, 11), (4, 12), (5, 12), (6, 12), (7, 12),
-      ], ArrowDirection.down),
-      pathArrow('13-X', [(8, 12), (9, 12), (10, 12), (11, 12), (12, 12)], ArrowDirection.down),
-      pathArrow('13-Y', [
-        (13, 12), (13, 11), (12, 11), (12, 10), (13, 10), (13, 9),
-      ], ArrowDirection.left),
-      pathArrow('13-Z', [(13, 8), (13, 7), (13, 6)], ArrowDirection.left),
-      pathArrow('13-AA', [
-        (4, 7), (4, 8), (4, 9), (5, 9), (6, 9),
-      ], ArrowDirection.down),
-      pathArrow('13-AB', [(9, 9), (10, 9), (11, 9)], ArrowDirection.down),
-      pathArrow('13-AN', [(7, 9), (8, 9)], ArrowDirection.down),
-
-      // Nested center C / U / bar
-      pathArrow('13-AC', [
-        (6, 5), (7, 5), (8, 5), (9, 5), (10, 5), (11, 5),
-      ], ArrowDirection.down),
-      pathArrow('13-AD', [(11, 6), (11, 7), (11, 8)], ArrowDirection.right),
-      pathArrow('13-AE', [
-        (10, 8), (9, 8), (8, 8), (7, 8), (6, 8), (6, 7), (6, 6),
-      ], ArrowDirection.left),
-      pathArrow('13-AF', [
-        (7, 6), (8, 6), (9, 6), (10, 6), (10, 7), (9, 7), (8, 7), (7, 7),
-      ], ArrowDirection.up),
-      pathArrow('13-AG', [(5, 5), (5, 6), (5, 7), (5, 8)], ArrowDirection.right),
-      pathArrow('13-AH', [(5, 10), (5, 11), (6, 11), (7, 11)], ArrowDirection.down),
-      pathArrow('13-AI', [(8, 11), (9, 11), (10, 11)], ArrowDirection.down),
-      pathArrow('13-AJ', [(12, 5), (12, 6), (12, 7), (12, 8), (12, 9)], ArrowDirection.right),
-      pathArrow('13-AK', [(6, 10), (7, 10), (8, 10)], ArrowDirection.down),
-      pathArrow('13-AL', [(9, 10), (10, 10), (11, 10)], ArrowDirection.down),
-      pathArrow('13-AM', [(11, 11)], ArrowDirection.down),
-    ];
-
-    return SolvableLevelResult(
-      level: LevelModel(
-        levelNumber: 13,
-        gridRows: 18,
-        gridCols: 17,
-        arrows: arrows,
-        heartsAllowed: 3,
-        hintsAllowed: 1,
-        difficulty: LevelDifficulty.expert,
-      ),
-      placementOrder: const [
-        '13-AF', '13-AG', '13-AH', '13-AI', '13-AD', '13-AM', '13-AK', '13-AL',
-        '13-AE', '13-AC', '13-AA', '13-AN', '13-AB', '13-AJ', '13-W', '13-X',
-        '13-Y', '13-Z', '13-U', '13-V', '13-S', '13-T', '13-Q', '13-R', '13-O',
-        '13-P', '13-M', '13-N', '13-K', '13-L', '13-I', '13-J', '13-G', '13-E',
-        '13-F', '13-H', '13-D', '13-C', '13-B', '13-A',
-        '13-OUTD', '13-OUTC', '13-OUTB', '13-OUTA',
-      ],
-    );
-  }
-
-  /// Level 14 — denser Expert triangle nest.
-  static SolvableLevelResult _nestedLevel14() {
-    return _shapedExpertLevel(
-      levelNumber: 14,
-      rows: 18,
-      cols: 19,
-      mask: uprightTriangleMask(18, 19),
-      minArrows: 32,
-      maxPathLen: 13,
-      fillTarget: 0.9,
-      fallbackRows: 16,
-      fallbackCols: 17,
-      fallbackMask: uprightTriangleMask(16, 17),
-    );
-  }
-
-  /// Level 15 — denser Expert diamond nest.
-  static SolvableLevelResult _nestedLevel15() {
-    return _shapedExpertLevel(
-      levelNumber: 15,
-      rows: 18,
-      cols: 18,
-      mask: diamondMask(18, 18),
-      minArrows: 34,
-      maxPathLen: 13,
-      fillTarget: 0.9,
-      fallbackRows: 16,
-      fallbackCols: 16,
-      fallbackMask: diamondMask(16, 16),
-    );
-  }
-
-  /// Level 16 — denser Expert hexagon nest.
-  static SolvableLevelResult _nestedLevel16() {
-    return _shapedExpertLevel(
-      levelNumber: 16,
-      rows: 19,
-      cols: 21,
-      mask: hexagonMask(19, 21),
-      minArrows: 36,
-      maxPathLen: 13,
-      fillTarget: 0.9,
-      fallbackRows: 17,
-      fallbackCols: 19,
-      fallbackMask: hexagonMask(17, 19),
-    );
-  }
-
-  /// Level 17 — packed mix nest (small/medium/tall, little free space).
-  static SolvableLevelResult _nestedLevel17() {
-    return _shapedExpertLevel(
-      levelNumber: 17,
-      rows: 20,
-      cols: 20,
-      mask: generateHeartShapeMask(20),
-      minArrows: 40,
-      maxPathLen: 12,
-      fillTarget: 0.98,
-      fallbackRows: 18,
-      fallbackCols: 18,
-      fallbackMask: generateHeartShapeMask(18),
-      mixPathSizes: true,
-    );
-  }
-
-  /// Level 18 — heart silhouette: short L/U/zigzag arrows pack into each other
-  /// (Escape Puzzle style). Not a concentric ring like L12/L13.
-  static SolvableLevelResult _nestedLevel18() {
-    return _shapedExpertLevel(
-      levelNumber: 18,
-      rows: 19,
-      cols: 19,
-      mask: generateHeartShapeMask(19),
-      minArrows: 50,
-      maxPathLen: 8,
-      fillTarget: 0.99,
-      fallbackRows: 17,
-      fallbackCols: 17,
-      fallbackMask: generateHeartShapeMask(17),
-      mixPathSizes: true,
-    );
-  }
-
-  /// Level 19 — packed mix circle nest.
-  static SolvableLevelResult _nestedLevel19() {
-    return _shapedExpertLevel(
-      levelNumber: 19,
-      rows: 21,
-      cols: 21,
-      mask: circleMask(21, 21),
-      minArrows: 48,
-      maxPathLen: 12,
-      fillTarget: 0.97,
-      fallbackRows: 19,
-      fallbackCols: 19,
-      fallbackMask: circleMask(19, 19),
-      mixPathSizes: true,
-    );
-  }
-
-  /// Level 20 — packed mix nest.
-  static SolvableLevelResult _nestedLevel20() {
-    return _shapedExpertLevel(
-      levelNumber: 20,
-      rows: 22,
-      cols: 22,
-      mask: octagonMask(22, 22),
-      minArrows: 52,
-      maxPathLen: 12,
-      fillTarget: 0.97,
-      fallbackRows: 20,
-      fallbackCols: 20,
-      fallbackMask: circleMask(20, 20),
-      mixPathSizes: true,
-    );
-  }
-
-  /// Level 21 — packed Escape-puzzle mix nest.
-  static SolvableLevelResult _nestedLevel21() {
-    return _denseExpertRect(
-      levelNumber: 21,
-      rows: 18,
-      cols: 18,
-      minArrows: 48,
-      maxFreeAtStart: 6,
-      mixPathSizes: true,
-    );
-  }
-
-  /// Level 22 — packed Escape-puzzle mix nest.
-  static SolvableLevelResult _nestedLevel22() {
-    return _denseExpertRect(
-      levelNumber: 22,
-      rows: 18,
-      cols: 19,
-      minArrows: 50,
-      maxFreeAtStart: 6,
-      mixPathSizes: true,
-    );
-  }
-
-  /// Level 23 — packed Escape-puzzle mix nest.
-  static SolvableLevelResult _nestedLevel23() {
-    return _denseExpertRect(
-      levelNumber: 23,
-      rows: 19,
-      cols: 19,
-      minArrows: 52,
-      maxFreeAtStart: 6,
-      mixPathSizes: true,
-    );
-  }
-
-  /// Level 24 — packed Escape-puzzle mix nest.
-  static SolvableLevelResult _nestedLevel24() {
-    return _denseExpertRect(
-      levelNumber: 24,
-      rows: 19,
-      cols: 20,
-      minArrows: 54,
-      maxFreeAtStart: 6,
-      mixPathSizes: true,
-    );
-  }
-
-  /// Level 25 — packed Escape-puzzle mix nest.
-  static SolvableLevelResult _nestedLevel25() {
-    return _denseExpertRect(
-      levelNumber: 25,
-      rows: 20,
-      cols: 20,
-      minArrows: 56,
-      maxFreeAtStart: 7,
-      mixPathSizes: true,
-    );
-  }
-
-  /// Level 26 — packed Escape-puzzle mix nest.
-  static SolvableLevelResult _nestedLevel26() {
-    return _denseExpertRect(
-      levelNumber: 26,
-      rows: 20,
-      cols: 21,
-      minArrows: 58,
-      maxFreeAtStart: 7,
-      mixPathSizes: true,
-    );
-  }
-
-  /// Level 27 — packed Escape-puzzle mix nest.
-  static SolvableLevelResult _nestedLevel27() {
-    return _denseExpertRect(
-      levelNumber: 27,
-      rows: 21,
-      cols: 21,
-      minArrows: 60,
-      maxFreeAtStart: 7,
-      mixPathSizes: true,
-    );
-  }
-
-  /// Level 28 — packed Escape-puzzle mix nest.
-  static SolvableLevelResult _nestedLevel28() {
-    return _denseExpertRect(
-      levelNumber: 28,
-      rows: 21,
-      cols: 22,
-      minArrows: 62,
-      maxFreeAtStart: 8,
-      mixPathSizes: true,
-    );
-  }
-
-  /// Level 29 — packed Escape-puzzle mix nest.
-  static SolvableLevelResult _nestedLevel29() {
-    return _denseExpertRect(
-      levelNumber: 29,
-      rows: 22,
-      cols: 22,
-      minArrows: 64,
-      maxFreeAtStart: 8,
-      mixPathSizes: true,
-    );
-  }
-
-  /// Level 30 — packed Escape-puzzle mix nest (campaign finale).
-  static SolvableLevelResult _nestedLevel30() {
-    return _denseExpertRect(
-      levelNumber: 30,
-      rows: 22,
-      cols: 23,
-      minArrows: 66,
-      maxFreeAtStart: 8,
-      mixPathSizes: true,
-    );
-  }
-
-  /// Full-rectangle Expert nest — ref-style bent hooks, few free at start.
-  static SolvableLevelResult _denseExpertRect({
-    required int levelNumber,
-    required int rows,
-    required int cols,
-    required int minArrows,
-    int maxFreeAtStart = 4,
-    bool mixPathSizes = false,
-  }) {
-    StateError? lastError;
-    final minPath = mixPathSizes ? 2 : 3;
-    final fillTight = mixPathSizes ? 0.97 : 0.94;
-
-    SolvableLevelResult? tryOnce({
-      required int r,
-      required int c,
-      required int seed,
-      required int arrows,
-      required double fill,
-      required int maxPath,
-      int? freeCap,
-    }) {
-      try {
-        return generateNestedSolvableLevel(
-          levelNumber,
-          r,
-          c,
-          3,
-          1,
-          difficulty: LevelDifficulty.expert,
-          seed: seed,
-          fillTarget: fill,
-          minPathLen: minPath,
-          maxPathLen: maxPath,
-          minArrows: arrows,
-          hardNest: true,
-          mixPathSizes: mixPathSizes,
-          maxFreeAtStart: freeCap,
-        );
-      } on StateError catch (e) {
-        lastError = e;
-        return null;
-      }
-    }
-
-    for (var attempt = 0; attempt < (mixPathSizes ? 60 : 160); attempt++) {
-      final result = tryOnce(
-        r: rows,
-        c: cols,
-        seed: levelNumber * 9973 + attempt * 173 + rows * 19,
-        arrows: minArrows,
-        fill: fillTight,
-        maxPath: mixPathSizes ? 12 : 11,
-        freeCap: attempt < (mixPathSizes ? 40 : 90)
-            ? maxFreeAtStart
-            : maxFreeAtStart + 2,
-      );
-      if (result != null) return result;
-    }
-
-    final soft = (minArrows * 0.85).round().clamp(34, minArrows);
-    for (var attempt = 0; attempt < (mixPathSizes ? 40 : 100); attempt++) {
-      final result = tryOnce(
-        r: rows,
-        c: cols,
-        seed: levelNumber * 4243 + attempt * 41,
-        arrows: soft,
-        fill: mixPathSizes ? 0.95 : 0.92,
-        maxPath: mixPathSizes ? 10 : 9,
-        freeCap: maxFreeAtStart + 3,
-      );
-      if (result != null) return result;
-    }
-
-    for (var attempt = 0; attempt < 80; attempt++) {
-      final result = tryOnce(
-        r: (rows + 1).clamp(rows, 24),
-        c: (cols + 1).clamp(cols, 24),
-        seed: levelNumber * 1117 + attempt * 29,
-        arrows: (minArrows * 0.75).round().clamp(32, soft),
-        fill: mixPathSizes ? 0.93 : 0.9,
-        maxPath: 8,
-        freeCap: maxFreeAtStart + 3,
-      );
-      if (result != null) return result;
-    }
-
-    for (var attempt = 0; attempt < 100; attempt++) {
-      final size = 18 + (attempt % 5);
-      final result = tryOnce(
-        r: size,
-        c: size + (attempt.isEven ? 1 : 0),
-        seed: levelNumber * 3331 + attempt * 17,
-        arrows: (minArrows * 0.65).round().clamp(36, soft),
-        fill: mixPathSizes ? 0.94 : 0.91,
-        maxPath: 8,
-        freeCap: 8,
-      );
-      if (result != null) return result;
-    }
-
-    return tryOnce(
-          r: 19,
-          c: 19,
-          seed: levelNumber * 3331,
-          arrows: mixPathSizes ? 40 : 42,
-          fill: mixPathSizes ? 0.93 : 0.91,
-          maxPath: 8,
-          freeCap: 8,
-        ) ??
-        generateNestedSolvableLevel(
-          levelNumber,
-          19,
-          19,
-          3,
-          1,
-          difficulty: LevelDifficulty.expert,
-          seed: levelNumber * 3331 + 7,
-          fillTarget: mixPathSizes ? 0.92 : 0.9,
-          minPathLen: minPath,
-          maxPathLen: 8,
-          minArrows: 40,
-          hardNest: true,
-          mixPathSizes: mixPathSizes,
-        );
-  }
-
-  /// Shared builder for L14–L20 shaped Expert nests (solvable by construction).
-  static SolvableLevelResult _shapedExpertLevel({
-    required int levelNumber,
-    required int rows,
-    required int cols,
-    required List<List<bool>> mask,
-    required int minArrows,
-    required int maxPathLen,
-    required double fillTarget,
-    required int fallbackRows,
-    required int fallbackCols,
-    required List<List<bool>> fallbackMask,
-    bool mixPathSizes = false,
-  }) {
-    StateError? lastError;
-    final minPath = mixPathSizes ? 2 : 3;
-
-    SolvableLevelResult? tryOnce({
-      required int r,
-      required int c,
-      required List<List<bool>> m,
-      required int seed,
-      required int arrows,
-      required double fill,
-      required int maxPath,
-      int? freeCap,
-    }) {
-      try {
-        return generateNestedSolvableLevel(
-          levelNumber,
-          r,
-          c,
-          3,
-          1,
-          difficulty: LevelDifficulty.expert,
-          seed: seed,
-          shapeMask: m,
-          fillTarget: fill,
-          minPathLen: minPath,
-          maxPathLen: maxPath,
-          minArrows: arrows,
-          hardNest: true,
-          mixPathSizes: mixPathSizes,
-          maxFreeAtStart: freeCap,
-        );
-      } on StateError catch (e) {
-        lastError = e;
-        return null;
-      }
-    }
-
-    for (var attempt = 0; attempt < (mixPathSizes ? 50 : 120); attempt++) {
-      final result = tryOnce(
-        r: rows,
-        c: cols,
-        m: mask,
-        seed: levelNumber * 9973 + attempt * 173 + rows * 19,
-        arrows: minArrows,
-        fill: fillTarget,
-        maxPath: maxPathLen,
-        freeCap: attempt < (mixPathSizes ? 30 : 70) ? 8 : 11,
-      );
-      if (result != null) return result;
-    }
-
-    final softMin = (minArrows * 0.8).round().clamp(26, minArrows);
-    for (var attempt = 0; attempt < (mixPathSizes ? 30 : 80); attempt++) {
-      final result = tryOnce(
-        r: fallbackRows,
-        c: fallbackCols,
-        m: fallbackMask,
-        seed: levelNumber * 7919 + attempt * 97 + 42,
-        arrows: softMin,
-        fill: (fillTarget - 0.02).clamp(0.84, 0.95),
-        maxPath: maxPathLen,
-        freeCap: 12,
-      );
-      if (result != null) return result;
-    }
-
-    for (var attempt = 0; attempt < 70; attempt++) {
-      final size = 18 + (attempt % 4);
-      final result = tryOnce(
-        r: size,
-        c: size,
-        m: octagonMask(size, size),
-        seed: levelNumber * 4243 + attempt * 53,
-        arrows: softMin,
-        fill: mixPathSizes ? 0.94 : 0.9,
-        maxPath: mixPathSizes ? 10 : 9,
-        freeCap: 10,
-      );
-      if (result != null) return result;
-    }
-
-    return tryOnce(
-          r: 18,
-          c: 18,
-          m: octagonMask(18, 18),
-          seed: levelNumber * 2221,
-          arrows: mixPathSizes ? 32 : 28,
-          fill: mixPathSizes ? 0.92 : 0.88,
-          maxPath: 8,
-        ) ??
-        generateNestedSolvableLevel(
-          levelNumber,
-          18,
-          18,
-          3,
-          1,
-          difficulty: LevelDifficulty.expert,
-          seed: levelNumber * 2221 + 3,
-          shapeMask: octagonMask(18, 18),
-          fillTarget: mixPathSizes ? 0.9 : 0.86,
-          minPathLen: minPath,
-          maxPathLen: 8,
-          minArrows: mixPathSizes ? 28 : 24,
-          hardNest: true,
-          mixPathSizes: mixPathSizes,
-        );
-  }
 
 }
 
