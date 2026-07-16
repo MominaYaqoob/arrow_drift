@@ -110,34 +110,54 @@ void main() {
       }
     }
 
-    test('L1 untouched; L2–10 progressive nests stay solvable', () {
+    test('L1 tutorial; L2–5 prior nests; L6+ Mix snakes; all solvable', () {
       final repo = LevelRepository();
       expect(repo.levelCount, 10);
 
+      // L1 unchanged tutorial.
       expect(repo.getLevel(1).arrows, hasLength(3));
       expect(repo.getLevel(1).gridRows, 3);
-
       final l1 = repo.getLevel(1).arrows;
       final byCol = {for (final a in l1) a.col: a};
       expect(byCol[0]!.direction, ArrowDirection.up);
       expect(byCol[1]!.direction, ArrowDirection.up);
       expect(byCol[2]!.direction, ArrowDirection.down);
 
-      // Same board sizes as the original hand nests (shapes unchanged).
+      // L2–5: previous open-rectangle nested boards.
       expect(repo.getLevel(2).gridRows, 6);
       expect(repo.getLevel(2).gridCols, 6);
       expect(repo.getLevel(2).difficulty, LevelDifficulty.easy);
       expect(repo.getLevel(3).gridRows, 6);
       expect(repo.getLevel(4).gridRows, 7);
       expect(repo.getLevel(5).gridRows, 12);
-      expect(repo.getLevel(6).gridRows, 9);
-      expect(repo.getLevel(10).gridRows, 11);
+      for (var n = 2; n <= 5; n++) {
+        final level = repo.getLevel(n);
+        expect(level.shapeMask, isNull, reason: 'L$n open rect');
+        expect(level.arrows, isNotEmpty);
+        for (final a in level.arrows) {
+          expect(a.path.length, greaterThanOrEqualTo(2), reason: 'L$n ${a.id}');
+        }
+      }
+
+      // L6: heart silhouette + nested snakes.
+      final l6 = repo.getLevel(6);
+      expect(l6.shapeMask, isNotNull);
+      expect(l6.difficulty, LevelDifficulty.hard);
+      expectInMask(l6);
+
+      // L7–10: nested paths, in-mask when masked, solvable.
+      for (var n = 7; n <= 10; n++) {
+        final level = repo.getLevel(n);
+        expect(level.arrows, isNotEmpty, reason: 'L$n');
+        for (final a in level.arrows) {
+          expect(a.path.length, greaterThanOrEqualTo(2), reason: 'L$n ${a.id}');
+        }
+        expectInMask(level);
+      }
       expect(repo.getLevel(10).difficulty, LevelDifficulty.expert);
 
       for (var n = 1; n <= 10; n++) {
-        final level = repo.getLevel(n);
-        expect(level.arrows, isNotEmpty, reason: 'L$n');
-        expectSolvable(repo, level);
+        expectSolvable(repo, repo.getLevel(n));
       }
 
       // Beyond campaign pack clamps to level 10.

@@ -331,10 +331,6 @@ class GameController extends StateNotifier<GameState> {
       shapeMask: state.level.shapeMask,
     );
 
-    // TEMP debug — remove once tap logic is confirmed in-game.
-    // ignore: avoid_print
-    print('Tapped arrow $arrowId, blocked: $blocked');
-
     if (!blocked) {
       // New list + new instances so Riverpod / UI always rebuild.
       final updatedArrows = [

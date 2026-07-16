@@ -1600,6 +1600,8 @@ class LevelRepository {
   final List<SolvableLevelResult?> _lazy;
   final Map<int, LevelModel> _dailyCache = {};
 
+  /// Ship 10 now. Raise this single constant to 500–1000 later — boards are
+  /// formula-driven, lazy, and cached (no per-level hand tables).
   static const int campaignLevelCount = 10;
 
   SolvableLevelResult _resultAt(int index) {
@@ -1891,87 +1893,37 @@ class LevelRepository {
   }
 
   static SolvableLevelResult _buildCampaignLevel(int levelNumber) {
-    return switch (levelNumber) {
-      1 => _tutorialLevel1(),
-      >= 2 && <= 10 => _earlyCampaignLevel(levelNumber),
-      _ => throw RangeError('Campaign only ships levels 1–10 (got $levelNumber)'),
-    };
+    if (levelNumber == 1) return _tutorialLevel1();
+    if (levelNumber <= 5) return _earlyCampaignLevel(levelNumber);
+    return _shapedSnakeLevel(levelNumber);
   }
 
-  /// Progressive early campaign on fixed rectangular boards (no shape mask).
-  /// Keeps historical grid sizes for L2–10; only arrows/placement change.
+  /// L2–L5: previous progressive nested boards on open rectangles (unchanged feel).
   static SolvableLevelResult _earlyCampaignLevel(int levelNumber) {
     final (rows, cols) = switch (levelNumber) {
       2 => (6, 6),
       3 => (6, 6),
       4 => (7, 7),
-      5 => (12, 12),
-      6 => (9, 9),
-      7 => (10, 10),
-      8 => (11, 11),
-      9 => (14, 14),
-      _ => (11, 11), // 10
+      _ => (12, 12), // L5
     };
 
-    final LevelDifficulty difficulty;
-    final double fillTarget;
-    final int minPath;
-    final int maxPath;
-    final int minArrows;
-    final int maxFree;
-    final int hearts;
-    final int hints;
-    final bool nest;
-
-    if (levelNumber <= 5) {
-      // Easy: short→mid paths, several free starts, light nesting.
-      difficulty = LevelDifficulty.easy;
-      fillTarget = switch (levelNumber) {
-        2 || 3 => 0.82,
-        4 => 0.86,
-        _ => 0.84, // L5 is a large 12×12 — keep lighter than Hard
-      };
-      minPath = 3;
-      maxPath = levelNumber <= 3 ? 7 : (levelNumber == 4 ? 8 : 9);
-      minArrows = switch (levelNumber) {
-        2 => 5,
-        3 => 6,
-        4 => 8,
-        _ => 16,
-      };
-      maxFree = levelNumber <= 3 ? 5 : 4;
-      hearts = 3;
-      hints = 2;
-      nest = levelNumber >= 5; // L2–4: soft; L5: light hardNest
-    } else if (levelNumber <= 9) {
-      // Medium: longer woven paths, 2–3 free starts, onion nesting.
-      difficulty =
-          levelNumber <= 7 ? LevelDifficulty.medium : LevelDifficulty.hard;
-      fillTarget = 0.90 + (levelNumber - 6) * 0.01;
-      minPath = 4;
-      maxPath = 10 + (levelNumber - 6);
-      minArrows = switch (levelNumber) {
-        6 => 12,
-        7 => 14,
-        8 => 16,
-        _ => 22,
-      };
-      maxFree = levelNumber <= 7 ? 3 : 2;
-      hearts = 3;
-      hints = 1;
-      nest = true;
-    } else {
-      // Hard entry (L10): deep nest on same 11×11 frame.
-      difficulty = LevelDifficulty.expert;
-      fillTarget = 0.94;
-      minPath = 4;
-      maxPath = 12;
-      minArrows = 18;
-      maxFree = 2;
-      hearts = 3;
-      hints = 1;
-      nest = true;
-    }
+    final fillTarget = switch (levelNumber) {
+      2 || 3 => 0.82,
+      4 => 0.86,
+      _ => 0.84, // L5 large 12×12 — lighter than Hard
+    };
+    final minPath = 3;
+    final maxPath = levelNumber <= 3 ? 7 : (levelNumber == 4 ? 8 : 9);
+    final minArrows = switch (levelNumber) {
+      2 => 5,
+      3 => 6,
+      4 => 8,
+      _ => 16,
+    };
+    final maxFree = levelNumber <= 3 ? 5 : 4;
+    const hearts = 3;
+    const hints = 2;
+    final nest = levelNumber >= 5; // L2–4 soft; L5 light hardNest
 
     StateError? lastError;
     for (var attempt = 0; attempt < 48; attempt++) {
@@ -1982,7 +1934,7 @@ class LevelRepository {
           cols,
           hearts,
           hints,
-          difficulty: difficulty,
+          difficulty: LevelDifficulty.easy,
           seed: levelNumber * 7919 + attempt * 131 + rows * 17,
           fillTarget: (fillTarget - (attempt > 24 ? 0.04 : 0)).clamp(0.78, 0.96),
           minPathLen: minPath,
@@ -1997,7 +1949,6 @@ class LevelRepository {
       }
     }
 
-    // Soft last resort — same grid size; drop free-cap gate so level always builds.
     try {
       return generateNestedSolvableLevel(
         levelNumber,
@@ -2005,7 +1956,7 @@ class LevelRepository {
         cols,
         hearts,
         hints,
-        difficulty: difficulty,
+        difficulty: LevelDifficulty.easy,
         seed: levelNumber * 4243,
         fillTarget: 0.78,
         minPathLen: 2,
@@ -2018,6 +1969,130 @@ class LevelRepository {
     } on StateError catch (e) {
       throw lastError ?? e;
     }
+  }
+
+  /// L6+: bent-snake nests with rotating silhouettes. L6 is always a heart
+  /// (reference “Hard”); then every 8 levels the shape cycles.
+  static SolvableLevelResult _shapedSnakeLevel(int levelNumber) {
+    final LevelDifficulty difficulty;
+    if (levelNumber <= 9) {
+      difficulty = LevelDifficulty.hard;
+    } else {
+      difficulty = LevelDifficulty.expert;
+    }
+
+    // Grid grows slowly, capped for phone performance.
+    final baseSize = (10 + ((levelNumber - 6) ~/ 2)).clamp(10, 16);
+    final (rows, cols, mask) = _campaignShapeFor(levelNumber, baseSize);
+
+    final fillTarget = (0.86 + (levelNumber - 6) * 0.008).clamp(0.84, 0.94);
+    final minPath = levelNumber <= 8 ? 3 : 4;
+    final maxPath = (8 + (levelNumber - 6)).clamp(8, 12);
+    final minArrows = (14 + (levelNumber - 6) * 2).clamp(12, 40);
+    final maxFree = levelNumber <= 8 ? 3 : 2;
+    const hearts = 3;
+    final hints = 1;
+
+    StateError? lastError;
+
+    SolvableLevelResult? tryOnce({
+      required int r,
+      required int c,
+      required List<List<bool>> m,
+      required int seed,
+      required int arrows,
+      required double fill,
+      required int freeCap,
+    }) {
+      try {
+        return generateNestedSolvableLevel(
+          levelNumber,
+          r,
+          c,
+          hearts,
+          hints,
+          difficulty: difficulty,
+          seed: seed,
+          shapeMask: m,
+          fillTarget: fill,
+          minPathLen: minPath,
+          maxPathLen: maxPath,
+          minArrows: arrows,
+          hardNest: true,
+          mixPathSizes: true,
+          maxFreeAtStart: freeCap,
+        );
+      } on StateError catch (e) {
+        lastError = e;
+        return null;
+      }
+    }
+
+    for (var attempt = 0; attempt < 60; attempt++) {
+      final result = tryOnce(
+        r: rows,
+        c: cols,
+        m: mask,
+        seed: levelNumber * 9973 + attempt * 173 + baseSize * 19,
+        arrows: (minArrows - (attempt ~/ 10) * 2).clamp(10, minArrows),
+        fill: (fillTarget - (attempt ~/ 20) * 0.03).clamp(0.78, 0.94),
+        freeCap: maxFree + (attempt ~/ 15),
+      );
+      if (result != null) return result;
+    }
+
+    // Fallback: slightly smaller square (still nested), then open rectangle.
+    final fb = (baseSize - 2).clamp(8, baseSize);
+    final fbMask = List.generate(fb, (_) => List<bool>.filled(fb, true));
+    for (var attempt = 0; attempt < 40; attempt++) {
+      final result = tryOnce(
+        r: fb,
+        c: fb,
+        m: fbMask,
+        seed: levelNumber * 4243 + attempt * 97,
+        arrows: (minArrows * 0.7).round().clamp(10, minArrows),
+        fill: 0.82,
+        freeCap: maxFree + 2,
+      );
+      if (result != null) return result;
+    }
+
+    final soft = tryOnce(
+      r: 10,
+      c: 10,
+      m: List.generate(10, (_) => List<bool>.filled(10, true)),
+      seed: levelNumber * 1117,
+      arrows: 12,
+      fill: 0.8,
+      freeCap: 5,
+    );
+    if (soft != null) return soft;
+
+    throw lastError ??
+        StateError('Failed to build campaign level $levelNumber');
+  }
+
+  /// Shape rotation for L6+: heart, square, diamond, square, star, octagon,
+  /// square, clover — then repeats. L6 is always heart.
+  static (int rows, int cols, List<List<bool>> mask) _campaignShapeFor(
+    int levelNumber,
+    int size,
+  ) {
+    final s = size.clamp(8, 16);
+    List<List<bool>> full() =>
+        List.generate(s, (_) => List<bool>.filled(s, true));
+
+    final slot = (levelNumber - 6) % 8;
+    return switch (slot) {
+      0 => (s, s, generateHeartShapeMask(s)),
+      1 => (s, s, full()),
+      2 => (s, s, diamondMask(s, s)),
+      3 => (s, s, full()),
+      4 => (s, s, starMask(s, s)),
+      5 => (s, s, octagonMask(s, s)),
+      6 => (s, s, full()),
+      _ => (s, s, cloverMask(s, s)),
+    };
   }
 
   /// Fixed Level 1: three vertical arrows — UP, UP, DOWN (left → right).
