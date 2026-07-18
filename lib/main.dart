@@ -7,7 +7,7 @@ import 'package:arrow_drift/core/router/app_router.dart';
 import 'package:arrow_drift/core/theme/app_theme.dart';
 import 'package:arrow_drift/data/repositories/settings_repository.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Ignore legacy / Auto-Backup-restored prefs so reinstall starts at Level 1.
   SharedPreferences.setPrefix('arrow_drift_v2.');

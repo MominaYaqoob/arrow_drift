@@ -97,6 +97,22 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     );
     _chromeController.forward();
     _loadTutorialFlag();
+    // After this frame: warm the next campaign level in the lazy cache so
+    // "Next" navigation does not rebuild from scratch on the UI isolate.
+    if (!widget.isDaily) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final repo = ref.read(levelRepositoryProvider);
+        final next = widget.levelNumber + 1;
+        if (next > repo.levelCount) return;
+        Future<void>.delayed(const Duration(milliseconds: 80), () {
+          if (!mounted) return;
+          try {
+            repo.getLevel(next);
+          } catch (_) {}
+        });
+      });
+    }
   }
 
   Future<void> _loadTutorialFlag() async {
@@ -382,6 +398,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     await repo.saveProgress(_level.levelNumber);
     ref.invalidate(currentLevelProvider);
     ref.invalidate(lastCompletedLevelProvider);
+    if (!mounted) return;
     await AdsService.instance.onLevelCleared(context);
 
     if (!mounted) return;
@@ -410,6 +427,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
       await repo.saveProgress(_level.levelNumber);
       ref.invalidate(currentLevelProvider);
       ref.invalidate(lastCompletedLevelProvider);
+      if (!mounted) return;
       await AdsService.instance.onLevelCleared(context);
       if (!mounted) return;
       context.go(HomeScreen.routePath);

@@ -1,0 +1,231 @@
+  /// Daily puzzles are calendar-seeded (one unique board per day).
+  /// Large nested silhouette (~120–150 arrows), mixed sizes, hardNest.
+  static LevelModel _buildDailyChallengeLevel(DateTime day, int levelNumber) {
+    final dayOfYear = day.difference(DateTime(day.year)).inDays;
+    final shapeIndex = (dayOfYear + day.year * 5 + day.month * 3) % 12;
+
+    // Large primary boards so 120–150 mixed arrows pack tightly.
+    final config = switch (shapeIndex) {
+      0 => (
+          rows: 26,
+          cols: 26,
+          mask: generateHeartShapeMask(26),
+          fbRows: 24,
+          fbCols: 24,
+          fbMask: generateHeartShapeMask(24),
+        ),
+      1 => (
+          rows: 26,
+          cols: 26,
+          mask: ovalMask(26, 26),
+          fbRows: 24,
+          fbCols: 24,
+          fbMask: ovalMask(24, 24),
+        ),
+      2 => (
+          rows: 26,
+          cols: 26,
+          mask: starMask(26, 26),
+          fbRows: 24,
+          fbCols: 24,
+          fbMask: cloverMask(24, 24),
+        ),
+      3 => (
+          rows: 26,
+          cols: 26,
+          mask: crescentMask(26, 26),
+          fbRows: 24,
+          fbCols: 24,
+          fbMask: circleMask(24, 24),
+        ),
+      4 => (
+          rows: 26,
+          cols: 26,
+          mask: cloverMask(26, 26),
+          fbRows: 24,
+          fbCols: 24,
+          fbMask: octagonMask(24, 24),
+        ),
+      5 => (
+          rows: 27,
+          cols: 25,
+          mask: shieldMask(27, 25),
+          fbRows: 24,
+          fbCols: 22,
+          fbMask: shieldMask(24, 22),
+        ),
+      6 => (
+          rows: 24,
+          cols: 28,
+          mask: fishMask(24, 28),
+          fbRows: 22,
+          fbCols: 26,
+          fbMask: fishMask(22, 26),
+        ),
+      7 => (
+          rows: 26,
+          cols: 26,
+          mask: butterflyMask(26, 26),
+          fbRows: 24,
+          fbCols: 24,
+          fbMask: flowerMask(24, 24),
+        ),
+      8 => (
+          rows: 25,
+          cols: 27,
+          mask: birdOutlineMask(25, 27),
+          fbRows: 23,
+          fbCols: 25,
+          fbMask: birdOutlineMask(23, 25),
+        ),
+      9 => (
+          rows: 26,
+          cols: 26,
+          mask: catFaceMask(26, 26),
+          fbRows: 24,
+          fbCols: 24,
+          fbMask: catFaceMask(24, 24),
+        ),
+      10 => (
+          rows: 26,
+          cols: 28,
+          mask: stadiumMask(26, 28),
+          fbRows: 24,
+          fbCols: 26,
+          fbMask: stadiumMask(24, 26),
+        ),
+      _ => (
+          rows: 27,
+          cols: 27,
+          mask: octagonMask(27, 27),
+          fbRows: 24,
+          fbCols: 24,
+          fbMask: diamondMask(24, 24),
+        ),
+    };
+
+    const minArrows = 120;
+    const maxArrows = 150;
+    StateError? lastError;
+
+    LevelModel? tryBuild({
+      required int rows,
+      required int cols,
+      required List<List<bool>> mask,
+      required int seed,
+      required double fill,
+      required int arrows,
+      int? freeCap,
+    }) {
+      try {
+        return generateNestedSolvableLevel(
+          levelNumber,
+          rows,
+          cols,
+          3,
+          2,
+          difficulty: LevelDifficulty.expert,
+          seed: seed,
+          shapeMask: mask,
+          fillTarget: fill,
+          minPathLen: 2,
+          maxPathLen: 12,
+          minArrows: arrows,
+          maxArrows: maxArrows,
+          hardNest: true,
+          mixPathSizes: true,
+          maxFreeAtStart: freeCap,
+        ).level;
+      } on StateError catch (e) {
+        lastError = e;
+        return null;
+      }
+    }
+
+    // Prefer 120–150 nested arrows on the daily silhouette.
+    for (var attempt = 0; attempt < 24; attempt++) {
+      final target = (150 - (attempt ~/ 4) * 5).clamp(minArrows, maxArrows);
+      final level = tryBuild(
+        rows: config.rows,
+        cols: config.cols,
+        mask: config.mask,
+        seed: levelNumber + attempt * 211 + shapeIndex * 47,
+        fill: 0.99,
+        arrows: target,
+        freeCap: attempt < 14 ? 14 : 18,
+      );
+      if (level != null) return level;
+    }
+
+    for (var attempt = 0; attempt < 16; attempt++) {
+      final level = tryBuild(
+        rows: config.fbRows,
+        cols: config.fbCols,
+        mask: config.fbMask,
+        seed: levelNumber + 9000 + attempt * 131,
+        fill: 0.98,
+        arrows: (125 - attempt).clamp(100, 140),
+        freeCap: attempt < 8 ? 16 : null,
+      );
+      if (level != null) return level;
+    }
+
+    for (var attempt = 0; attempt < 16; attempt++) {
+      final size = 24 + (attempt % 3);
+      final level = tryBuild(
+        rows: size,
+        cols: size,
+        mask: ovalMask(size, size),
+        seed: levelNumber + 17000 + attempt * 97,
+        fill: 0.97,
+        arrows: (120 - attempt * 2).clamp(100, 130),
+        freeCap: null,
+      );
+      if (level != null) return level;
+    }
+
+    for (var attempt = 0; attempt < 20; attempt++) {
+      final size = 22 + (attempt % 4);
+      try {
+        return generateNestedSolvableLevel(
+          levelNumber,
+          size,
+          size,
+          3,
+          2,
+          difficulty: LevelDifficulty.expert,
+          seed: levelNumber + 29000 + attempt * 37,
+          fillTarget: 0.96,
+          minPathLen: 2,
+          maxPathLen: 11,
+          minArrows: 100,
+          maxArrows: maxArrows,
+          hardNest: true,
+          mixPathSizes: true,
+        ).level;
+      } on StateError catch (e) {
+        lastError = e;
+      }
+    }
+
+    try {
+      return generateNestedSolvableLevel(
+        levelNumber,
+        24,
+        24,
+        3,
+        2,
+        difficulty: LevelDifficulty.expert,
+        seed: levelNumber + 99,
+        fillTarget: 0.94,
+        minPathLen: 2,
+        maxPathLen: 10,
+        minArrows: 100,
+        maxArrows: maxArrows,
+        hardNest: true,
+        mixPathSizes: true,
+      ).level;
+    } on StateError catch (e) {
+      throw lastError ?? e;
+    }
+  }

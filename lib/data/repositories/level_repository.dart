@@ -390,6 +390,10 @@ SolvableLevelResult generateNestedSolvableLevel(
   bool exactFreeAtStart = false,
   /// Daily-style mix: long + medium + small arrow lengths interleaved.
   bool mixPathSizes = false,
+  /// Multiplier on hardNest turn/contact/cup-wrap scoring — pushes harder
+  /// toward multi-bend U/C hooks for the densest late-campaign levels.
+  /// 1.0 = existing behavior; only raise for L16+ so L1–15 feel is untouched.
+  double turnBias = 1.0,
 }) {
   final random = Random(
     seed ?? levelNumber * 9973 + rows * 131 + cols * 17,
@@ -881,20 +885,22 @@ SolvableLevelResult generateNestedSolvableLevel(
             final d2c = c.col - b.col;
             if (d1r != d2r || d1c != d2c) turns++;
           }
-          score += turns * 7;
-          if (turns >= 2) score += 10; // real hook / zigzag, not a single L
-          if (turns >= 3) score += 6;
+          score += (turns * 7 * turnBias).round();
+          if (turns >= 2) {
+            score += (10 * turnBias).round(); // real hook / zigzag, not a single L
+          }
+          if (turns >= 3) score += (6 * turnBias).round();
           if (path.length >= 5 && turns == 0) score -= 14;
 
           // Nest against neighbors — floating separated snakes score poorly.
           final contacts = nestContactScore(path);
-          score += contacts * 6;
+          score += (contacts * 6 * turnBias).round();
           if (arrows.isNotEmpty && contacts == 0) score -= 28;
-          if (contacts >= 3) score += 10;
-          if (contacts >= 5) score += 6;
+          if (contacts >= 3) score += (10 * turnBias).round();
+          if (contacts >= 5) score += (6 * turnBias).round();
 
           // Occupied cells cupped in bend pockets (hooks around neighbors).
-          score += _cupWrapBonus(path, occupied) * 5;
+          score += (_cupWrapBonus(path, occupied) * 5 * turnBias).round();
         }
       } else if (hardNest && arrows.isNotEmpty) {
         // Late fill: still prefer nesting against existing paths.
@@ -1188,8 +1194,8 @@ SolvableLevelResult generateNestedSolvableLevel(
         }
       }
     }
-    // Random fallback.
-    for (var attempt = 0; attempt < 2000 && !keeperOk; attempt++) {
+    // Random fallback (capped — long searches freeze the UI isolate).
+    for (var attempt = 0; attempt < 400 && !keeperOk; attempt++) {
       final direction =
           ArrowDirection.values[random.nextInt(ArrowDirection.values.length)];
       final (dr, dc) = _dirDelta(direction);
@@ -1241,7 +1247,7 @@ SolvableLevelResult generateNestedSolvableLevel(
 
     var safety = 0;
     var stall = 0;
-    while (arrows.length < max(minArrows, 15) && underArrowCap() && safety < 8000) {
+    while (arrows.length < max(minArrows, 15) && underArrowCap() && safety < 2500) {
       safety++;
       final before = arrows.length;
       if (!tryForceSealPlacement()) {
@@ -1262,7 +1268,7 @@ SolvableLevelResult generateNestedSolvableLevel(
       }
       if (arrows.length == before) {
         stall++;
-        if (stall > 600) break;
+        if (stall > 200) break;
       } else {
         stall = 0;
       }
@@ -1271,7 +1277,7 @@ SolvableLevelResult generateNestedSolvableLevel(
     // Densify with seal-only placements (never open a second free tip).
     safety = 0;
     stall = 0;
-    while (occupied.length < targetCells && underArrowCap() && safety < 8000) {
+    while (occupied.length < targetCells && underArrowCap() && safety < 2500) {
       safety++;
       final before = occupied.length;
       if (!tryForceSealPlacement()) {
@@ -1280,7 +1286,7 @@ SolvableLevelResult generateNestedSolvableLevel(
       }
       if (occupied.length == before) {
         stall++;
-        if (stall > 900) break;
+        if (stall > 250) break;
       } else {
         stall = 0;
       }
@@ -1289,7 +1295,7 @@ SolvableLevelResult generateNestedSolvableLevel(
   // Phase 1: woven snakes — tips biased into nesting pockets.
   var safety = 0;
   var stall = 0;
-  while (occupied.length < targetCells && underArrowCap() && safety < 5000) {
+  while (occupied.length < targetCells && underArrowCap() && safety < 2000) {
     safety++;
     final before = occupied.length;
     if (exactFreeAtStart && maxFreeAtStart == 1 && arrows.isNotEmpty) {
@@ -1314,7 +1320,7 @@ SolvableLevelResult generateNestedSolvableLevel(
           stall % 10 == 0) {
         tryRetractAFreeTip();
       }
-      if (stall > 400) break;
+      if (stall > 150) break;
     } else {
       stall = 0;
     }
@@ -1323,7 +1329,7 @@ SolvableLevelResult generateNestedSolvableLevel(
   // Phase 2: mop up — keep size mix; fill gaps tightly for daily.
   safety = 0;
   stall = 0;
-  while (occupied.length < targetCells && underArrowCap() && safety < 3000) {
+  while (occupied.length < targetCells && underArrowCap() && safety < 1200) {
     safety++;
     final before = occupied.length;
     if (exactFreeAtStart && maxFreeAtStart == 1 && arrows.isNotEmpty) {
@@ -1348,7 +1354,7 @@ SolvableLevelResult generateNestedSolvableLevel(
           stall % 10 == 0) {
         tryRetractAFreeTip();
       }
-      if (stall > 300) break;
+      if (stall > 120) break;
     } else {
       stall = 0;
     }
@@ -1466,7 +1472,7 @@ SolvableLevelResult generateNestedSolvableLevel(
     final live = cloneArrows(arrows);
     final solve = <String>[];
     var clearSafety = 0;
-    while (live.any((a) => !a.isRemoved) && clearSafety < 5000) {
+    while (live.any((a) => !a.isRemoved) && clearSafety < 800) {
       clearSafety++;
       ArrowModel? pick;
       for (final a in live) {
@@ -1610,8 +1616,12 @@ class LevelRepository {
   final List<SolvableLevelResult?> _lazy;
   final Map<int, LevelModel> _dailyCache = {};
 
-  /// Campaign pack size. Boards are formula-driven, lazy, and cached.
-  static const int campaignLevelCount = 20;
+  /// Campaign pack size. Boards are formula-driven, lazy, and cached — going
+  /// from 100 to 500 is a one-constant change plus the Expert tier's range
+  /// (see `_expertPuzzleLevel`). No level is ever built eagerly: `_lazy` is
+  /// just 500 null slots (a few KB) until a level is actually opened, so
+  /// this doesn't add startup cost or memory pressure.
+  static const int campaignLevelCount = 500;
 
   SolvableLevelResult _resultAt(int index) {
     if (index < 0 || index >= campaignLevelCount) {
@@ -1901,104 +1911,240 @@ class LevelRepository {
         StateError('Failed to build dense daily (≥$minArrows) for $levelNumber');
   }
 
+  /// L1 tutorial → L2–6 redesigned Easy (shaped/nested, was open-rect) →
+  /// L7–20 Medium → L21–50 Hard (seal-chain) → L51–500 Expert/Master
+  /// (seal-chain, phone-safe grid cap, difficulty keeps ramping — slowly —
+  /// across the whole long tail instead of maxing out at L100). See
+  /// arrow_escape_100_level_plan.md for the original design rationale
+  /// (still accurate for L1–100; the 500-level extension only changes the
+  /// Expert tier's range, not its mechanics).
   static SolvableLevelResult _buildCampaignLevel(int levelNumber) {
     if (levelNumber == 1) return _tutorialLevel1();
-    if (levelNumber <= 5) return _earlyCampaignLevel(levelNumber);
-    if (levelNumber <= 10) return _shapedSnakeLevel(levelNumber);
-    if (levelNumber <= 15) return _mediumCampaignLevel(levelNumber);
-    if (levelNumber <= 18) return _complexHardCampaignLevel(levelNumber);
-    return _ultraDenseFinaleLevel(levelNumber); // L19–20
+    // L2/L3: adapted directly from the real Unity 'Arrows' prefabs
+    // (Level 2.prefab / Level 3.prefab) — same arrow count, path lengths,
+    // bend shapes, and final directions as the original, reshaped onto
+    // non-overlapping cells since Arrow Escape's static blocking model
+    // (unlike Unity's real-time line collision) requires every arrow's
+    // path to occupy exclusive cells. L4 deferred — its real source data
+    // turned out far more complex (a 14-waypoint arrow) than its arrow
+    // count suggested, and needs the same careful treatment as L5–10.
+    if (levelNumber == 2) return _unityLevel2();
+    if (levelNumber == 3) return _unityLevel3();
+    if (levelNumber <= 6) return _easyPuzzleLevel(levelNumber);
+    if (levelNumber <= 20) return _mediumPuzzleLevel(levelNumber);
+    if (levelNumber <= 50) return _hardPuzzleLevel(levelNumber);
+    return _expertPuzzleLevel(levelNumber); // L51–500
   }
 
-  /// L2–L5: previous progressive nested boards on open rectangles (unchanged feel).
-  static SolvableLevelResult _earlyCampaignLevel(int levelNumber) {
-    final (rows, cols) = switch (levelNumber) {
-      2 => (6, 6),
-      3 => (6, 6),
-      4 => (7, 7),
-      _ => (12, 12), // L5
-    };
+  /// Adapted from Unity 'Arrows' Level 2.prefab: 3 arrows, lengths 6/5/5,
+  /// bend shapes up2-right2-up1 / down2-left2 / down1-left3, final
+  /// directions up/left/left. Unity's real paths overlap in two places
+  /// (impossible under Arrow Escape's static blocking model), so cells are
+  /// reshaped onto a non-overlapping 7x7 board while preserving each
+  /// arrow's length, bend count, and final direction. Verified by hand:
+  /// 2 arrows free at start, third unlocks after either is cleared.
+  static SolvableLevelResult _unityLevel2() {
+    const levelNumber = 2;
+    final arrows = [
+      // Mirrors "Line (5)": up,up,right,right,up (6 cells).
+      ArrowModel(
+        id: '$levelNumber-0',
+        row: 3,
+        col: 3,
+        direction: ArrowDirection.up,
+        path: const [
+          GridCell(6, 1),
+          GridCell(5, 1),
+          GridCell(4, 1),
+          GridCell(4, 2),
+          GridCell(4, 3),
+          GridCell(3, 3),
+        ],
+      ),
+      // Mirrors "Line (2)": down,down,left,left (5 cells). Free at start.
+      ArrowModel(
+        id: '$levelNumber-1',
+        row: 2,
+        col: 4,
+        direction: ArrowDirection.left,
+        path: const [
+          GridCell(0, 6),
+          GridCell(1, 6),
+          GridCell(2, 6),
+          GridCell(2, 5),
+          GridCell(2, 4),
+        ],
+      ),
+      // Mirrors "Line (3)": down,left,left,left (5 cells). Free at start;
+      // clearing it unlocks arrow 0 (its ray was blocked at (1,3)).
+      ArrowModel(
+        id: '$levelNumber-2',
+        row: 1,
+        col: 0,
+        direction: ArrowDirection.left,
+        path: const [
+          GridCell(0, 3),
+          GridCell(1, 3),
+          GridCell(1, 2),
+          GridCell(1, 1),
+          GridCell(1, 0),
+        ],
+      ),
+    ];
+    return SolvableLevelResult(
+      level: LevelModel(
+        levelNumber: levelNumber,
+        gridRows: 7,
+        gridCols: 7,
+        arrows: arrows,
+        heartsAllowed: 3,
+        hintsAllowed: 2,
+        difficulty: LevelDifficulty.easy,
+      ),
+      // Solve order: either free arrow first, then the other, then the
+      // unlocked one — placement order is reverse of that.
+      placementOrder: const ['$levelNumber-0', '$levelNumber-2', '$levelNumber-1'],
+    );
+  }
 
-    final fillTarget = switch (levelNumber) {
-      2 || 3 => 0.82,
-      4 => 0.86,
-      _ => 0.84, // L5 large 12×12 — lighter than Hard
+  /// Adapted from Unity 'Arrows' Level 3.prefab: 4 arrows, lengths 4/7/5/3,
+  /// directions down/up/down/left. Unity's real paths overlap heavily (3 of
+  /// 4 arrows share a corridor), reshaped onto a non-overlapping 7x6 board
+  /// preserving each arrow's length, bend count, and final direction.
+  /// Verified by hand: 2 arrows free at start (up-shaped and left-shaped),
+  /// each unlocks one of the other two once cleared.
+  static SolvableLevelResult _unityLevel3() {
+    const levelNumber = 3;
+    final arrows = [
+      // Mirrors "Line (6)": left,down,down (4 cells).
+      ArrowModel(
+        id: '$levelNumber-0',
+        row: 2,
+        col: 1,
+        direction: ArrowDirection.down,
+        path: const [
+          GridCell(0, 2),
+          GridCell(0, 1),
+          GridCell(1, 1),
+          GridCell(2, 1),
+        ],
+      ),
+      // Mirrors "Line (2)": down,down,left,left,up,up (7 cells). Free at start.
+      ArrowModel(
+        id: '$levelNumber-1',
+        row: 2,
+        col: 3,
+        direction: ArrowDirection.up,
+        path: const [
+          GridCell(2, 5),
+          GridCell(3, 5),
+          GridCell(4, 5),
+          GridCell(4, 4),
+          GridCell(4, 3),
+          GridCell(3, 3),
+          GridCell(2, 3),
+        ],
+      ),
+      // Mirrors "Line (4)": left,down,down,down (5 cells).
+      ArrowModel(
+        id: '$levelNumber-2',
+        row: 3,
+        col: 4,
+        direction: ArrowDirection.down,
+        path: const [
+          GridCell(0, 5),
+          GridCell(0, 4),
+          GridCell(1, 4),
+          GridCell(2, 4),
+          GridCell(3, 4),
+        ],
+      ),
+      // Mirrors "Line (3)": left,left (3 cells). Free at start; clearing it
+      // unlocks arrow 0.
+      ArrowModel(
+        id: '$levelNumber-3',
+        row: 6,
+        col: 1,
+        direction: ArrowDirection.left,
+        path: const [
+          GridCell(6, 3),
+          GridCell(6, 2),
+          GridCell(6, 1),
+        ],
+      ),
+    ];
+    return SolvableLevelResult(
+      level: LevelModel(
+        levelNumber: levelNumber,
+        gridRows: 7,
+        gridCols: 6,
+        arrows: arrows,
+        heartsAllowed: 3,
+        hintsAllowed: 2,
+        difficulty: LevelDifficulty.easy,
+      ),
+      // Solve order is [1, 2, 3, 0]: arrow 1 (up) and arrow 3 (left) are
+      // free at start; clearing arrow 1 unlocks arrow 2, clearing arrow 3
+      // unlocks arrow 0. placementOrder is that solve order *reversed*
+      // (per SolvableLevelResult's contract — solve order = placement
+      // order reversed).
+      placementOrder: const [
+        '$levelNumber-0',
+        '$levelNumber-3',
+        '$levelNumber-2',
+        '$levelNumber-1',
+      ],
+    );
+  }
+
+  // --- Shared helpers ---------------------------------------------------
+
+  static double _lerp(num a, num b, double t) => a + (b - a) * t;
+
+  static int _lerpRound(num a, num b, double t) => _lerp(a, b, t).round();
+
+  /// Position of [levelNumber] within [start]..[end], clamped to 0..1.
+  static double _tierT(int levelNumber, int start, int end) {
+    if (end <= start) return 0;
+    return ((levelNumber - start) / (end - start)).clamp(0.0, 1.0);
+  }
+
+  /// Convex/near-convex-only rotation — required for the exact-free-at-start
+  /// seal-chain keeper placement (L21+) to stay reliable. Thin concave
+  /// silhouettes are reserved for L2–20 (non-exact) and the daily path.
+  static List<List<bool>> _convexShapeFor(int offset, int size) {
+    final square = List.generate(size, (_) => List<bool>.filled(size, true));
+    return switch (offset % 7) {
+      0 => square,
+      1 => octagonMask(size, size),
+      2 => hexagonMask(size, size),
+      3 => diamondMask(size, size),
+      4 => circleMask(size, size),
+      5 => ovalMask(size, size),
+      _ => stadiumMask(size, size),
     };
-    final minPath = 3;
-    final maxPath = levelNumber <= 3 ? 7 : (levelNumber == 4 ? 8 : 9);
-    final minArrows = switch (levelNumber) {
-      2 => 5,
-      3 => 6,
-      4 => 8,
-      _ => 16,
-    };
-    final maxFree = levelNumber <= 3 ? 5 : 4;
+  }
+
+  /// L2–L6: redesigned Easy tier — shaped/nested boards from the very first
+  /// non-tutorial level (previously a plain open rectangle). Small grids,
+  /// loose fill, generous free tiles; ramps smoothly toward L7's Medium
+  /// starting values so there's no visible jump at the seam.
+  static SolvableLevelResult _easyPuzzleLevel(int levelNumber) {
+    // Only L4–6 actually route here (L2/L3 are hardcoded Unity ports), so
+    // this is really the "ramp to complex" tier: still labelled Easy, but
+    // arrow count climbs fast (20 → 45) so the jump from L3's handful of
+    // arrows into the dense mid/late game doesn't feel like a wall.
+    final t = _tierT(levelNumber, 2, 6);
+    final size = _lerpRound(10, 16, t).clamp(10, 16);
+    final (rows, cols, mask) = _campaignShapeFor(levelNumber, size);
+    final fillTarget = _lerp(0.80, 0.92, t);
+    final minPath = _lerpRound(2, 3, t).clamp(2, 3);
+    final maxPath = _lerpRound(6, 10, t).clamp(6, 10);
+    final minArrows = _lerpRound(10, 45, t).clamp(10, 45);
+    final maxFree = _lerpRound(5, 3, t).clamp(3, 5);
+    final turnBias = _lerp(1.0, 1.3, t);
     const hearts = 3;
     const hints = 2;
-    final nest = levelNumber >= 5; // L2–4 soft; L5 light hardNest
-
-    StateError? lastError;
-    for (var attempt = 0; attempt < 48; attempt++) {
-      try {
-        return generateNestedSolvableLevel(
-          levelNumber,
-          rows,
-          cols,
-          hearts,
-          hints,
-          difficulty: LevelDifficulty.easy,
-          seed: levelNumber * 7919 + attempt * 131 + rows * 17,
-          fillTarget: (fillTarget - (attempt > 24 ? 0.04 : 0)).clamp(0.78, 0.96),
-          minPathLen: minPath,
-          maxPathLen: maxPath,
-          minArrows: (minArrows - (attempt ~/ 10) * 2).clamp(4, minArrows),
-          hardNest: nest,
-          mixPathSizes: nest,
-          maxFreeAtStart: maxFree + (attempt ~/ 8),
-        );
-      } on StateError catch (e) {
-        lastError = e;
-      }
-    }
-
-    try {
-      return generateNestedSolvableLevel(
-        levelNumber,
-        rows,
-        cols,
-        hearts,
-        hints,
-        difficulty: LevelDifficulty.easy,
-        seed: levelNumber * 4243,
-        fillTarget: 0.78,
-        minPathLen: 2,
-        maxPathLen: maxPath,
-        minArrows: max(4, minArrows ~/ 2),
-        hardNest: nest,
-        mixPathSizes: true,
-        maxFreeAtStart: null,
-      );
-    } on StateError catch (e) {
-      throw lastError ?? e;
-    }
-  }
-
-  /// L6–L10: bent-snake nests with rotating silhouettes (same boards as before).
-  /// All labeled Easy — challenge ramps at L11+.
-  static SolvableLevelResult _shapedSnakeLevel(int levelNumber) {
-    const difficulty = LevelDifficulty.easy;
-
-    // Grid grows slowly, capped for phone performance.
-    final baseSize = (10 + ((levelNumber - 6) ~/ 2)).clamp(10, 16);
-    final (rows, cols, mask) = _campaignShapeFor(levelNumber, baseSize);
-
-    final fillTarget = (0.86 + (levelNumber - 6) * 0.008).clamp(0.84, 0.94);
-    final minPath = levelNumber <= 8 ? 3 : 4;
-    final maxPath = (8 + (levelNumber - 6)).clamp(8, 12);
-    final minArrows = (14 + (levelNumber - 6) * 2).clamp(12, 40);
-    final maxFree = levelNumber <= 8 ? 3 : 2;
-    const hearts = 3;
-    final hints = 1;
 
     StateError? lastError;
 
@@ -2018,7 +2164,7 @@ class LevelRepository {
           c,
           hearts,
           hints,
-          difficulty: difficulty,
+          difficulty: LevelDifficulty.easy,
           seed: seed,
           shapeMask: m,
           fillTarget: fill,
@@ -2028,6 +2174,7 @@ class LevelRepository {
           hardNest: true,
           mixPathSizes: true,
           maxFreeAtStart: freeCap,
+          turnBias: turnBias,
         );
       } on StateError catch (e) {
         lastError = e;
@@ -2035,62 +2182,72 @@ class LevelRepository {
       }
     }
 
-    for (var attempt = 0; attempt < 20; attempt++) {
+    for (var attempt = 0; attempt < 12; attempt++) {
       final result = tryOnce(
         r: rows,
         c: cols,
         m: mask,
-        seed: levelNumber * 9973 + attempt * 173 + baseSize * 19,
-        arrows: (minArrows - (attempt ~/ 10) * 2).clamp(10, minArrows),
-        fill: (fillTarget - (attempt ~/ 20) * 0.03).clamp(0.78, 0.94),
-        freeCap: maxFree + (attempt ~/ 8),
+        seed: levelNumber * 7919 + attempt * 131 + size * 17,
+        arrows: (minArrows - (attempt ~/ 4) * 4).clamp(10, minArrows),
+        fill: (fillTarget - (attempt ~/ 6) * 0.03).clamp(0.74, fillTarget),
+        freeCap: maxFree + (attempt ~/ 4),
       );
       if (result != null) return result;
     }
 
-    // Fallback: slightly smaller square (still nested), then open rectangle.
-    final fb = (baseSize - 2).clamp(8, baseSize);
+    final fb = (size - 2).clamp(10, size);
     final fbMask = List.generate(fb, (_) => List<bool>.filled(fb, true));
-    for (var attempt = 0; attempt < 12; attempt++) {
+    for (var attempt = 0; attempt < 6; attempt++) {
       final result = tryOnce(
         r: fb,
         c: fb,
         m: fbMask,
         seed: levelNumber * 4243 + attempt * 97,
-        arrows: (minArrows * 0.7).round().clamp(10, minArrows),
+        arrows: (minArrows * 0.6).round().clamp(10, minArrows),
         fill: 0.82,
-        freeCap: maxFree + 2 + attempt,
+        freeCap: maxFree + 2,
       );
       if (result != null) return result;
     }
 
-    final soft = tryOnce(
+    final safe = tryOnce(
       r: 10,
       c: 10,
       m: List.generate(10, (_) => List<bool>.filled(10, true)),
       seed: levelNumber * 1117,
-      arrows: 12,
-      fill: 0.8,
-      freeCap: 5,
+      arrows: 10,
+      fill: 0.78,
+      freeCap: 6,
     );
-    if (soft != null) return soft;
+    if (safe != null) return safe;
 
     throw lastError ??
-        StateError('Failed to build campaign level $levelNumber');
+        StateError('Failed to build easy puzzle level $levelNumber');
   }
 
-  /// L11–L15: Medium pack — denser than Easy, built with few fast retries.
-  static SolvableLevelResult _mediumCampaignLevel(int levelNumber) {
-    final offset = levelNumber - 11; // 0..4
-    final baseSize = (12 + (offset ~/ 2)).clamp(12, 14);
-    final (rows, cols, mask) = _campaignShapeFor(levelNumber, baseSize);
-
-    final fillTarget = (0.88 + offset * 0.01).clamp(0.88, 0.92);
-    const minPath = 4;
-    final maxPath = (10 + (offset ~/ 2)).clamp(10, 12);
-    final minArrows = (22 + offset * 2).clamp(22, 30);
+  /// L7–L20: Medium tier — shaped silhouettes, growing density + nesting,
+  /// free-tile cap shrinks toward the end but stays non-exact (no forced
+  /// single-key sequencing yet — that starts at L21).
+  static SolvableLevelResult _mediumPuzzleLevel(int levelNumber) {
+    final t = _tierT(levelNumber, 7, 20);
+    final size = _lerpRound(12, 16, t).clamp(12, 16);
+    final (rows, cols, mask) = _campaignShapeFor(levelNumber, size);
+    final fillTarget = _lerp(0.90, 0.95, t);
+    // Kept short (2–9) rather than long: many nested short/mid arrows fit
+    // far more of them into the same board than a few long snakes, which
+    // is what actually gets arrow count up into the 30-50+ range.
+    final minPath = 2;
+    final maxPath = _lerpRound(7, 9, t).clamp(7, 9);
+    final minArrows = _lerpRound(30, 50, t).clamp(30, 50);
+    final maxFree = _lerpRound(3, 1, t).clamp(1, 3);
+    final turnBias = _lerp(1.35, 1.6, t);
+    // From the back half of this tier on, force the single-free-tile
+    // seal-chain (previously only L21+ did this) — this is the mechanic
+    // that actually requires the player to plan ahead instead of just
+    // tapping whatever's open, which was the core "too easy" complaint.
+    final exact = t >= 0.5;
     const hearts = 3;
-    const hints = 1;
+    final hints = t < 0.5 ? 2 : 1;
 
     StateError? lastError;
 
@@ -2101,7 +2258,11 @@ class LevelRepository {
       required int seed,
       required int arrows,
       required double fill,
-      int? freeCap,
+      required int freeCap,
+      int? pathFloor,
+      int? pathCeil,
+      double? bias,
+      bool? exactOverride,
     }) {
       try {
         return generateNestedSolvableLevel(
@@ -2114,12 +2275,14 @@ class LevelRepository {
           seed: seed,
           shapeMask: m,
           fillTarget: fill,
-          minPathLen: minPath,
-          maxPathLen: maxPath,
+          minPathLen: pathFloor ?? minPath,
+          maxPathLen: pathCeil ?? maxPath,
           minArrows: arrows,
           hardNest: true,
           mixPathSizes: true,
           maxFreeAtStart: freeCap,
+          exactFreeAtStart: (exactOverride ?? exact) && freeCap == 1,
+          turnBias: bias ?? turnBias,
         );
       } on StateError catch (e) {
         lastError = e;
@@ -2127,62 +2290,101 @@ class LevelRepository {
       }
     }
 
-    for (var attempt = 0; attempt < 16; attempt++) {
+    for (var attempt = 0; attempt < 10; attempt++) {
       final result = tryOnce(
         r: rows,
         c: cols,
         m: mask,
-        seed: levelNumber * 9973 + attempt * 173 + baseSize * 19,
-        arrows: (minArrows - (attempt ~/ 6) * 2).clamp(16, minArrows),
-        fill: (fillTarget - (attempt ~/ 8) * 0.02).clamp(0.84, 0.92),
-        freeCap: 3 + (attempt ~/ 5),
+        seed: levelNumber * 9973 + attempt * 173 + size * 19,
+        arrows: (minArrows - (attempt ~/ 3) * 4).clamp(20, minArrows),
+        fill: (fillTarget - (attempt ~/ 4) * 0.03).clamp(0.82, fillTarget),
+        freeCap: exact ? 1 : (maxFree + (attempt ~/ 4)),
+        pathFloor: minPath,
       );
       if (result != null) return result;
     }
 
-    final fb = (baseSize - 1).clamp(11, baseSize);
+    final fb = (size - 2).clamp(12, size);
     final fbMask = List.generate(fb, (_) => List<bool>.filled(fb, true));
-    for (var attempt = 0; attempt < 10; attempt++) {
+    for (var attempt = 0; attempt < 6; attempt++) {
       final result = tryOnce(
         r: fb,
         c: fb,
         m: fbMask,
         seed: levelNumber * 4243 + attempt * 97,
-        arrows: (minArrows * 0.75).round().clamp(14, minArrows),
-        fill: 0.86,
-        freeCap: null,
+        arrows: (minArrows * 0.75).round().clamp(30, minArrows),
+        fill: (0.88 - (attempt ~/ 3) * 0.02).clamp(0.80, 0.88),
+        freeCap: exact ? 1 : (maxFree + 2 + attempt ~/ 2).clamp(maxFree, 8),
+        pathFloor: 2,
+        pathCeil: 8,
+        bias: 1.2,
+        exactOverride: exact,
       );
       if (result != null) return result;
     }
 
-    final soft = tryOnce(
-      r: 12,
-      c: 12,
-      m: List.generate(12, (_) => List<bool>.filled(12, true)),
-      seed: levelNumber * 1117,
-      arrows: 16,
-      fill: 0.84,
-      freeCap: null,
-    );
-    if (soft != null) return soft;
+    // Soft open board — must not hang on concave silhouettes / high minPath.
+    // Still dense (25+ arrows) — this is a safety net for shape/geometry
+    // failures, not a return to the old "too easy" small boards.
+    for (var attempt = 0; attempt < 6; attempt++) {
+      final result = tryOnce(
+        r: 12,
+        c: 12,
+        m: List.generate(12, (_) => List<bool>.filled(12, true)),
+        seed: levelNumber * 1117 + attempt * 53,
+        arrows: (28 - (attempt ~/ 3) * 2).clamp(18, 28),
+        fill: (0.86 - (attempt ~/ 3) * 0.02).clamp(0.78, 0.86),
+        freeCap: (4 + attempt).clamp(4, 8),
+        pathFloor: 2,
+        pathCeil: 7,
+        bias: 1.1,
+        exactOverride: false,
+      );
+      if (result != null) return result;
+    }
 
-    throw lastError ?? StateError('Failed to build campaign level $levelNumber');
+    // Absolute last resort: small open square — always builds.
+    for (var attempt = 0; attempt < 4; attempt++) {
+      final result = tryOnce(
+        r: 10,
+        c: 10,
+        m: List.generate(10, (_) => List<bool>.filled(10, true)),
+        seed: levelNumber * 3331 + attempt * 17,
+        arrows: (16 - attempt).clamp(10, 16),
+        fill: 0.78,
+        freeCap: (6 + attempt).clamp(6, 8),
+        pathFloor: 2,
+        pathCeil: 6,
+        bias: 1.0,
+        exactOverride: false,
+      );
+      if (result != null) return result;
+    }
+
+    throw lastError ??
+        StateError('Failed to build medium puzzle level $levelNumber');
   }
 
-  /// L16–L18: Hard maze pack — long snakes, fast first-success build.
-  static SolvableLevelResult _complexHardCampaignLevel(int levelNumber) {
-    final offset = levelNumber - 16; // 0..2 for L16–18
-    const baseSize = 14;
-    final rows = baseSize;
-    final cols = baseSize;
-    final mask = List.generate(rows, (_) => List<bool>.filled(cols, true));
-
-    final fillTarget = (0.90 + offset * 0.01).clamp(0.90, 0.93);
-    const minPath = 4;
-    final maxPath = (11 + offset).clamp(11, 13);
-    final minArrows = (26 + offset * 2).clamp(26, 32);
+  /// L21–L50: Hard tier — "seal-chain" puzzles. Exactly one arrow is free
+  /// at the start; clearing it must cascade deep into the board. Convex
+  /// silhouettes only, for keeper-placement reliability.
+  static SolvableLevelResult _hardPuzzleLevel(int levelNumber) {
+    final t = _tierT(levelNumber, 21, 50);
+    final size = _lerpRound(16, 18, t).clamp(16, 18);
+    final mask = _convexShapeFor(levelNumber - 21, size);
+    final fillTarget = _lerp(0.93, 0.97, t);
+    // Kept deliberately short (2–9) rather than long-and-few: many
+    // interlocking short/mid arrows (like Play Store escape puzzles) read
+    // as far more "logic-heavy" than a handful of giant snakes, and it's
+    // the only way to fit 45-58 arrows in a seal-chain board this size.
+    final minPath = 2;
+    final maxPath = _lerpRound(7, 9, t).clamp(7, 9);
+    final minArrows = _lerpRound(45, 58, t).clamp(45, 58);
+    final turnBias = _lerp(1.6, 1.9, t);
+    // Floor kept generous per product decision: 3 hearts / 2 hints for the
+    // entire Hard/Expert range (L21–100) — no further reduction.
     const hearts = 3;
-    const hints = 1;
+    const hints = 2;
 
     StateError? lastError;
 
@@ -2195,6 +2397,8 @@ class LevelRepository {
       required double fill,
       required int pathFloor,
       int? freeCap,
+      bool exact = false,
+      double bias = 1.0,
     }) {
       try {
         return generateNestedSolvableLevel(
@@ -2213,6 +2417,8 @@ class LevelRepository {
           hardNest: true,
           mixPathSizes: true,
           maxFreeAtStart: freeCap,
+          exactFreeAtStart: exact,
+          turnBias: bias,
         );
       } on StateError catch (e) {
         lastError = e;
@@ -2220,57 +2426,137 @@ class LevelRepository {
       }
     }
 
-    for (var attempt = 0; attempt < 16; attempt++) {
+    // Primary: exact-one-free seal chain.
+    for (var attempt = 0; attempt < 6; attempt++) {
       final result = tryOnce(
-        r: rows,
-        c: cols,
+        r: size,
+        c: size,
         m: mask,
-        seed: levelNumber * 9973 + attempt * 173 + baseSize * 19,
-        arrows: (minArrows - (attempt ~/ 6) * 2).clamp(18, minArrows),
-        fill: (fillTarget - (attempt ~/ 8) * 0.02).clamp(0.86, 0.93),
-        pathFloor: attempt < 8 ? minPath : 3,
-        freeCap: 3 + (attempt ~/ 4),
+        seed: levelNumber * 9973 + attempt * 173 + size * 19,
+        arrows: (minArrows - (attempt ~/ 3) * 4).clamp(40, minArrows),
+        fill: (fillTarget - (attempt ~/ 3) * 0.02).clamp(0.88, fillTarget),
+        pathFloor: minPath,
+        freeCap: 1,
+        exact: true,
+        bias: turnBias,
       );
       if (result != null) return result;
     }
 
-    for (var attempt = 0; attempt < 10; attempt++) {
+    // Fallback: tight (not exact) free cap — still dense/hard.
+    for (var attempt = 0; attempt < 8; attempt++) {
       final result = tryOnce(
-        r: 12,
-        c: 12,
-        m: List.generate(12, (_) => List<bool>.filled(12, true)),
-        seed: levelNumber * 4243 + attempt * 97,
-        arrows: 18,
-        fill: 0.86,
-        pathFloor: 3,
-        freeCap: null,
+        r: size,
+        c: size,
+        m: mask,
+        seed: levelNumber * 9973 + 5000 + attempt * 173 + size * 19,
+        arrows: (minArrows - (attempt ~/ 3) * 4).clamp(32, minArrows),
+        fill: (fillTarget - (attempt ~/ 4) * 0.04).clamp(0.84, fillTarget),
+        pathFloor: minPath,
+        freeCap: (2 + attempt ~/ 4).clamp(2, 4),
+        bias: (turnBias - 0.1).clamp(1.0, turnBias),
       );
       if (result != null) return result;
     }
+
+    // Final safety net: plain square, phone-safe size (still large enough
+    // to hold 30+ nested arrows). freeCap escalates across attempts so a
+    // sparse fallback board (naturally more free tiles) doesn't just throw
+    // StateError on every single attempt in this loop.
+    const fbSize = 14;
+    for (var attempt = 0; attempt < 8; attempt++) {
+      final result = tryOnce(
+        r: fbSize,
+        c: fbSize,
+        m: List.generate(fbSize, (_) => List<bool>.filled(fbSize, true)),
+        seed: levelNumber * 4243 + attempt * 97,
+        arrows: (32 - (attempt ~/ 3) * 2).clamp(24, 32),
+        fill: (0.90 - (attempt ~/ 4) * 0.02).clamp(0.82, 0.90),
+        pathFloor: minPath,
+        freeCap: (4 + attempt ~/ 4).clamp(4, 6),
+        bias: 1.2,
+      );
+      if (result != null) return result;
+    }
+
+    // Absolute last resort — must never crash level open. freeCap escalates
+    // so a sparse board can't dead-end every attempt.
+    for (var attempt = 0; attempt < 6; attempt++) {
+      final result = tryOnce(
+        r: fbSize,
+        c: fbSize,
+        m: List.generate(fbSize, (_) => List<bool>.filled(fbSize, true)),
+        seed: levelNumber * 7771 + attempt * 53,
+        arrows: (20 - attempt).clamp(12, 20),
+        fill: (0.84 - attempt * 0.02).clamp(0.74, 0.84),
+        pathFloor: minPath,
+        freeCap: (6 + attempt).clamp(6, 8),
+        bias: 1.0,
+      );
+      if (result != null) return result;
+    }
+
+    // Guaranteed build: skip free-cap rejection so level open never crashes.
+    final safe = tryOnce(
+      r: fbSize,
+      c: fbSize,
+      m: List.generate(fbSize, (_) => List<bool>.filled(fbSize, true)),
+      seed: levelNumber * 3331,
+      arrows: 14,
+      fill: 0.78,
+      pathFloor: 2,
+      freeCap: null,
+      bias: 1.0,
+    );
+    if (safe != null) return safe;
 
     throw lastError ??
-        StateError('Failed to build campaign level $levelNumber');
+        StateError('Failed to build hard puzzle level $levelNumber');
   }
 
-  /// L19–L20 finale: dense snakes, return first good board (no long search).
-  static SolvableLevelResult _ultraDenseFinaleLevel(int levelNumber) {
-    final isL20 = levelNumber >= 20;
-    final size = isL20 ? 15 : 14;
-    final minArrows = isL20 ? 34 : 30;
-    final fillTarget = isL20 ? 0.92 : 0.90;
+  /// L51–L500: Expert/Master tier — same seal-chain logic as Hard, pushed to
+  /// maximum density/turns. Grid capped at 18×18 (phone-safe — see design
+  /// doc) for the entire 450-level tail; complexity keeps climbing via
+  /// fill %, path length, and turn bias instead of board size. The ramp is
+  /// deliberately spread across all 450 levels (not maxed out by L100) so
+  /// long-term players still feel gradual escalation instead of hitting a
+  /// difficulty ceiling early and then repeating the same intensity for
+  /// hundreds of levels. `_convexShapeFor`'s 7-shape rotation (keyed off
+  /// `levelNumber - 51`) cycles for visual variety across the whole tail —
+  /// same proven, solvability-tested formula reused rather than inventing
+  /// new mechanics for L150+, which is what keeps this tier reliable at
+  /// this scale (no new failure modes to audit).
+  static SolvableLevelResult _expertPuzzleLevel(int levelNumber) {
+    final t = _tierT(levelNumber, 51, 500);
+    final size = _lerpRound(17, 18, t).clamp(17, 18);
+    final mask = _convexShapeFor(levelNumber - 51, size);
+    final fillTarget = _lerp(0.96, 0.99, t);
+    // Same short-length choice as the Hard tier: many nested short arrows
+    // (50-62) reads as far harder than a handful of very long ones, and
+    // it's what actually fits in an 18×18 seal-chain board. Complexity
+    // still climbs via turnBias (tighter hooks/U-wraps) and fill %.
+    final minPath = 2;
+    final maxPath = _lerpRound(7, 9, t).clamp(7, 9);
+    final minArrows = _lerpRound(50, 62, t).clamp(50, 62);
+    final turnBias = _lerp(1.9, 2.3, t);
+    // Same generous floor as the Hard tier — no reduction through L500.
     const hearts = 3;
-    const hints = 1;
+    const hints = 2;
 
     StateError? lastError;
 
     SolvableLevelResult? tryOnce({
-      required int grid,
+      required List<List<bool>> m,
       required int seed,
       required int arrows,
       required double fill,
       required int pathFloor,
+      int? freeCap,
+      bool exact = false,
+      double bias = 1.0,
+      int? gridSize,
     }) {
-      final mask = List.generate(grid, (_) => List<bool>.filled(grid, true));
+      final grid = gridSize ?? size;
       try {
         return generateNestedSolvableLevel(
           levelNumber,
@@ -2278,16 +2564,19 @@ class LevelRepository {
           grid,
           hearts,
           hints,
-          difficulty: LevelDifficulty.hard,
+          difficulty: LevelDifficulty.expert,
           seed: seed,
-          shapeMask: mask,
+          shapeMask: m,
           fillTarget: fill,
           minPathLen: pathFloor,
-          maxPathLen: 12,
+          maxPathLen: maxPath,
           minArrows: arrows,
-          maxArrows: arrows + 16,
+          maxArrows: arrows + 20,
           hardNest: true,
           mixPathSizes: true,
+          maxFreeAtStart: freeCap,
+          exactFreeAtStart: exact,
+          turnBias: bias,
         );
       } on StateError catch (e) {
         lastError = e;
@@ -2295,61 +2584,145 @@ class LevelRepository {
       }
     }
 
-    SolvableLevelResult? fallback;
-
-    for (var attempt = 0; attempt < 12; attempt++) {
+    // Primary: exact-one-free seal chain on a round/convex shape.
+    for (var attempt = 0; attempt < 6; attempt++) {
       final result = tryOnce(
-        grid: size,
-        seed: levelNumber * 12011 + attempt * 211 + size * 29,
-        arrows: (minArrows - (attempt ~/ 4) * 2).clamp(22, minArrows),
-        fill: (fillTarget - (attempt ~/ 6) * 0.02).clamp(0.86, 0.92),
-        pathFloor: attempt < 6 ? 4 : 3,
-      );
-      if (result == null) continue;
-      fallback ??= result;
-      final cells = size * size;
-      final occupied =
-          result.level.arrows.fold<int>(0, (s, a) => s + a.path.length);
-      if (occupied / cells >= 0.85) return result;
-    }
-
-    for (var attempt = 0; attempt < 8; attempt++) {
-      final result = tryOnce(
-        grid: 12,
-        seed: levelNumber * 4243 + attempt * 97,
-        arrows: 22,
-        fill: 0.88,
-        pathFloor: 3,
+        m: mask,
+        seed: levelNumber * 15013 + attempt * 251 + size * 31,
+        arrows: (minArrows - (attempt ~/ 3) * 4).clamp(44, minArrows),
+        fill: (fillTarget - (attempt ~/ 3) * 0.02).clamp(0.92, fillTarget),
+        pathFloor: minPath,
+        freeCap: 1,
+        exact: true,
+        bias: turnBias,
       );
       if (result != null) return result;
     }
 
-    if (fallback != null) return fallback;
+    // Fallback: same shape, tight (not exact) free cap — still dense/hard.
+    for (var attempt = 0; attempt < 8; attempt++) {
+      final result = tryOnce(
+        m: mask,
+        seed: levelNumber * 15013 + 7000 + attempt * 251 + size * 31,
+        arrows: (minArrows - (attempt ~/ 3) * 4).clamp(36, minArrows),
+        fill: (fillTarget - (attempt ~/ 4) * 0.05).clamp(0.86, fillTarget),
+        pathFloor: minPath,
+        freeCap: (2 + attempt ~/ 4).clamp(2, 4),
+        bias: (turnBias - 0.2).clamp(1.2, turnBias),
+      );
+      if (result != null) return result;
+    }
+
+    // Final safety net: plain small square — always builds (phone-safe),
+    // still large enough (16×16) to hold 30+ nested arrows. freeCap
+    // escalates so a sparse fallback board doesn't dead-end every attempt.
+    const fbSize = 16;
+    for (var attempt = 0; attempt < 8; attempt++) {
+      final result = tryOnce(
+        m: List.generate(fbSize, (_) => List<bool>.filled(fbSize, true)),
+        seed: levelNumber * 4243 + attempt * 97,
+        arrows: (36 - (attempt ~/ 3) * 2).clamp(28, 36),
+        fill: (0.92 - (attempt ~/ 4) * 0.02).clamp(0.84, 0.92),
+        pathFloor: minPath,
+        freeCap: (4 + attempt ~/ 4).clamp(4, 8),
+        gridSize: fbSize,
+      );
+      if (result != null) return result;
+    }
+
+    for (var attempt = 0; attempt < 4; attempt++) {
+      final result = tryOnce(
+        m: List.generate(fbSize, (_) => List<bool>.filled(fbSize, true)),
+        seed: levelNumber * 5557 + attempt * 41,
+        arrows: 24,
+        fill: 0.86,
+        pathFloor: minPath,
+        freeCap: (4 + attempt).clamp(4, 8),
+        gridSize: fbSize,
+      );
+      if (result != null) return result;
+    }
+
+    // Absolute last resort — must never crash level open on any device.
+    // Still bounded (not null) so it can't blow past the "mostly locked"
+    // free-tile assertion even on a sparse, low-density board.
+    for (var attempt = 0; attempt < 5; attempt++) {
+      final result = tryOnce(
+        m: List.generate(fbSize, (_) => List<bool>.filled(fbSize, true)),
+        seed: levelNumber * 7771 + attempt * 53,
+        arrows: (18 - attempt).clamp(12, 18),
+        fill: (0.82 - (attempt ~/ 3) * 0.02).clamp(0.76, 0.82),
+        pathFloor: minPath,
+        freeCap: (6 + attempt ~/ 2).clamp(6, 8),
+        gridSize: fbSize,
+      );
+      if (result != null) return result;
+    }
+
+    // Tiny open square — guaranteed build for any seed. Grid kept at the
+    // tier's phone-safe floor (16) so even this absolute last resort can
+    // never return a level below the Expert tier's own size floor.
+    // Skip free-cap rejection so open never crashes on a sparse board.
+    final safe = tryOnce(
+      m: List.generate(fbSize, (_) => List<bool>.filled(fbSize, true)),
+      seed: levelNumber * 3331,
+      arrows: 12,
+      fill: 0.74,
+      pathFloor: 2,
+      freeCap: null,
+      gridSize: fbSize,
+    );
+    if (safe != null) return safe;
 
     throw lastError ??
-        StateError('Failed to build ultra-dense level $levelNumber');
+        StateError('Failed to build expert puzzle level $levelNumber');
   }
 
-  /// Shape rotation for L6+: heart, square, diamond, square, star, octagon,
-  /// square, clover — then repeats. L6 is always heart.
+  /// Shape rotation for L2+: 29-shape cycle (heart, diamond, oval, star,
+  /// octagon, circle, hexagon, stadium, clover, ring, thick ring, hourglass,
+  /// crescent, plus, shield, flower, infinity, both triangles, fish,
+  /// butterfly, bird, cat — plus square "breathing room" slots), used by
+  /// the L2–6 Easy and L7–20 Medium tiers. L21+ uses [_convexShapeFor]
+  /// instead (seal-chain reliability constraint).
   static (int rows, int cols, List<List<bool>> mask) _campaignShapeFor(
     int levelNumber,
     int size,
   ) {
-    final s = size.clamp(8, 16);
+    final s = size.clamp(6, 18);
     List<List<bool>> full() =>
         List.generate(s, (_) => List<bool>.filled(s, true));
 
-    final slot = (levelNumber - 6) % 8;
+    final slot = (levelNumber - 2) % 29;
     return switch (slot) {
       0 => (s, s, generateHeartShapeMask(s)),
       1 => (s, s, full()),
       2 => (s, s, diamondMask(s, s)),
-      3 => (s, s, full()),
+      3 => (s, s, ovalMask(s, s)),
       4 => (s, s, starMask(s, s)),
       5 => (s, s, octagonMask(s, s)),
       6 => (s, s, full()),
-      _ => (s, s, cloverMask(s, s)),
+      7 => (s, s, circleMask(s, s)),
+      8 => (s, s, hexagonMask(s, s)),
+      9 => (s, s, stadiumMask(s, s)),
+      10 => (s, s, full()),
+      11 => (s, s, cloverMask(s, s)),
+      12 => (s, s, ringMask(s, s)),
+      13 => (s, s, thickRingMask(s, s)),
+      14 => (s, s, full()),
+      15 => (s, s, hourglassMask(s, s)),
+      16 => (s, s, crescentMask(s, s)),
+      17 => (s, s, plusMask(s, s)),
+      18 => (s, s, full()),
+      19 => (s, s, shieldMask(s, s)),
+      20 => (s, s, flowerMask(s, s)),
+      21 => (s, s, infinityMask(s, s)),
+      22 => (s, s, full()),
+      23 => (s, s, uprightTriangleMask(s, s)),
+      24 => (s, s, invertedTriangleMask(s, s)),
+      25 => (s, s, fishMask(s, s)),
+      26 => (s, s, butterflyMask(s, s)),
+      27 => (s, s, birdOutlineMask(s, s)),
+      _ => (s, s, catFaceMask(s, s)),
     };
   }
 

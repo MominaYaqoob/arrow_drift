@@ -19,6 +19,9 @@ dependencies:
   go_router: ^15.1.2
   url_launcher: ^6.3.2
   package_info_plus: ^10.2.1
+  audioplayers: ^6.8.1
+  google_mobile_ads: ^8.0.0
+  connectivity_plus: ^7.1.1
 
 dev_dependencies:
   flutter_test:
@@ -49,3 +52,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/branding/app_icon.png
+    - assets/sounds/tap_ok.wav
+    - assets/sounds/tap_wrong.wav
+    - assets/sounds/level_win.wav
+    - assets/sounds/ui_tap.wav

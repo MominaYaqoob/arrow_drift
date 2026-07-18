@@ -117,8 +117,6 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
     _exitOffset = _buildExitOffset(widget.arrow.direction);
     _exitController.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
-        // ignore: avoid_print
-        print('ESCAPE DONE: arrow=${widget.arrow.id}');
         setState(() => _exitFinished = true);
       }
     });
@@ -381,10 +379,6 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
     _entranceController.stop();
     _entranceController.value = 1;
     _exitOffset = _buildExitOffset(widget.arrow.direction);
-    // ignore: avoid_print
-    print(
-      'ESCAPE START: arrow=${widget.arrow.id} direction=${widget.arrow.direction}',
-    );
     _exitController.forward(from: 0);
     if (mounted) setState(() {});
   }
@@ -520,8 +514,12 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
     final baseColor =
         isDark ? colors.arrowLight : ArrowTile.referenceArrowColor;
     final cell = widget.cellSize;
+    // Unity reference uses a thin, uniform stroke relative to its grid step
+    // (Line prefab widthMultiplier: 0.1) rather than the thicker ~0.2 ratio
+    // this used before — thinned toward that reference while keeping a
+    // slightly higher floor/ceiling for touch-target legibility on mobile.
     // Dense / large grids (daily ~100 arrows): thinner stroke so board stays readable.
-    final strokeWidth = (cell * 0.2).clamp(2.0, 5.0);
+    final strokeWidth = (cell * 0.15).clamp(1.6, 4.0);
     final multi = widget.arrow.isMultiCell;
 
     return AnimatedBuilder(
@@ -721,12 +719,15 @@ class ArrowPolylinePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (points.length < 2) return;
 
+    // Unity reference (Line (1).prefab): numCornerVertices: 0, numCapVertices: 0
+    // — sharp miter joins + flat butt caps, not rounded. Matches the crisp
+    // blocky maze look in the reference screenshots.
     final stroke = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.butt
+      ..strokeJoin = StrokeJoin.miter
       ..isAntiAlias = true;
 
     final tip = points.last;
@@ -814,11 +815,12 @@ class ArrowPathPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Flat butt cap to match the Unity reference (numCapVertices: 0).
     final stroke = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round
+      ..strokeCap = StrokeCap.butt
       ..isAntiAlias = true;
 
     final headLen = (strokeWidth * 2.6).clamp(7.0, 13.0);

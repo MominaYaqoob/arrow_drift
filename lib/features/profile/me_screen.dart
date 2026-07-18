@@ -94,7 +94,19 @@ class MeScreen extends ConsumerWidget {
             onNameTap: () => _editNickname(context, ref, nickname),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+            // Bottom inset adds the device's gesture-nav / system-bar safe
+            // area on top of the existing 32px design spacing, so the
+            // trailing ad slot never sits flush against (or under) Android's
+            // bottom gesture bar on devices with larger insets. This screen
+            // uses a scrolling ListView (not a fixed-height Scaffold body),
+            // so a SafeArea ancestor wouldn't reliably reserve this space —
+            // reading the inset directly is the correct fix here.
+            padding: EdgeInsets.fromLTRB(
+              16,
+              20,
+              16,
+              32 + MediaQuery.paddingOf(context).bottom,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

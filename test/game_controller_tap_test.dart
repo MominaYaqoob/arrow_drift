@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arrow_drift/data/models/arrow_model.dart';
+import 'package:arrow_drift/data/models/level_model.dart';
 import 'package:arrow_drift/data/repositories/level_repository.dart';
 import 'package:arrow_drift/features/gameplay/game_controller.dart';
 
@@ -85,9 +86,9 @@ void main() {
           isTrue);
     });
 
-    test('levels 1-20 can be fully cleared by always tapping a free arrow', () {
+    test('levels 1-30 can be fully cleared by always tapping a free arrow', () {
       final repo = LevelRepository();
-      for (var n = 1; n <= 20; n++) {
+      for (var n = 1; n <= 30; n++) {
         final level = repo.getLevel(n);
         final controller = GameController(level);
         var safety = 0;
@@ -141,6 +142,31 @@ void main() {
       expect(after, before - 1);
       expect(
         controller.state.arrows.firstWhere((a) => a.id == id).isRemoved,
+        isTrue,
+      );
+    });
+
+    test('a blocked tap only costs a heart — nothing removed', () {
+      final arrows = [
+        ArrowModel(id: 'a', row: 0, col: 0, direction: ArrowDirection.right),
+        ArrowModel(id: 'b', row: 0, col: 1, direction: ArrowDirection.left),
+      ];
+      final level = LevelModel(
+        levelNumber: 9002,
+        gridRows: 1,
+        gridCols: 2,
+        arrows: arrows,
+        heartsAllowed: 3,
+        hintsAllowed: 1,
+      );
+      final controller = GameController(level);
+      final beforeHearts = controller.state.heartsLeft;
+      final result = controller.tapArrow('a');
+
+      expect(result, TapArrowResult.wrongTap);
+      expect(controller.state.heartsLeft, beforeHearts - 1);
+      expect(
+        controller.state.arrows.every((arrow) => !arrow.isRemoved),
         isTrue,
       );
     });

@@ -314,6 +314,7 @@ class GameController extends StateNotifier<GameState> {
   ///
   /// Free arrows are removed. Blocked arrows cost one heart and return
   /// [TapArrowResult.wrongTap] so the UI can play a shake animation.
+  /// One tap removes only the tapped arrow (no cascade).
   TapArrowResult tapArrow(String arrowId) {
     if (state.isWon || state.isLost) return TapArrowResult.ignored;
 
@@ -332,7 +333,6 @@ class GameController extends StateNotifier<GameState> {
     );
 
     if (!blocked) {
-      // New list + new instances so Riverpod / UI always rebuild.
       final updatedArrows = [
         for (final item in state.arrows)
           if (item.id == arrowId)
