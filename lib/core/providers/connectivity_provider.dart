@@ -26,10 +26,7 @@ class ConnectivityNotifier extends StateNotifier<bool> {
     try {
       return await NetworkStatus.instance.isOnline();
     } catch (_) {
-      // Same policy as NetworkStatus itself: a broken *check* shouldn't
-      // permanently lock the player out — assume online, and let the
-      // live stream correct it on the next real change.
-      return true;
+      return false;
     }
   }
 

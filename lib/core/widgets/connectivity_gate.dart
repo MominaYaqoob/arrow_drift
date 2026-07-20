@@ -53,6 +53,9 @@ class _ConnectivityGateState extends ConsumerState<ConnectivityGate> {
               child: NoInternetBlockingView(
                 retrying: _retrying,
                 onRetry: _retry,
+                title: 'Connection Lost',
+                subtitle:
+                    'Please reconnect to continue. Your game is paused and will resume when you are back online.',
               ),
             ),
           ),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:arrow_drift/core/theme/app_theme.dart';
+import 'package:arrow_drift/core/utils/online_gate.dart';
 import 'package:arrow_drift/core/widgets/app_logo.dart';
 import 'package:arrow_drift/data/repositories/level_repository.dart';
 import 'package:arrow_drift/data/repositories/progress_repository.dart';
@@ -10,16 +11,53 @@ import 'package:arrow_drift/data/repositories/settings_repository.dart';
 import 'package:arrow_drift/features/daily_challenge/daily_challenge_screen.dart';
 import 'package:arrow_drift/features/gameplay/gameplay_screen.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   static const String routePath = '/home';
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  int? _prefetchedForLevel;
+
+  void _prefetchAround(int level) {
+    if (_prefetchedForLevel == level) return;
+    _prefetchedForLevel = level;
+    final count = ref.read(levelRepositoryProvider).levelCount;
+    final resume = level > count ? count : level;
+    ref.read(levelRepositoryProvider).prefetchLevels([
+      resume,
+      if (resume < count) resume + 1,
+    ]);
+  }
+
+  Future<void> _openWhenOnline(
+    BuildContext context,
+    WidgetRef ref,
+    VoidCallback open,
+  ) async {
+    final online = await requireOnline(ref);
+    if (!context.mounted) return;
+    if (!online) {
+      await showNoInternetDialog(context);
+      return;
+    }
+    open();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final colors = context.appColors;
     final currentLevelAsync = ref.watch(currentLevelProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    ref.listen(currentLevelProvider, (previous, next) {
+      next.whenData(_prefetchAround);
+    });
+    currentLevelAsync.whenData(_prefetchAround);
 
     return Scaffold(
       body: DecoratedBox(
@@ -54,8 +92,11 @@ class HomeScreen extends ConsumerWidget {
                         const _BrandBlock(),
                         SizedBox(height: tight ? 14 : 22),
                         _DailyChallengeCard(
-                          onPlay: () =>
-                              context.go(DailyChallengeScreen.routePath),
+                          onPlay: () => _openWhenOnline(
+                            context,
+                            ref,
+                            () => context.go(DailyChallengeScreen.routePath),
+                          ),
                         ),
                         SizedBox(height: tight ? 18 : 28),
                         const Spacer(),
@@ -67,21 +108,33 @@ class HomeScreen extends ConsumerWidget {
                                 level > levelCount ? levelCount : level;
                             return _ContinueButton(
                               level: resumeLevel,
-                              onPressed: () => context.push(
-                                '${GameplayScreen.routePath}?level=$resumeLevel',
+                              onPressed: () => _openWhenOnline(
+                                context,
+                                ref,
+                                () => context.push(
+                                  '${GameplayScreen.routePath}?level=$resumeLevel',
+                                ),
                               ),
                             );
                           },
                           loading: () => _ContinueButton(
                             level: 1,
-                            onPressed: () => context.push(
-                              '${GameplayScreen.routePath}?level=1',
+                            onPressed: () => _openWhenOnline(
+                              context,
+                              ref,
+                              () => context.push(
+                                '${GameplayScreen.routePath}?level=1',
+                              ),
                             ),
                           ),
                           error: (_, _) => _ContinueButton(
                             level: 1,
-                            onPressed: () => context.push(
-                              '${GameplayScreen.routePath}?level=1',
+                            onPressed: () => _openWhenOnline(
+                              context,
+                              ref,
+                              () => context.push(
+                                '${GameplayScreen.routePath}?level=1',
+                              ),
                             ),
                           ),
                         ),

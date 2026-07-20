@@ -12,12 +12,14 @@ class NoInternetBlockingView extends StatelessWidget {
     super.key,
     required this.retrying,
     required this.onRetry,
+    this.title = 'No Internet Connection',
     this.subtitle = 'Arrow Drift needs an internet connection to continue. '
         'Please check your Wi-Fi or mobile data and try again.',
   });
 
   final bool retrying;
   final VoidCallback onRetry;
+  final String title;
   final String subtitle;
 
   @override
@@ -60,7 +62,7 @@ class NoInternetBlockingView extends StatelessWidget {
                 ),
                 const SizedBox(height: 22),
                 Text(
-                  'No Internet Connection',
+                  title,
                   textAlign: TextAlign.center,
                   style: AppTextStyles.heading(
                     fontSize: 20,

@@ -25,12 +25,10 @@ class NetworkStatus {
       final results = await _connectivity.checkConnectivity();
       return results.any((r) => r != ConnectivityResult.none);
     } catch (e) {
-      // If the platform channel itself fails (rare, but seen on some
-      // heavily-customized OEM Android builds), assume online rather than
-      // permanently locking the app out of ads over a connectivity-check
-      // bug — every ad call downstream is still individually guarded.
-      debugPrint('NetworkStatus: checkConnectivity failed, assuming online: $e');
-      return true;
+      // For strict online-only gameplay, treat check failures as offline.
+      // Ads still have their own try/catch safety nets.
+      debugPrint('NetworkStatus: checkConnectivity failed, assuming offline: $e');
+      return false;
     }
   }
 

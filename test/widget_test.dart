@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:arrow_drift/core/constants/app_constants.dart';
 import 'package:arrow_drift/core/router/app_router.dart';
 import 'package:arrow_drift/core/widgets/app_logo.dart';
+import 'package:arrow_drift/data/repositories/progress_repository.dart';
+import 'package:arrow_drift/features/consent/consent_screen.dart';
 import 'package:arrow_drift/features/home/home_screen.dart';
 import 'package:arrow_drift/features/splash/splash_loading_screen.dart';
 import 'package:arrow_drift/features/splash/splash_logo_screen.dart';
@@ -17,7 +19,8 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('Splash chain: logo -> loading -> home', (WidgetTester tester) async {
+  testWidgets('Splash chain: logo -> loading -> consent -> home',
+      (WidgetTester tester) async {
     final container = ProviderContainer();
     addTearDown(container.dispose);
 
@@ -44,7 +47,41 @@ void main() {
 
     await tester.pump(const Duration(milliseconds: 3500));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
 
+    expect(router.state.uri.path, ConsentScreen.routePath);
+    expect(find.text('Agree'), findsOneWidget);
+
+    await tester.tap(find.text('Agree'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(router.state.uri.path, HomeScreen.routePath);
+  });
+
+  testWidgets('Returning user skips consent after splash',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({
+      ProgressRepository.hasAcceptedTermsKey: true,
+    });
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const ArrowDriftApp(),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1500));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 3500));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final router = container.read(appRouterProvider);
     expect(router.state.uri.path, HomeScreen.routePath);
   });
 }

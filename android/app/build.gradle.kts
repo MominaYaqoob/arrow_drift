@@ -56,6 +56,11 @@ android {
                 // Local fallback until key.properties is present.
                 signingConfigs.getByName("debug")
             }
+            // Keep the sideloaded universal APK unminified. The Google Ads
+            // SDK already provides its own consumer rules if shrinking is
+            // enabled for a future Play Store build.
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 }

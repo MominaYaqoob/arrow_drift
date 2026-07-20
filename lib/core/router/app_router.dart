@@ -8,6 +8,7 @@ import 'package:arrow_drift/features/about/help_center_screen.dart';
 import 'package:arrow_drift/features/about/privacy_policy_screen.dart';
 import 'package:arrow_drift/features/about/terms_of_service_screen.dart';
 import 'package:arrow_drift/features/awards/awards_screen.dart';
+import 'package:arrow_drift/features/consent/consent_screen.dart';
 import 'package:arrow_drift/features/daily_challenge/daily_challenge_screen.dart';
 import 'package:arrow_drift/features/gameplay/gameplay_screen.dart';
 import 'package:arrow_drift/features/home/home_screen.dart';
@@ -29,6 +30,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: SplashLoadingScreen.routePath,
         builder: (context, state) => const SplashLoadingScreen(),
+      ),
+      GoRoute(
+        path: ConsentScreen.routePath,
+        builder: (context, state) => const ConsentScreen(),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {

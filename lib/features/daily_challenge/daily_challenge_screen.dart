@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:arrow_drift/core/theme/app_theme.dart';
+import 'package:arrow_drift/core/utils/online_gate.dart';
 import 'package:arrow_drift/data/repositories/level_repository.dart';
 import 'package:arrow_drift/data/repositories/progress_repository.dart';
 import 'package:arrow_drift/features/gameplay/gameplay_screen.dart';
@@ -51,7 +52,7 @@ class _DailyChallengeScreenState extends ConsumerState<DailyChallengeScreen> {
     return completed.where((k) => k.startsWith(prefix)).length;
   }
 
-  void _openDaily(DateTime selected) {
+  Future<void> _openDaily(DateTime selected) async {
     final today = DateTime(_now.year, _now.month, _now.day);
     final day = DateTime(selected.year, selected.month, selected.day);
 
@@ -62,6 +63,13 @@ class _DailyChallengeScreenState extends ConsumerState<DailyChallengeScreen> {
           duration: Duration(seconds: 2),
         ),
       );
+      return;
+    }
+
+    final online = await requireOnline(ref);
+    if (!mounted) return;
+    if (!online) {
+      await showNoInternetDialog(context);
       return;
     }
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
@@ -53,10 +55,10 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
     }
     if (_disposed || !mounted || _loadStarted) return;
     _loadStarted = true;
-    _load();
+    unawaited(_load());
   }
 
-  void _load() {
+  Future<void> _load() async {
     final ad = BannerAd(
       adUnitId: widget.adUnitId,
       size: AdSize.banner,
@@ -88,8 +90,15 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
       ),
     );
     try {
-      ad.load();
+      await ad.load();
     } catch (e) {
+      ad.dispose();
+      if (!_disposed && mounted) {
+        setState(() {
+          _isLoaded = false;
+          _bannerAd = null;
+        });
+      }
       debugPrint('BannerAdWidget: load() threw: $e');
     }
   }

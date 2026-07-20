@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:arrow_drift/core/constants/app_constants.dart';
+import 'package:arrow_drift/core/providers/connectivity_provider.dart';
 import 'package:arrow_drift/core/router/app_router.dart';
 import 'package:arrow_drift/core/theme/app_theme.dart';
+import 'package:arrow_drift/core/widgets/connectivity_gate.dart';
 import 'package:arrow_drift/data/repositories/settings_repository.dart';
 
 void main() async {
@@ -21,6 +23,8 @@ class ArrowDriftApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // Load persisted settings (including dark theme) on startup.
     ref.watch(settingsProvider);
+    // Keep the global connectivity listener alive for the whole session.
+    ref.watch(connectivityProvider);
 
     final router = ref.watch(appRouterProvider);
     final themeMode = ref.watch(themeModeProvider);
@@ -32,6 +36,9 @@ class ArrowDriftApp extends ConsumerWidget {
       darkTheme: AppTheme.dark,
       themeMode: themeMode,
       routerConfig: router,
+      builder: (context, child) {
+        return ConnectivityGate(child: child ?? const SizedBox.shrink());
+      },
     );
   }
 }

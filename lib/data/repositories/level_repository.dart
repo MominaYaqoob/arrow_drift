@@ -1,11 +1,21 @@
+import 'dart:async';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart' show compute, kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:arrow_drift/data/models/arrow_model.dart';
 import 'package:arrow_drift/data/models/level_model.dart';
 import 'package:arrow_drift/data/repositories/shape_masks.dart';
 import 'package:arrow_drift/features/gameplay/game_controller.dart';
+
+/// Top-level entry point for `compute()` — must be a top-level or static
+/// function (not a closure) so it can be sent to a background isolate.
+/// Unpacks the (day, levelNumber) record and delegates to the repository's
+/// static daily-challenge builder.
+LevelModel _dailyChallengeIsolateEntry((DateTime, int) args) {
+  return LevelRepository._buildDailyChallengeLevel(args.$1, args.$2);
+}
 
 /// Result of [generateSolvableLevel], including placement order for tests.
 class SolvableLevelResult {
@@ -1615,6 +1625,9 @@ class LevelRepository {
   final List<SolvableLevelResult>? _prebuilt;
   final List<SolvableLevelResult?> _lazy;
   final Map<int, LevelModel> _dailyCache = {};
+  /// Prevents duplicate concurrent generation of the same level (prefetch + open).
+  final Map<int, Future<LevelModel>> _inflightCampaign = {};
+  final Map<int, Future<LevelModel>> _inflightDaily = {};
 
   /// Campaign pack size. Boards are formula-driven, lazy, and cached — going
   /// from 100 to 500 is a one-constant change plus the Expert tier's range
@@ -1665,6 +1678,89 @@ class LevelRepository {
       levelNumber,
       () => _buildDailyChallengeLevel(day, levelNumber),
     );
+  }
+
+  /// Async campaign level fetch. Runs generation on a background isolate
+  /// via [compute] so boards with up to ~200 arrows (Hard/Expert tiers)
+  /// never block the UI thread / trigger an ANR. If the level was already
+  /// generated (cached in [_lazy]), returns instantly with no isolate hop.
+  /// Callers that already hold a warm cache (e.g. [getLevel] called after
+  /// this resolves once) keep working exactly as before — this is purely
+  /// an additive, non-blocking entry point.
+  Future<LevelModel> getLevelAsync(int levelNumber) async {
+    final key = levelNumber < 1 ? 1 : levelNumber;
+    final clamped = key > campaignLevelCount ? campaignLevelCount : key;
+    final index = clamped - 1;
+    if (_prebuilt != null) return _prebuilt![index].level;
+    final cached = _lazy[index];
+    if (cached != null) return cached.level;
+    final inflight = _inflightCampaign[clamped];
+    if (inflight != null) return inflight;
+
+    final future = _generateCampaignAsync(clamped, index);
+    _inflightCampaign[clamped] = future;
+    try {
+      return await future;
+    } finally {
+      _inflightCampaign.remove(clamped);
+    }
+  }
+
+  Future<LevelModel> _generateCampaignAsync(int clamped, int index) async {
+    // Easy/Medium (≤20) and web: build on this isolate — faster than Worker/
+    // isolate cold-start. Hard/Expert stay on a background isolate so the UI
+    // thread never freezes on 70–200+ arrow packs.
+    final SolvableLevelResult result;
+    if (kIsWeb || clamped <= 20) {
+      await Future<void>.delayed(Duration.zero);
+      result = _buildCampaignLevel(clamped);
+    } else {
+      result = await compute(_buildCampaignLevel, clamped);
+    }
+    _lazy[index] = result;
+    return result.level;
+  }
+
+  /// Prefetch one or more campaign levels into [_lazy] without blocking UI.
+  void prefetchLevels(Iterable<int> levelNumbers) {
+    for (final levelNumber in levelNumbers) {
+      final key = levelNumber < 1 ? 1 : levelNumber;
+      final clamped = key > campaignLevelCount ? campaignLevelCount : key;
+      final index = clamped - 1;
+      if (_prebuilt != null || _lazy[index] != null) continue;
+      unawaited(getLevelAsync(clamped));
+    }
+  }
+
+  /// Async daily-challenge fetch — same background-isolate treatment as
+  /// [getLevelAsync], since daily boards are the heaviest generation case
+  /// (~120-150 arrows, many retry passes).
+  Future<LevelModel> getDailyLevelAsync([DateTime? date]) async {
+    final day = date ?? DateTime.now();
+    final levelNumber =
+        900000000 + day.year * 10000 + day.month * 100 + day.day;
+    final cached = _dailyCache[levelNumber];
+    if (cached != null) return cached;
+    final inflight = _inflightDaily[levelNumber];
+    if (inflight != null) return inflight;
+
+    final future = () async {
+      final LevelModel level;
+      if (kIsWeb) {
+        await Future<void>.delayed(Duration.zero);
+        level = _buildDailyChallengeLevel(day, levelNumber);
+      } else {
+        level = await compute(_dailyChallengeIsolateEntry, (day, levelNumber));
+      }
+      _dailyCache[levelNumber] = level;
+      return level;
+    }();
+    _inflightDaily[levelNumber] = future;
+    try {
+      return await future;
+    } finally {
+      _inflightDaily.remove(levelNumber);
+    }
   }
 
   /// Daily puzzles are calendar-seeded (one unique board per day).
@@ -1920,20 +2016,14 @@ class LevelRepository {
   /// Expert tier's range, not its mechanics).
   static SolvableLevelResult _buildCampaignLevel(int levelNumber) {
     if (levelNumber == 1) return _tutorialLevel1();
-    // L2/L3: adapted directly from the real Unity 'Arrows' prefabs
-    // (Level 2.prefab / Level 3.prefab) — same arrow count, path lengths,
-    // bend shapes, and final directions as the original, reshaped onto
-    // non-overlapping cells since Arrow Escape's static blocking model
-    // (unlike Unity's real-time line collision) requires every arrow's
-    // path to occupy exclusive cells. L4 deferred — its real source data
-    // turned out far more complex (a 14-waypoint arrow) than its arrow
-    // count suggested, and needs the same careful treatment as L5–10.
-    if (levelNumber == 2) return _unityLevel2();
-    if (levelNumber == 3) return _unityLevel3();
-    if (levelNumber <= 6) return _easyPuzzleLevel(levelNumber);
+    // Easy: L2–5, 10–20 arrows (L1 stays the fixed tutorial).
+    if (levelNumber <= 5) return _easyPuzzleLevel(levelNumber);
+    // Medium: L6–20, 30–40 arrows, seal-chain blocking throughout.
     if (levelNumber <= 20) return _mediumPuzzleLevel(levelNumber);
-    if (levelNumber <= 50) return _hardPuzzleLevel(levelNumber);
-    return _expertPuzzleLevel(levelNumber); // L51–500
+    // Hard: L21–199, 70–199 arrows.
+    if (levelNumber <= 199) return _hardPuzzleLevel(levelNumber);
+    // Expert: L200–500, 100+ arrows, maximum complexity.
+    return _expertPuzzleLevel(levelNumber);
   }
 
   /// Adapted from Unity 'Arrows' Level 2.prefab: 3 arrows, lengths 6/5/5,
@@ -2109,6 +2199,25 @@ class LevelRepository {
     return ((levelNumber - start) / (end - start)).clamp(0.0, 1.0);
   }
 
+  /// Per-tier arrow bounds: (min, max, interpolated target for [levelNumber]).
+  static (int min, int max, int target) _campaignArrowSpec(int levelNumber) {
+    if (levelNumber <= 5) {
+      final t = _tierT(levelNumber, 2, 5);
+      return (10, 20, _lerpRound(10, 20, t).clamp(10, 20));
+    }
+    if (levelNumber <= 20) {
+      final t = _tierT(levelNumber, 6, 20);
+      return (30, 40, _lerpRound(30, 40, t).clamp(30, 40));
+    }
+    if (levelNumber <= 199) {
+      final t = _tierT(levelNumber, 21, 199);
+      return (70, 199, _lerpRound(70, 199, t).clamp(70, 199));
+    }
+    final t = _tierT(levelNumber, 200, 500);
+    final target = _lerpRound(100, 220, t).clamp(100, 220);
+    return (100, 250, target);
+  }
+
   /// Convex/near-convex-only rotation — required for the exact-free-at-start
   /// seal-chain keeper placement (L21+) to stay reliable. Thin concave
   /// silhouettes are reserved for L2–20 (non-exact) and the daily path.
@@ -2125,24 +2234,18 @@ class LevelRepository {
     };
   }
 
-  /// L2–L6: redesigned Easy tier — shaped/nested boards from the very first
-  /// non-tutorial level (previously a plain open rectangle). Small grids,
-  /// loose fill, generous free tiles; ramps smoothly toward L7's Medium
-  /// starting values so there's no visible jump at the seam.
+  /// L2–L5: Easy tier — shaped/nested boards, 10–20 arrows, light blocking
+  /// (1–2 free tips) before Medium tightens the seal-chain.
   static SolvableLevelResult _easyPuzzleLevel(int levelNumber) {
-    // Only L4–6 actually route here (L2/L3 are hardcoded Unity ports), so
-    // this is really the "ramp to complex" tier: still labelled Easy, but
-    // arrow count climbs fast (20 → 45) so the jump from L3's handful of
-    // arrows into the dense mid/late game doesn't feel like a wall.
-    final t = _tierT(levelNumber, 2, 6);
-    final size = _lerpRound(10, 16, t).clamp(10, 16);
+    final t = _tierT(levelNumber, 2, 5);
+    final (_, tierMax, targetArrows) = _campaignArrowSpec(levelNumber);
+    final size = _lerpRound(10, 13, t).clamp(10, 13);
     final (rows, cols, mask) = _campaignShapeFor(levelNumber, size);
-    final fillTarget = _lerp(0.80, 0.92, t);
+    final fillTarget = _lerp(0.82, 0.90, t);
     final minPath = _lerpRound(2, 3, t).clamp(2, 3);
-    final maxPath = _lerpRound(6, 10, t).clamp(6, 10);
-    final minArrows = _lerpRound(10, 45, t).clamp(10, 45);
-    final maxFree = _lerpRound(5, 3, t).clamp(3, 5);
-    final turnBias = _lerp(1.0, 1.3, t);
+    final maxPath = _lerpRound(6, 9, t).clamp(6, 9);
+    final maxFree = _lerpRound(2, 1, t).clamp(1, 2);
+    final turnBias = _lerp(1.05, 1.25, t);
     const hearts = 3;
     const hints = 2;
 
@@ -2156,6 +2259,8 @@ class LevelRepository {
       required int arrows,
       required double fill,
       required int freeCap,
+      bool exact = false,
+      int? cap,
     }) {
       try {
         return generateNestedSolvableLevel(
@@ -2171,9 +2276,11 @@ class LevelRepository {
           minPathLen: minPath,
           maxPathLen: maxPath,
           minArrows: arrows,
+          maxArrows: cap ?? tierMax,
           hardNest: true,
           mixPathSizes: true,
           maxFreeAtStart: freeCap,
+          exactFreeAtStart: exact && freeCap == 1,
           turnBias: turnBias,
         );
       } on StateError catch (e) {
@@ -2182,44 +2289,59 @@ class LevelRepository {
       }
     }
 
-    for (var attempt = 0; attempt < 12; attempt++) {
+    for (var attempt = 0; attempt < 5; attempt++) {
       final result = tryOnce(
         r: rows,
         c: cols,
         m: mask,
         seed: levelNumber * 7919 + attempt * 131 + size * 17,
-        arrows: (minArrows - (attempt ~/ 4) * 4).clamp(10, minArrows),
-        fill: (fillTarget - (attempt ~/ 6) * 0.03).clamp(0.74, fillTarget),
-        freeCap: maxFree + (attempt ~/ 4),
+        arrows: (targetArrows - (attempt ~/ 3)).clamp(10, targetArrows),
+        fill: (fillTarget - (attempt ~/ 4) * 0.03).clamp(0.76, fillTarget),
+        freeCap: maxFree,
+        exact: maxFree == 1,
       );
       if (result != null) return result;
     }
 
-    final fb = (size - 2).clamp(10, size);
+    final fb = (size - 1).clamp(10, size);
     final fbMask = List.generate(fb, (_) => List<bool>.filled(fb, true));
-    for (var attempt = 0; attempt < 6; attempt++) {
+    for (var attempt = 0; attempt < 3; attempt++) {
       final result = tryOnce(
         r: fb,
         c: fb,
         m: fbMask,
         seed: levelNumber * 4243 + attempt * 97,
-        arrows: (minArrows * 0.6).round().clamp(10, minArrows),
-        fill: 0.82,
-        freeCap: maxFree + 2,
+        arrows: (targetArrows - attempt).clamp(10, targetArrows),
+        fill: 0.84,
+        freeCap: 2,
       );
       if (result != null) return result;
     }
 
-    final safe = tryOnce(
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final result = tryOnce(
+        r: 10,
+        c: 10,
+        m: List.generate(10, (_) => List<bool>.filled(10, true)),
+        seed: levelNumber * 1117 + attempt * 53,
+        arrows: (12 - attempt).clamp(10, 12),
+        fill: 0.80,
+        freeCap: (4 + attempt).clamp(4, 6),
+      );
+      if (result != null) return result;
+    }
+
+    // Guaranteed build — skip free-cap so Easy never fails to open.
+    final guaranteed = tryOnce(
       r: 10,
       c: 10,
       m: List.generate(10, (_) => List<bool>.filled(10, true)),
-      seed: levelNumber * 1117,
+      seed: levelNumber * 2221,
       arrows: 10,
       fill: 0.78,
-      freeCap: 6,
+      freeCap: 8,
     );
-    if (safe != null) return safe;
+    if (guaranteed != null) return guaranteed;
 
     throw lastError ??
         StateError('Failed to build easy puzzle level $levelNumber');
@@ -2229,23 +2351,21 @@ class LevelRepository {
   /// free-tile cap shrinks toward the end but stays non-exact (no forced
   /// single-key sequencing yet — that starts at L21).
   static SolvableLevelResult _mediumPuzzleLevel(int levelNumber) {
-    final t = _tierT(levelNumber, 7, 20);
+    final t = _tierT(levelNumber, 6, 20);
+    final (tierMin, tierMax, targetArrows) = _campaignArrowSpec(levelNumber);
     final size = _lerpRound(12, 16, t).clamp(12, 16);
     final (rows, cols, mask) = _campaignShapeFor(levelNumber, size);
     final fillTarget = _lerp(0.90, 0.95, t);
     // Kept short (2–9) rather than long: many nested short/mid arrows fit
     // far more of them into the same board than a few long snakes, which
-    // is what actually gets arrow count up into the 30-50+ range.
+    // is what actually gets arrow count up into the 30-40 range.
     final minPath = 2;
     final maxPath = _lerpRound(7, 9, t).clamp(7, 9);
-    final minArrows = _lerpRound(30, 50, t).clamp(30, 50);
-    final maxFree = _lerpRound(3, 1, t).clamp(1, 3);
-    final turnBias = _lerp(1.35, 1.6, t);
-    // From the back half of this tier on, force the single-free-tile
-    // seal-chain (previously only L21+ did this) — this is the mechanic
-    // that actually requires the player to plan ahead instead of just
-    // tapping whatever's open, which was the core "too easy" complaint.
-    final exact = t >= 0.5;
+    final maxFree = _lerpRound(2, 1, t).clamp(1, 2);
+    final turnBias = _lerp(1.4, 1.7, t);
+    // Prefer tight free-cap (1–2) without exact seal-chain: exact=1 causes
+    // many failed full-board builds and multi-second loads. Hard tier keeps
+    // the exact seal-chain. Arrow counts stay in the Medium band.
     const hearts = 3;
     final hints = t < 0.5 ? 2 : 1;
 
@@ -2262,7 +2382,8 @@ class LevelRepository {
       int? pathFloor,
       int? pathCeil,
       double? bias,
-      bool? exactOverride,
+      bool exact = false,
+      int? cap,
     }) {
       try {
         return generateNestedSolvableLevel(
@@ -2278,10 +2399,11 @@ class LevelRepository {
           minPathLen: pathFloor ?? minPath,
           maxPathLen: pathCeil ?? maxPath,
           minArrows: arrows,
+          maxArrows: cap ?? tierMax,
           hardNest: true,
           mixPathSizes: true,
           maxFreeAtStart: freeCap,
-          exactFreeAtStart: (exactOverride ?? exact) && freeCap == 1,
+          exactFreeAtStart: exact && freeCap == 1,
           turnBias: bias ?? turnBias,
         );
       } on StateError catch (e) {
@@ -2290,15 +2412,32 @@ class LevelRepository {
       }
     }
 
-    for (var attempt = 0; attempt < 10; attempt++) {
+    // Fast primary: tight free cap, no exact seal (loads in ~100–400ms).
+    for (var attempt = 0; attempt < 5; attempt++) {
       final result = tryOnce(
         r: rows,
         c: cols,
         m: mask,
         seed: levelNumber * 9973 + attempt * 173 + size * 19,
-        arrows: (minArrows - (attempt ~/ 3) * 4).clamp(20, minArrows),
-        fill: (fillTarget - (attempt ~/ 4) * 0.03).clamp(0.82, fillTarget),
-        freeCap: exact ? 1 : (maxFree + (attempt ~/ 4)),
+        arrows: (targetArrows - (attempt ~/ 2)).clamp(tierMin, targetArrows),
+        fill: (fillTarget - (attempt ~/ 3) * 0.03).clamp(0.82, fillTarget),
+        freeCap: (maxFree + attempt ~/ 2).clamp(maxFree, 3),
+        pathFloor: minPath,
+      );
+      if (result != null) return result;
+    }
+
+    // Optional nicer seal if it lands quickly.
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final result = tryOnce(
+        r: rows,
+        c: cols,
+        m: mask,
+        seed: levelNumber * 7919 + attempt * 211,
+        arrows: targetArrows,
+        fill: fillTarget,
+        freeCap: 1,
+        exact: true,
         pathFloor: minPath,
       );
       if (result != null) return result;
@@ -2306,83 +2445,107 @@ class LevelRepository {
 
     final fb = (size - 2).clamp(12, size);
     final fbMask = List.generate(fb, (_) => List<bool>.filled(fb, true));
-    for (var attempt = 0; attempt < 6; attempt++) {
+    for (var attempt = 0; attempt < 4; attempt++) {
       final result = tryOnce(
         r: fb,
         c: fb,
         m: fbMask,
         seed: levelNumber * 4243 + attempt * 97,
-        arrows: (minArrows * 0.75).round().clamp(30, minArrows),
-        fill: (0.88 - (attempt ~/ 3) * 0.02).clamp(0.80, 0.88),
-        freeCap: exact ? 1 : (maxFree + 2 + attempt ~/ 2).clamp(maxFree, 8),
+        arrows: (targetArrows - attempt).clamp(tierMin, targetArrows),
+        fill: (0.88 - (attempt ~/ 2) * 0.02).clamp(0.80, 0.88),
+        freeCap: (maxFree + attempt ~/ 2).clamp(maxFree, 3),
         pathFloor: 2,
         pathCeil: 8,
         bias: 1.2,
-        exactOverride: exact,
       );
       if (result != null) return result;
     }
 
-    // Soft open board — must not hang on concave silhouettes / high minPath.
-    // Still dense (25+ arrows) — this is a safety net for shape/geometry
-    // failures, not a return to the old "too easy" small boards.
-    for (var attempt = 0; attempt < 6; attempt++) {
+    // Soft open board — still within Medium arrow bounds.
+    for (var attempt = 0; attempt < 4; attempt++) {
       final result = tryOnce(
-        r: 12,
-        c: 12,
-        m: List.generate(12, (_) => List<bool>.filled(12, true)),
+        r: 14,
+        c: 14,
+        m: List.generate(14, (_) => List<bool>.filled(14, true)),
         seed: levelNumber * 1117 + attempt * 53,
-        arrows: (28 - (attempt ~/ 3) * 2).clamp(18, 28),
-        fill: (0.86 - (attempt ~/ 3) * 0.02).clamp(0.78, 0.86),
-        freeCap: (4 + attempt).clamp(4, 8),
+        arrows: (tierMin + 2 - (attempt ~/ 2)).clamp(tierMin, tierMin + 4),
+        fill: (0.86 - (attempt ~/ 2) * 0.02).clamp(0.78, 0.86),
+        freeCap: 8,
         pathFloor: 2,
         pathCeil: 7,
         bias: 1.1,
-        exactOverride: false,
       );
       if (result != null) return result;
     }
 
-    // Absolute last resort: small open square — always builds.
-    for (var attempt = 0; attempt < 4; attempt++) {
+    // Absolute last resort: open square — always builds within 30–40.
+    for (var attempt = 0; attempt < 3; attempt++) {
       final result = tryOnce(
-        r: 10,
-        c: 10,
-        m: List.generate(10, (_) => List<bool>.filled(10, true)),
+        r: 14,
+        c: 14,
+        m: List.generate(14, (_) => List<bool>.filled(14, true)),
         seed: levelNumber * 3331 + attempt * 17,
-        arrows: (16 - attempt).clamp(10, 16),
-        fill: 0.78,
-        freeCap: (6 + attempt).clamp(6, 8),
+        arrows: tierMin,
+        fill: 0.82,
+        freeCap: 8,
         pathFloor: 2,
         pathCeil: 6,
         bias: 1.0,
-        exactOverride: false,
       );
       if (result != null) return result;
+    }
+
+    // Guaranteed: skip free-cap rejection so Medium never fails to open.
+    try {
+      return generateNestedSolvableLevel(
+        levelNumber,
+        14,
+        14,
+        hearts,
+        hints,
+        difficulty: LevelDifficulty.medium,
+        seed: levelNumber * 5557,
+        shapeMask: List.generate(14, (_) => List<bool>.filled(14, true)),
+        fillTarget: 0.80,
+        minPathLen: 2,
+        maxPathLen: 6,
+        minArrows: tierMin,
+        maxArrows: tierMax,
+        hardNest: true,
+        mixPathSizes: true,
+        maxFreeAtStart: 8,
+        turnBias: 1.0,
+      );
+    } on StateError catch (e) {
+      lastError = e;
     }
 
     throw lastError ??
         StateError('Failed to build medium puzzle level $levelNumber');
   }
 
-  /// L21–L50: Hard tier — "seal-chain" puzzles. Exactly one arrow is free
+  /// L21–L199: Hard tier — "seal-chain" puzzles. Exactly one arrow is free
   /// at the start; clearing it must cascade deep into the board. Convex
   /// silhouettes only, for keeper-placement reliability.
   static SolvableLevelResult _hardPuzzleLevel(int levelNumber) {
-    final t = _tierT(levelNumber, 21, 50);
-    final size = _lerpRound(16, 18, t).clamp(16, 18);
+    final t = _tierT(levelNumber, 21, 199);
+    final (tierMin, tierMax, targetArrows) = _campaignArrowSpec(levelNumber);
+    // Grid grows across the whole tier (not capped at 18) so 70–199 arrows
+    // actually fit at a legible short-path density; 26×26 is still well
+    // within what a scrollable/zoomable board can render on phones (same
+    // rendering path already used for the 24–30 daily-challenge boards).
+    final size = _lerpRound(20, 26, t).clamp(20, 26);
     final mask = _convexShapeFor(levelNumber - 21, size);
-    final fillTarget = _lerp(0.93, 0.97, t);
+    final fillTarget = _lerp(0.93, 0.98, t);
     // Kept deliberately short (2–9) rather than long-and-few: many
     // interlocking short/mid arrows (like Play Store escape puzzles) read
     // as far more "logic-heavy" than a handful of giant snakes, and it's
-    // the only way to fit 45-58 arrows in a seal-chain board this size.
+    // the only way to fit 70-199 arrows in a seal-chain board this size.
     final minPath = 2;
-    final maxPath = _lerpRound(7, 9, t).clamp(7, 9);
-    final minArrows = _lerpRound(45, 58, t).clamp(45, 58);
-    final turnBias = _lerp(1.6, 1.9, t);
+    final maxPath = _lerpRound(7, 10, t).clamp(7, 10);
+    final turnBias = _lerp(1.6, 2.1, t);
     // Floor kept generous per product decision: 3 hearts / 2 hints for the
-    // entire Hard/Expert range (L21–100) — no further reduction.
+    // entire Hard/Expert range — no further reduction.
     const hearts = 3;
     const hints = 2;
 
@@ -2399,6 +2562,7 @@ class LevelRepository {
       int? freeCap,
       bool exact = false,
       double bias = 1.0,
+      int? cap,
     }) {
       try {
         return generateNestedSolvableLevel(
@@ -2414,6 +2578,7 @@ class LevelRepository {
           minPathLen: pathFloor,
           maxPathLen: maxPath,
           minArrows: arrows,
+          maxArrows: cap ?? tierMax,
           hardNest: true,
           mixPathSizes: true,
           maxFreeAtStart: freeCap,
@@ -2426,15 +2591,31 @@ class LevelRepository {
       }
     }
 
-    // Primary: exact-one-free seal chain.
-    for (var attempt = 0; attempt < 6; attempt++) {
+    // Fast path first: freeCap 1–2 (no exact) — same density, much faster open.
+    for (var attempt = 0; attempt < 4; attempt++) {
+      final result = tryOnce(
+        r: size,
+        c: size,
+        m: mask,
+        seed: levelNumber * 9973 + 5000 + attempt * 173 + size * 19,
+        arrows: (targetArrows - (attempt ~/ 2) * 4).clamp(tierMin, targetArrows),
+        fill: (fillTarget - (attempt ~/ 3) * 0.03).clamp(0.84, fillTarget),
+        pathFloor: minPath,
+        freeCap: (1 + attempt ~/ 3).clamp(1, 2),
+        bias: (turnBias - 0.1).clamp(1.0, turnBias),
+      );
+      if (result != null) return result;
+    }
+
+    // Optional exact seal if it lands quickly.
+    for (var attempt = 0; attempt < 3; attempt++) {
       final result = tryOnce(
         r: size,
         c: size,
         m: mask,
         seed: levelNumber * 9973 + attempt * 173 + size * 19,
-        arrows: (minArrows - (attempt ~/ 3) * 4).clamp(40, minArrows),
-        fill: (fillTarget - (attempt ~/ 3) * 0.02).clamp(0.88, fillTarget),
+        arrows: (targetArrows - attempt * 4).clamp(tierMin, targetArrows),
+        fill: (fillTarget - attempt * 0.02).clamp(0.88, fillTarget),
         pathFloor: minPath,
         freeCap: 1,
         exact: true,
@@ -2443,67 +2624,68 @@ class LevelRepository {
       if (result != null) return result;
     }
 
-    // Fallback: tight (not exact) free cap — still dense/hard.
-    for (var attempt = 0; attempt < 8; attempt++) {
-      final result = tryOnce(
-        r: size,
-        c: size,
-        m: mask,
-        seed: levelNumber * 9973 + 5000 + attempt * 173 + size * 19,
-        arrows: (minArrows - (attempt ~/ 3) * 4).clamp(32, minArrows),
-        fill: (fillTarget - (attempt ~/ 4) * 0.04).clamp(0.84, fillTarget),
-        pathFloor: minPath,
-        freeCap: (2 + attempt ~/ 4).clamp(2, 4),
-        bias: (turnBias - 0.1).clamp(1.0, turnBias),
-      );
-      if (result != null) return result;
-    }
-
-    // Final safety net: plain square, phone-safe size (still large enough
-    // to hold 30+ nested arrows). freeCap escalates across attempts so a
-    // sparse fallback board (naturally more free tiles) doesn't just throw
-    // StateError on every single attempt in this loop.
-    const fbSize = 14;
-    for (var attempt = 0; attempt < 8; attempt++) {
+    // Final safety net: plain square, still scaled with the tier.
+    final fbSize = size.clamp(22, 26);
+    for (var attempt = 0; attempt < 4; attempt++) {
       final result = tryOnce(
         r: fbSize,
         c: fbSize,
         m: List.generate(fbSize, (_) => List<bool>.filled(fbSize, true)),
         seed: levelNumber * 4243 + attempt * 97,
-        arrows: (32 - (attempt ~/ 3) * 2).clamp(24, 32),
-        fill: (0.90 - (attempt ~/ 4) * 0.02).clamp(0.82, 0.90),
+        arrows: (targetArrows - attempt * 6).clamp(tierMin, targetArrows),
+        fill: (0.90 - (attempt ~/ 2) * 0.02).clamp(0.82, 0.90),
         pathFloor: minPath,
-        freeCap: (4 + attempt ~/ 4).clamp(4, 6),
-        bias: 1.2,
+        freeCap: 2,
+        bias: 1.3,
       );
       if (result != null) return result;
     }
 
-    // Absolute last resort — must never crash level open. freeCap escalates
-    // so a sparse board can't dead-end every attempt.
-    for (var attempt = 0; attempt < 6; attempt++) {
+    // Absolute last resort — must never crash level open, stay within tier.
+    for (var attempt = 0; attempt < 3; attempt++) {
       final result = tryOnce(
         r: fbSize,
         c: fbSize,
         m: List.generate(fbSize, (_) => List<bool>.filled(fbSize, true)),
         seed: levelNumber * 7771 + attempt * 53,
-        arrows: (20 - attempt).clamp(12, 20),
-        fill: (0.84 - attempt * 0.02).clamp(0.74, 0.84),
+        arrows: (tierMin + 2 - attempt).clamp(tierMin, tierMin + 2),
+        fill: (0.86 - attempt * 0.01).clamp(0.80, 0.86),
         pathFloor: minPath,
-        freeCap: (6 + attempt).clamp(6, 8),
-        bias: 1.0,
+        freeCap: 2,
+        bias: 1.2,
       );
       if (result != null) return result;
     }
 
-    // Guaranteed build: skip free-cap rejection so level open never crashes.
-    final safe = tryOnce(
-      r: fbSize,
-      c: fbSize,
-      m: List.generate(fbSize, (_) => List<bool>.filled(fbSize, true)),
+    // Guaranteed build: prefer still-bounded free tips; skip rejection only
+    // if that fails so level open never crashes.
+    final guaranteedSize = fbSize.clamp(24, 26);
+    final bounded = tryOnce(
+      r: guaranteedSize,
+      c: guaranteedSize,
+      m: List.generate(
+        guaranteedSize,
+        (_) => List<bool>.filled(guaranteedSize, true),
+      ),
       seed: levelNumber * 3331,
-      arrows: 14,
-      fill: 0.78,
+      arrows: tierMin,
+      fill: 0.82,
+      pathFloor: 2,
+      freeCap: 2,
+      bias: 1.0,
+    );
+    if (bounded != null) return bounded;
+
+    final safe = tryOnce(
+      r: guaranteedSize,
+      c: guaranteedSize,
+      m: List.generate(
+        guaranteedSize,
+        (_) => List<bool>.filled(guaranteedSize, true),
+      ),
+      seed: levelNumber * 4447,
+      arrows: tierMin,
+      fill: 0.80,
       pathFloor: 2,
       freeCap: null,
       bias: 1.0,
@@ -2527,18 +2709,20 @@ class LevelRepository {
   /// new mechanics for L150+, which is what keeps this tier reliable at
   /// this scale (no new failure modes to audit).
   static SolvableLevelResult _expertPuzzleLevel(int levelNumber) {
-    final t = _tierT(levelNumber, 51, 500);
-    final size = _lerpRound(17, 18, t).clamp(17, 18);
-    final mask = _convexShapeFor(levelNumber - 51, size);
-    final fillTarget = _lerp(0.96, 0.99, t);
+    final t = _tierT(levelNumber, 200, 500);
+    final (tierMin, tierMax, targetArrows) = _campaignArrowSpec(levelNumber);
+    // Grid keeps growing past Hard's ceiling so 100+ arrows (climbing
+    // toward 220+ by L500) still pack at a legible short-path density.
+    final size = _lerpRound(22, 30, t).clamp(22, 30);
+    final mask = _convexShapeFor(levelNumber - 200, size);
+    final fillTarget = _lerp(0.97, 0.99, t);
     // Same short-length choice as the Hard tier: many nested short arrows
-    // (50-62) reads as far harder than a handful of very long ones, and
-    // it's what actually fits in an 18×18 seal-chain board. Complexity
-    // still climbs via turnBias (tighter hooks/U-wraps) and fill %.
+    // reads as far harder than a handful of very long ones, and it's what
+    // actually fits at this density. Complexity still climbs via turnBias
+    // (tighter hooks/U-wraps) and fill %.
     final minPath = 2;
-    final maxPath = _lerpRound(7, 9, t).clamp(7, 9);
-    final minArrows = _lerpRound(50, 62, t).clamp(50, 62);
-    final turnBias = _lerp(1.9, 2.3, t);
+    final maxPath = _lerpRound(7, 10, t).clamp(7, 10);
+    final turnBias = _lerp(2.1, 2.6, t);
     // Same generous floor as the Hard tier — no reduction through L500.
     const hearts = 3;
     const hints = 2;
@@ -2555,6 +2739,7 @@ class LevelRepository {
       bool exact = false,
       double bias = 1.0,
       int? gridSize,
+      int? cap,
     }) {
       final grid = gridSize ?? size;
       try {
@@ -2571,7 +2756,7 @@ class LevelRepository {
           minPathLen: pathFloor,
           maxPathLen: maxPath,
           minArrows: arrows,
-          maxArrows: arrows + 20,
+          maxArrows: cap ?? tierMax,
           hardNest: true,
           mixPathSizes: true,
           maxFreeAtStart: freeCap,
@@ -2584,13 +2769,27 @@ class LevelRepository {
       }
     }
 
-    // Primary: exact-one-free seal chain on a round/convex shape.
-    for (var attempt = 0; attempt < 6; attempt++) {
+    // Fast path first: freeCap 1–2 (no exact).
+    for (var attempt = 0; attempt < 4; attempt++) {
+      final result = tryOnce(
+        m: mask,
+        seed: levelNumber * 15013 + 7000 + attempt * 251 + size * 31,
+        arrows: (targetArrows - (attempt ~/ 2) * 4).clamp(tierMin, targetArrows),
+        fill: (fillTarget - (attempt ~/ 3) * 0.04).clamp(0.86, fillTarget),
+        pathFloor: minPath,
+        freeCap: (1 + attempt ~/ 3).clamp(1, 2),
+        bias: (turnBias - 0.2).clamp(1.2, turnBias),
+      );
+      if (result != null) return result;
+    }
+
+    // Optional exact seal if it lands quickly.
+    for (var attempt = 0; attempt < 3; attempt++) {
       final result = tryOnce(
         m: mask,
         seed: levelNumber * 15013 + attempt * 251 + size * 31,
-        arrows: (minArrows - (attempt ~/ 3) * 4).clamp(44, minArrows),
-        fill: (fillTarget - (attempt ~/ 3) * 0.02).clamp(0.92, fillTarget),
+        arrows: (targetArrows - attempt * 4).clamp(tierMin, targetArrows),
+        fill: (fillTarget - attempt * 0.02).clamp(0.92, fillTarget),
         pathFloor: minPath,
         freeCap: 1,
         exact: true,
@@ -2599,78 +2798,61 @@ class LevelRepository {
       if (result != null) return result;
     }
 
-    // Fallback: same shape, tight (not exact) free cap — still dense/hard.
-    for (var attempt = 0; attempt < 8; attempt++) {
-      final result = tryOnce(
-        m: mask,
-        seed: levelNumber * 15013 + 7000 + attempt * 251 + size * 31,
-        arrows: (minArrows - (attempt ~/ 3) * 4).clamp(36, minArrows),
-        fill: (fillTarget - (attempt ~/ 4) * 0.05).clamp(0.86, fillTarget),
-        pathFloor: minPath,
-        freeCap: (2 + attempt ~/ 4).clamp(2, 4),
-        bias: (turnBias - 0.2).clamp(1.2, turnBias),
-      );
-      if (result != null) return result;
-    }
-
-    // Final safety net: plain small square — always builds (phone-safe),
-    // still large enough (16×16) to hold 30+ nested arrows. freeCap
-    // escalates so a sparse fallback board doesn't dead-end every attempt.
-    const fbSize = 16;
-    for (var attempt = 0; attempt < 8; attempt++) {
+    // Final safety net: plain square, scaled from the tier size.
+    final fbSize = size.clamp(22, 30);
+    for (var attempt = 0; attempt < 4; attempt++) {
       final result = tryOnce(
         m: List.generate(fbSize, (_) => List<bool>.filled(fbSize, true)),
         seed: levelNumber * 4243 + attempt * 97,
-        arrows: (36 - (attempt ~/ 3) * 2).clamp(28, 36),
-        fill: (0.92 - (attempt ~/ 4) * 0.02).clamp(0.84, 0.92),
+        arrows: (targetArrows - attempt * 6).clamp(tierMin, targetArrows),
+        fill: (0.92 - (attempt ~/ 2) * 0.02).clamp(0.84, 0.92),
         pathFloor: minPath,
-        freeCap: (4 + attempt ~/ 4).clamp(4, 8),
+        freeCap: 2,
         gridSize: fbSize,
       );
       if (result != null) return result;
     }
 
-    for (var attempt = 0; attempt < 4; attempt++) {
+    for (var attempt = 0; attempt < 3; attempt++) {
       final result = tryOnce(
         m: List.generate(fbSize, (_) => List<bool>.filled(fbSize, true)),
         seed: levelNumber * 5557 + attempt * 41,
-        arrows: 24,
+        arrows: (tierMin + 2 - attempt).clamp(tierMin, tierMin + 2),
         fill: 0.86,
         pathFloor: minPath,
-        freeCap: (4 + attempt).clamp(4, 8),
+        freeCap: 2,
         gridSize: fbSize,
       );
       if (result != null) return result;
     }
 
     // Absolute last resort — must never crash level open on any device.
-    // Still bounded (not null) so it can't blow past the "mostly locked"
-    // free-tile assertion even on a sparse, low-density board.
-    for (var attempt = 0; attempt < 5; attempt++) {
+    for (var attempt = 0; attempt < 2; attempt++) {
       final result = tryOnce(
         m: List.generate(fbSize, (_) => List<bool>.filled(fbSize, true)),
         seed: levelNumber * 7771 + attempt * 53,
-        arrows: (18 - attempt).clamp(12, 18),
-        fill: (0.82 - (attempt ~/ 3) * 0.02).clamp(0.76, 0.82),
+        arrows: tierMin,
+        fill: (0.84 - attempt * 0.02).clamp(0.78, 0.84),
         pathFloor: minPath,
-        freeCap: (6 + attempt ~/ 2).clamp(6, 8),
+        freeCap: 2,
         gridSize: fbSize,
       );
       if (result != null) return result;
     }
 
-    // Tiny open square — guaranteed build for any seed. Grid kept at the
-    // tier's phone-safe floor (16) so even this absolute last resort can
-    // never return a level below the Expert tier's own size floor.
-    // Skip free-cap rejection so open never crashes on a sparse board.
+    // Open square — guaranteed build for any seed, still within Expert floor.
+    final guaranteedSize = fbSize.clamp(26, 30);
     final safe = tryOnce(
-      m: List.generate(fbSize, (_) => List<bool>.filled(fbSize, true)),
+      m: List.generate(
+        guaranteedSize,
+        (_) => List<bool>.filled(guaranteedSize, true),
+      ),
       seed: levelNumber * 3331,
-      arrows: 12,
-      fill: 0.74,
+      arrows: tierMin,
+      fill: 0.80,
       pathFloor: 2,
       freeCap: null,
-      gridSize: fbSize,
+      gridSize: guaranteedSize,
     );
     if (safe != null) return safe;
 
@@ -2769,14 +2951,27 @@ class LevelRepository {
 
 }
 
+final _sharedLevelRepository = LevelRepository();
+
 final levelRepositoryProvider = Provider<LevelRepository>((ref) {
-  return LevelRepository();
+  return _sharedLevelRepository;
 });
 
 final levelsRepositoryProvider = levelRepositoryProvider;
 
 final levelByNumberProvider = Provider.family<LevelModel, int>((ref, levelNumber) {
   return ref.watch(levelRepositoryProvider).getLevel(levelNumber);
+});
+
+/// Async counterpart to [levelByNumberProvider] — generation runs on a
+/// background isolate (see `LevelRepository.getLevelAsync`), so the UI can
+/// show a loading state instead of freezing while a 70-200+ arrow board is
+/// built. Once this resolves, the level is cached on the repo, so any
+/// later sync read via [levelByNumberProvider] / `getLevel` for the same
+/// level number is instant.
+final levelByNumberAsyncProvider =
+    FutureProvider.family<LevelModel, int>((ref, levelNumber) {
+  return ref.watch(levelRepositoryProvider).getLevelAsync(levelNumber);
 });
 
 final dailyLevelProvider = Provider<LevelModel>((ref) {
@@ -2793,6 +2988,19 @@ final dailyLevelForDateProvider =
     int.parse(parts[2]),
   );
   return ref.watch(levelRepositoryProvider).getDailyLevel(date);
+});
+
+/// Async counterpart to [dailyLevelForDateProvider] — same background-
+/// isolate treatment, since daily boards are the heaviest generation case.
+final dailyLevelForDateAsyncProvider =
+    FutureProvider.family<LevelModel, String>((ref, dateKey) {
+  final parts = dateKey.split('-');
+  final date = DateTime(
+    int.parse(parts[0]),
+    int.parse(parts[1]),
+    int.parse(parts[2]),
+  );
+  return ref.watch(levelRepositoryProvider).getDailyLevelAsync(date);
 });
 
 String dailyDateKey(DateTime date) {

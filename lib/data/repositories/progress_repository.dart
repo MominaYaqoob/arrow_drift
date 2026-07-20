@@ -12,6 +12,7 @@ class ProgressRepository {
   /// Exact keys required by progression spec.
   static const String currentLevelKey = 'currentLevel';
   static const String hasSeenTutorialKey = 'hasSeenTutorial';
+  static const String hasAcceptedTermsKey = 'hasAcceptedTerms';
 
   static const String _legacyCurrentLevelKey = 'current_level';
   static const String _lastCompletedLevelKey = 'last_completed_level';
@@ -36,6 +37,13 @@ class ProgressRepository {
 
   Future<void> setHasSeenTutorial(bool value) async {
     await _prefs.setBool(hasSeenTutorialKey, value);
+  }
+
+  /// Whether the first-launch Terms/Privacy agree screen was accepted.
+  bool getHasAcceptedTerms() => _prefs.getBool(hasAcceptedTermsKey) ?? false;
+
+  Future<void> setHasAcceptedTerms(bool value) async {
+    await _prefs.setBool(hasAcceptedTermsKey, value);
   }
 
   /// Marks [completedLevel] done and sets [currentLevel] to the next number.

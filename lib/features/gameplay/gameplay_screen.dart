@@ -105,10 +105,12 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
         final repo = ref.read(levelRepositoryProvider);
         final next = widget.levelNumber + 1;
         if (next > repo.levelCount) return;
-        Future<void>.delayed(const Duration(milliseconds: 80), () {
+        Future<void>.delayed(const Duration(milliseconds: 80), () async {
           if (!mounted) return;
+          // Async + background isolate: prefetching a 100-200 arrow Hard/
+          // Expert board must not block the UI thread either.
           try {
-            repo.getLevel(next);
+            await repo.getLevelAsync(next);
           } catch (_) {}
         });
       });
@@ -442,6 +444,33 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Heavy boards (Hard/Expert tiers, 70-200+ arrows) generate on a
+    // background isolate via compute() — watch the async provider FIRST so
+    // we can show a loading indicator instead of blocking this build() on
+    // the main isolate. Once it resolves, the level is cached on the repo,
+    // so the sync providers below (used by the rest of this widget, and by
+    // every other `_level` call site in this class) return instantly with
+    // no further generation work — nothing else in this file needs to
+    // change to become isolate-safe.
+    final levelAsync = widget.isDaily
+        ? ref.watch(dailyLevelForDateAsyncProvider(_dailyKey))
+        : ref.watch(levelByNumberAsyncProvider(widget.levelNumber));
+    if (levelAsync.isLoading) {
+      return const _LevelLoadingView();
+    }
+    if (levelAsync.hasError) {
+      return _LevelLoadingView(
+        error: true,
+        onRetry: () {
+          if (widget.isDaily) {
+            ref.invalidate(dailyLevelForDateAsyncProvider(_dailyKey));
+          } else {
+            ref.invalidate(levelByNumberAsyncProvider(widget.levelNumber));
+          }
+        },
+      );
+    }
+
     final level = widget.isDaily
         ? ref.watch(dailyLevelForDateProvider(_dailyKey))
         : ref.watch(levelByNumberProvider(widget.levelNumber));
@@ -1119,6 +1148,93 @@ class _ActionFab extends StatelessWidget {
             ],
           ),
           child: Center(child: child),
+        ),
+      ),
+    );
+  }
+}
+
+/// Shown while a level generates on the background isolate (see
+/// `LevelRepository.getLevelAsync`/`getDailyLevelAsync`). Hard/Expert
+/// boards can carry 70-200+ arrows, so generation is no longer done
+/// synchronously on the UI isolate — this replaces what would otherwise be
+/// a multi-hundred-millisecond freeze on level open. Same dark-gradient
+/// look as the splash/no-internet screens for visual consistency.
+class _LevelLoadingView extends StatelessWidget {
+  const _LevelLoadingView({this.error = false, this.onRetry});
+
+  final bool error;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0E1726),
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(0, -0.3),
+            radius: 1.1,
+            colors: [
+              Color(0xFF173049),
+              Color(0xFF0E1726),
+              Color(0xFF090F18),
+            ],
+            stops: [0.0, 0.58, 1.0],
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: error
+                  ? [
+                      const Icon(
+                        Icons.error_outline_rounded,
+                        size: 40,
+                        color: Color(0xFF9DB0C4),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Could not build this level',
+                        style: AppTextStyles.body(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: onRetry,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.accentTeal,
+                          foregroundColor: const Color(0xFF0A2430),
+                        ),
+                        child: const Text('Retry'),
+                      ),
+                    ]
+                  : [
+                      const SizedBox(
+                        width: 32,
+                        height: 32,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.6,
+                          valueColor:
+                              AlwaysStoppedAnimation(AppColors.accentTeal),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Building your puzzle…',
+                        style: AppTextStyles.body(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF9DB0C4),
+                        ),
+                      ),
+                    ],
+            ),
+          ),
         ),
       ),
     );

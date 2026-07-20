@@ -36,6 +36,7 @@ class AdsServiceImpl implements AdsService {
   static final AdsServiceImpl instance = AdsServiceImpl._();
 
   bool _initialized = false;
+  Future<void>? _initializing;
   bool _hasConnectivity = true;
   StreamSubscription<bool>? _connectivitySub;
   int _clearsSinceInterstitial = 0;
@@ -45,7 +46,6 @@ class AdsServiceImpl implements AdsService {
   RewardedAd? _rewardedAd;
   bool _rewardedLoading = false;
 
-  static const Duration _rewardedDuration = Duration(seconds: 18);
   static const Duration _interstitialDuration = Duration(seconds: 12);
 
   // --- Google's official Android test ad unit IDs ------------------------
@@ -66,8 +66,14 @@ class AdsServiceImpl implements AdsService {
   bool get _canServeAds => _initialized && _hasConnectivity;
 
   @override
-  Future<void> initialize() async {
-    if (_initialized) return;
+  Future<void> initialize() {
+    if (_initialized) return Future<void>.value();
+    return _initializing ??= _initialize().whenComplete(() {
+      _initializing = null;
+    });
+  }
+
+  Future<void> _initialize() async {
     if (!_adsSupported) {
       debugPrint(
         'AdsService: skipped — AdMob only runs on Android '
@@ -105,8 +111,8 @@ class AdsServiceImpl implements AdsService {
       // Preload one interstitial + one rewarded so the first "clear a
       // level" / "watch for a hint" moment doesn't have to wait on a
       // network round trip.
-      _loadInterstitial();
-      _loadRewarded();
+      unawaited(_loadInterstitial());
+      unawaited(_loadRewarded());
     } catch (e) {
       // Ad SDK failing to initialize (no network, misconfigured app ID,
       // Play services missing, etc.) must never take the app down —
@@ -144,29 +150,35 @@ class AdsServiceImpl implements AdsService {
 
   // --- Interstitial ------------------------------------------------------
 
-  void _loadInterstitial() {
+  Future<void> _loadInterstitial() async {
     if (!_canServeAds || _interstitialLoading || _interstitialAd != null) {
       return;
     }
     _interstitialLoading = true;
-    InterstitialAd.load(
-      adUnitId: _interstitialAdUnitId,
-      request: const AdRequest(),
-      adLoadCallback: InterstitialAdLoadCallback(
-        onAdLoaded: (ad) {
-          _interstitialLoading = false;
-          _interstitialAd = ad;
-        },
-        onAdFailedToLoad: (error) {
-          _interstitialLoading = false;
-          _interstitialAd = null;
-          debugPrint(
-            'AdsService: interstitial failed to load '
-            '(code=${error.code}, message=${error.message})',
-          );
-        },
-      ),
-    );
+    try {
+      await InterstitialAd.load(
+        adUnitId: _interstitialAdUnitId,
+        request: const AdRequest(),
+        adLoadCallback: InterstitialAdLoadCallback(
+          onAdLoaded: (ad) {
+            _interstitialLoading = false;
+            _interstitialAd = ad;
+          },
+          onAdFailedToLoad: (error) {
+            _interstitialLoading = false;
+            _interstitialAd = null;
+            debugPrint(
+              'AdsService: interstitial failed to load '
+              '(code=${error.code}, message=${error.message})',
+            );
+          },
+        ),
+      );
+    } catch (e) {
+      _interstitialLoading = false;
+      _interstitialAd = null;
+      debugPrint('AdsService: interstitial load threw: $e');
+    }
   }
 
   @override
@@ -179,7 +191,7 @@ class AdsServiceImpl implements AdsService {
       // No ad ready (or offline) — never block the player waiting for
       // one. Kick off a fresh load for next time (harmless no-op if
       // offline — _loadInterstitial re-checks _canServeAds) and move on.
-      _loadInterstitial();
+      unawaited(_loadInterstitial());
       return;
     }
 
@@ -190,12 +202,12 @@ class AdsServiceImpl implements AdsService {
     ad.fullScreenContentCallback = FullScreenContentCallback(
       onAdDismissedFullScreenContent: (ad) {
         ad.dispose();
-        _loadInterstitial();
+        unawaited(_loadInterstitial());
         if (!completer.isCompleted) completer.complete();
       },
       onAdFailedToShowFullScreenContent: (ad, error) {
         ad.dispose();
-        _loadInterstitial();
+        unawaited(_loadInterstitial());
         if (!completer.isCompleted) completer.complete();
       },
     );
@@ -211,33 +223,39 @@ class AdsServiceImpl implements AdsService {
 
   // --- Rewarded ------------------------------------------------------
 
-  void _loadRewarded() {
+  Future<void> _loadRewarded() async {
     if (!_canServeAds || _rewardedLoading || _rewardedAd != null) return;
     _rewardedLoading = true;
-    RewardedAd.load(
-      adUnitId: _rewardedAdUnitId,
-      request: const AdRequest(),
-      rewardedAdLoadCallback: RewardedAdLoadCallback(
-        onAdLoaded: (ad) {
-          _rewardedLoading = false;
-          _rewardedAd = ad;
-        },
-        onAdFailedToLoad: (error) {
-          _rewardedLoading = false;
-          _rewardedAd = null;
-          debugPrint(
-            'AdsService: rewarded failed to load '
-            '(code=${error.code}, message=${error.message})',
-          );
-        },
-      ),
-    );
+    try {
+      await RewardedAd.load(
+        adUnitId: _rewardedAdUnitId,
+        request: const AdRequest(),
+        rewardedAdLoadCallback: RewardedAdLoadCallback(
+          onAdLoaded: (ad) {
+            _rewardedLoading = false;
+            _rewardedAd = ad;
+          },
+          onAdFailedToLoad: (error) {
+            _rewardedLoading = false;
+            _rewardedAd = null;
+            debugPrint(
+              'AdsService: rewarded failed to load '
+              '(code=${error.code}, message=${error.message})',
+            );
+          },
+        ),
+      );
+    } catch (e) {
+      _rewardedLoading = false;
+      _rewardedAd = null;
+      debugPrint('AdsService: rewarded load threw: $e');
+    }
   }
 
   Future<bool> _showRewarded(BuildContext context) async {
     if (!context.mounted) return false;
     if (!_canServeAds || _rewardedAd == null) {
-      _loadRewarded();
+      unawaited(_loadRewarded());
       return false;
     }
 
@@ -249,12 +267,12 @@ class AdsServiceImpl implements AdsService {
     ad.fullScreenContentCallback = FullScreenContentCallback(
       onAdDismissedFullScreenContent: (ad) {
         ad.dispose();
-        _loadRewarded();
+        unawaited(_loadRewarded());
         if (!completer.isCompleted) completer.complete(earnedReward);
       },
       onAdFailedToShowFullScreenContent: (ad, error) {
         ad.dispose();
-        _loadRewarded();
+        unawaited(_loadRewarded());
         if (!completer.isCompleted) completer.complete(false);
       },
     );
