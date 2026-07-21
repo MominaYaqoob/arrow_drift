@@ -1,13 +1,13 @@
 class AppConstants {
   AppConstants._();
 
-  static const String appName = 'Arrow Drift: Puzzle Game';
+  static const String appName = 'Arrow Drift : Puzzle Game';
 
   /// Short brand for tight UI spots (tabs, short labels).
   static const String appShortName = 'Arrow Drift';
 
   /// Full product name (same as [appName]).
-  static const String appDisplayName = 'Arrow Drift: Puzzle Game';
+  static const String appDisplayName = 'Arrow Drift : Puzzle Game';
 
   /// Android / Play application id (must match build.gradle.kts).
   static const String applicationId = 'com.sid.arrowdrift.puzzlegame';

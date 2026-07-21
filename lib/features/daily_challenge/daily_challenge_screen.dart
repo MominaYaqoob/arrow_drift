@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:arrow_drift/core/providers/connectivity_provider.dart';
 import 'package:arrow_drift/core/theme/app_theme.dart';
 import 'package:arrow_drift/core/utils/online_gate.dart';
 import 'package:arrow_drift/data/repositories/level_repository.dart';
@@ -21,7 +24,10 @@ class DailyChallengeScreen extends ConsumerStatefulWidget {
 }
 
 class _DailyChallengeScreenState extends ConsumerState<DailyChallengeScreen> {
-  static const int _centerPage = 1000;
+  /// Past: only 1 month back. Future months stay swipeable.
+  static const int _monthsBack = 1;
+  static const int _monthsForward = 24;
+  static const int _centerPage = _monthsBack; // current month index
 
   late final PageController _pageController;
   late int _pageIndex;
@@ -31,6 +37,8 @@ class _DailyChallengeScreenState extends ConsumerState<DailyChallengeScreen> {
     super.initState();
     _pageIndex = _centerPage;
     _pageController = PageController(initialPage: _centerPage);
+    // Do NOT prefetch daily boards here — generation is heavy and freezes
+    // the calendar (especially on web). Load starts on the Daily loader screen.
   }
 
   @override
@@ -52,28 +60,21 @@ class _DailyChallengeScreenState extends ConsumerState<DailyChallengeScreen> {
     return completed.where((k) => k.startsWith(prefix)).length;
   }
 
-  Future<void> _openDaily(DateTime selected) async {
+  void _openDaily(DateTime selected) {
     final today = DateTime(_now.year, _now.month, _now.day);
     final day = DateTime(selected.year, selected.month, selected.day);
 
-    if (day.isAfter(today)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Upcoming days unlock later'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+    // Future days stay faded; no bottom snackbar.
+    if (day.isAfter(today)) return;
+
+    // Offline: dialog only. Do not block open with a network probe.
+    if (!ref.read(connectivityProvider)) {
+      unawaited(showNoInternetDialog(context));
       return;
     }
 
-    final online = await requireOnline(ref);
-    if (!mounted) return;
-    if (!online) {
-      await showNoInternetDialog(context);
-      return;
-    }
-
-    // Past + today (including already cleared) → open / replay.
+    // Instant navigation — all board wait happens on the Daily loader screen.
+    ScaffoldMessenger.of(context).clearSnackBars();
     final key = dailyDateKey(day);
     context.push('${GameplayScreen.routePath}?daily=1&date=$key');
   }
@@ -129,7 +130,7 @@ class _DailyChallengeScreenState extends ConsumerState<DailyChallengeScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           child: _CalendarPager(
                             controller: _pageController,
-                            centerPage: _centerPage,
+                            pageCount: _monthsBack + 1 + _monthsForward,
                             completedKeys: completed,
                             now: _now,
                             monthForPage: _monthForPage,
@@ -273,7 +274,7 @@ class _DailyHero extends StatelessWidget {
 class _CalendarPager extends StatelessWidget {
   const _CalendarPager({
     required this.controller,
-    required this.centerPage,
+    required this.pageCount,
     required this.completedKeys,
     required this.now,
     required this.monthForPage,
@@ -283,7 +284,7 @@ class _CalendarPager extends StatelessWidget {
   });
 
   final PageController controller;
-  final int centerPage;
+  final int pageCount;
   final Set<String> completedKeys;
   final DateTime now;
   final DateTime Function(int page) monthForPage;
@@ -298,6 +299,7 @@ class _CalendarPager extends StatelessWidget {
       height: 360,
       child: PageView.builder(
         controller: controller,
+        itemCount: pageCount,
         onPageChanged: onPageChanged,
         itemBuilder: (context, page) {
           final month = monthForPage(page);
@@ -421,7 +423,7 @@ class _CalendarCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Swipe for other months · tap a day to play',
+              'Swipe months · past only 1 month · tap a day to play',
               style: AppTextStyles.label(
                 fontSize: 11,
                 color: colors.secondaryText,

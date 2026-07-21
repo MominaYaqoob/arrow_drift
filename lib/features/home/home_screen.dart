@@ -254,7 +254,7 @@ class _BrandBlock extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         Text(
-          'Arrow Drift:',
+          'Arrow Drift :',
           textAlign: TextAlign.center,
           style: AppTextStyles.heading(
             fontSize: 28,

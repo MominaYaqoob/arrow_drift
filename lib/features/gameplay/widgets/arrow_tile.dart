@@ -123,7 +123,7 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
 
     _wrongColorController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 520),
+      duration: const Duration(milliseconds: 680),
     );
     _wrongColorController.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
@@ -446,9 +446,11 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
               _wrongBumpController.value > 0)) {
         return AppColors.heartRed;
       }
+      // Solid red for most of the flash, then ease back to base.
       final t = _wrongColorController.value;
-      final flash = t < 0.55 ? 1.0 : (1.0 - (t - 0.55) / 0.45);
-      return Color.lerp(base, AppColors.heartRed, flash)!;
+      if (t < 0.72) return AppColors.heartRed;
+      final flash = 1.0 - (t - 0.72) / 0.28;
+      return Color.lerp(base, AppColors.heartRed, flash.clamp(0.0, 1.0))!;
     }
     return base;
   }

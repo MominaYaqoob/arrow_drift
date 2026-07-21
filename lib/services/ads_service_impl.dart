@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
-import 'package:arrow_drift/services/ad_slot.dart';
 import 'package:arrow_drift/services/ads_service.dart';
 import 'package:arrow_drift/services/banner_ad_widget.dart';
 import 'package:arrow_drift/services/network_status.dart';
@@ -29,7 +28,7 @@ import 'package:arrow_drift/services/network_status.dart';
 /// ad-triggering path below checks both `_initialized` and
 /// `_hasConnectivity` before touching the SDK, so a connection dropping
 /// mid-session (airplane mode, tunnel, etc.) makes ads quietly stop
-/// showing — banners fall back to the styled placeholder, interstitial/
+/// showing — banners keep an empty reserved slot, interstitial/
 /// rewarded calls just no-op — instead of throwing.
 class AdsServiceImpl implements AdsService {
   AdsServiceImpl._();
@@ -127,12 +126,12 @@ class AdsServiceImpl implements AdsService {
   @override
   Widget bannerPlaceholder({required double height}) {
     if (!_adsSupported || !_hasConnectivity) {
-      return AdSlot(height: height, label: 'Sponsored · Arrow Drift');
+      // Keep layout space; never show fake Sponsored placeholder.
+      return SizedBox(width: double.infinity, height: height);
     }
     // Always return the real banner widget — it awaits initialize() itself
     // so a slow / late SDK init (or hot reload that skipped main()) still
-    // swaps in a live ad once ready, instead of locking onto AdSlot forever.
-    // BannerAdWidget has its own AdSlot fallback if the request fails.
+    // swaps in a live ad once ready. Empty slot until load / on failure.
     return BannerAdWidget(
       adUnitId: _bannerAdUnitId,
       height: height,

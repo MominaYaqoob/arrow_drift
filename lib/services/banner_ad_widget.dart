@@ -3,15 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
-import 'package:arrow_drift/services/ad_slot.dart';
-
 /// Loads and shows a real AdMob banner inside a fixed-height reserved slot.
 ///
 /// Fails **silently** by design: if the SDK isn't initialized, there's no
 /// connectivity, the ad request errors out, or the widget is disposed
-/// mid-load, this just falls back to the styled [AdSlot] placeholder
-/// instead of crashing or leaving a broken frame. The reserved height never
-/// changes, so nothing around it ever jumps.
+/// mid-load, this keeps an empty reserved-height slot (no fake "Sponsored"
+/// placeholder) instead of crashing. Height never changes, so layout
+/// around it never jumps.
 class BannerAdWidget extends StatefulWidget {
   const BannerAdWidget({
     super.key,
@@ -112,6 +110,8 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
 
   @override
   Widget build(BuildContext context) {
+    // Reserved height only — empty until a real AdMob banner loads.
+    // Do not show the fake "Sponsored · Arrow Drift" AdSlot here.
     return SizedBox(
       width: double.infinity,
       height: widget.height,
@@ -123,7 +123,7 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
                 child: AdWidget(ad: _bannerAd!),
               ),
             )
-          : AdSlot(height: widget.height, label: 'Sponsored · Arrow Drift'),
+          : const SizedBox.shrink(),
     );
   }
 }

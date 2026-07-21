@@ -1,5 +1,5 @@
 name: arrow_drift
-description: "Arrow Drift - A Flutter puzzle game."
+description: "Arrow Drift : Puzzle Game"
 publish_to: 'none'
 
 version: 1.0.2+3
@@ -22,6 +22,7 @@ dependencies:
   audioplayers: ^6.8.1
   google_mobile_ads: ^8.0.0
   connectivity_plus: ^7.1.1
+  vibration: ^3.2.0
 
 dev_dependencies:
   flutter_test:
@@ -56,3 +57,5 @@ flutter:
     - assets/sounds/tap_wrong.wav
     - assets/sounds/level_win.wav
     - assets/sounds/ui_tap.wav
+    - assets/sounds/arrow_escape.wav
+    - assets/sounds/arrow_hit.wav

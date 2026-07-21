@@ -15,6 +15,7 @@ import 'package:arrow_drift/data/models/level_model.dart';
 import 'package:arrow_drift/data/repositories/level_repository.dart';
 import 'package:arrow_drift/data/repositories/progress_repository.dart';
 import 'package:arrow_drift/features/daily_challenge/daily_challenge_screen.dart';
+import 'package:arrow_drift/features/daily_challenge/daily_loading_view.dart';
 import 'package:arrow_drift/features/gameplay/game_controller.dart';
 import 'package:arrow_drift/features/gameplay/widgets/game_board.dart';
 import 'package:arrow_drift/features/gameplay/widgets/halfway_complete_toast.dart';
@@ -74,6 +75,19 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
   bool _showWinOverlay = false;
   Timer? _winOverlayTimer;
 
+  /// Daily: hide board until load finishes + 1s soft wait.
+  bool _dailyBoardVisible = false;
+  Timer? _dailyRevealTimer;
+  String? _dailyRevealArmedFor;
+
+  /// Main Level 2+: hide board until load finishes + 1.2s soft wait.
+  bool _campaignBoardVisible = false;
+  Timer? _campaignRevealTimer;
+  int? _campaignRevealArmedFor;
+
+  /// Paint loader one frame before heavy board fetch (Daily + Main L2+).
+  bool _loadFetchStarted = false;
+
   late final AnimationController _chromeController;
   late final Animation<double> _chromeOpacity;
 
@@ -97,6 +111,17 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     );
     _chromeController.forward();
     _loadTutorialFlag();
+    // Daily + Main levels 2+: show loader first, then start generation so
+    // the previous screen never stays frozen waiting for the board.
+    // Level 1 stays instant (tutorial / light board).
+    if (widget.isDaily || widget.levelNumber > 1) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() => _loadFetchStarted = true);
+      });
+    } else {
+      _loadFetchStarted = true;
+    }
     // After this frame: warm the next campaign level in the lazy cache so
     // "Next" navigation does not rebuild from scratch on the UI isolate.
     if (!widget.isDaily) {
@@ -140,8 +165,36 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     _halfwayTimer?.cancel();
     _outOfLivesTimer?.cancel();
     _winOverlayTimer?.cancel();
+    _dailyRevealTimer?.cancel();
+    _campaignRevealTimer?.cancel();
     _chromeController.dispose();
     super.dispose();
+  }
+
+  /// After daily board is built, wait 1s then reveal (board stays hidden).
+  void _armDailyRevealIfNeeded() {
+    if (!widget.isDaily) return;
+    if (_dailyRevealArmedFor == _dailyKey) return;
+    _dailyRevealArmedFor = _dailyKey;
+    _dailyRevealTimer?.cancel();
+    _dailyBoardVisible = false;
+    _dailyRevealTimer = Timer(const Duration(seconds: 1), () {
+      if (!mounted) return;
+      setState(() => _dailyBoardVisible = true);
+    });
+  }
+
+  /// After Main Level 2+ board is built, wait 1.2s then reveal.
+  void _armCampaignRevealIfNeeded() {
+    if (widget.isDaily || widget.levelNumber <= 1) return;
+    if (_campaignRevealArmedFor == widget.levelNumber) return;
+    _campaignRevealArmedFor = widget.levelNumber;
+    _campaignRevealTimer?.cancel();
+    _campaignBoardVisible = false;
+    _campaignRevealTimer = Timer(const Duration(milliseconds: 1200), () {
+      if (!mounted) return;
+      setState(() => _campaignBoardVisible = true);
+    });
   }
 
   LevelModel get _level {
@@ -452,23 +505,100 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     // every other `_level` call site in this class) return instantly with
     // no further generation work — nothing else in this file needs to
     // change to become isolate-safe.
+    if (!_loadFetchStarted) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF6F3EC),
+        body: widget.isDaily
+            ? const DailyChallengeLoadingOverlay()
+            : DailyChallengeLoadingOverlay.forLevel(
+                levelNumber: widget.levelNumber,
+              ),
+      );
+    }
+
     final levelAsync = widget.isDaily
         ? ref.watch(dailyLevelForDateAsyncProvider(_dailyKey))
         : ref.watch(levelByNumberAsyncProvider(widget.levelNumber));
-    if (levelAsync.isLoading) {
-      return const _LevelLoadingView();
-    }
-    if (levelAsync.hasError) {
-      return _LevelLoadingView(
-        error: true,
-        onRetry: () {
-          if (widget.isDaily) {
-            ref.invalidate(dailyLevelForDateAsyncProvider(_dailyKey));
-          } else {
+
+    // Daily: center dialog — board hidden until generation + 1s soft pause.
+    if (widget.isDaily) {
+      if (levelAsync.hasError) {
+        return Scaffold(
+          backgroundColor: const Color(0xFFF6F3EC),
+          body: DailyChallengeLoadingOverlay(
+            error: true,
+            onRetry: () {
+              _dailyRevealArmedFor = null;
+              _dailyBoardVisible = false;
+              _dailyRevealTimer?.cancel();
+              ref.invalidate(dailyLevelForDateAsyncProvider(_dailyKey));
+            },
+          ),
+        );
+      }
+      if (levelAsync.isLoading || !levelAsync.hasValue) {
+        return const Scaffold(
+          backgroundColor: Color(0xFFF6F3EC),
+          body: DailyChallengeLoadingOverlay(),
+        );
+      }
+      if (!_dailyBoardVisible) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _armDailyRevealIfNeeded();
+        });
+        return const Scaffold(
+          backgroundColor: Color(0xFFF6F3EC),
+          body: DailyChallengeLoadingOverlay(),
+        );
+      }
+    } else if (widget.levelNumber > 1) {
+      // Main levels 2+: same dialog loader + 1.2s soft wait after board ready.
+      if (levelAsync.hasError) {
+        return Scaffold(
+          backgroundColor: const Color(0xFFF6F3EC),
+          body: DailyChallengeLoadingOverlay.forLevel(
+            levelNumber: widget.levelNumber,
+            error: true,
+            onRetry: () {
+              _campaignRevealArmedFor = null;
+              _campaignBoardVisible = false;
+              _campaignRevealTimer?.cancel();
+              ref.invalidate(levelByNumberAsyncProvider(widget.levelNumber));
+            },
+          ),
+        );
+      }
+      if (levelAsync.isLoading || !levelAsync.hasValue) {
+        return Scaffold(
+          backgroundColor: const Color(0xFFF6F3EC),
+          body: DailyChallengeLoadingOverlay.forLevel(
+            levelNumber: widget.levelNumber,
+          ),
+        );
+      }
+      if (!_campaignBoardVisible) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _armCampaignRevealIfNeeded();
+        });
+        return Scaffold(
+          backgroundColor: const Color(0xFFF6F3EC),
+          body: DailyChallengeLoadingOverlay.forLevel(
+            levelNumber: widget.levelNumber,
+          ),
+        );
+      }
+    } else {
+      if (levelAsync.isLoading) {
+        return const _LevelLoadingView();
+      }
+      if (levelAsync.hasError) {
+        return _LevelLoadingView(
+          error: true,
+          onRetry: () {
             ref.invalidate(levelByNumberAsyncProvider(widget.levelNumber));
-          }
-        },
-      );
+          },
+        );
+      }
     }
 
     final level = widget.isDaily
@@ -598,7 +728,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
                       showTutorialTip: tutorialArrowId != null,
                       plainTutorial: inTutorial,
                       plainBoard: isNestedPlain,
-                      playEntrance: true,
+                      playEntrance: !widget.isDaily,
                       boardZoomed: _boardZoomed,
                       shakeTokens: Map<String, int>.from(_shakeTokens),
                       wrongBumpCells: Map<String, double>.from(_wrongBumpCells),

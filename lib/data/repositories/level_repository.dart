@@ -1745,12 +1745,20 @@ class LevelRepository {
     if (inflight != null) return inflight;
 
     final future = () async {
+      // Yield so the Daily loader can paint before heavy work starts.
+      // Without this, the first frame after date-tap stays frozen on the
+      // calendar (compute on web often runs on the UI isolate).
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(const Duration(milliseconds: 32));
+
       final LevelModel level;
       if (kIsWeb) {
-        await Future<void>.delayed(Duration.zero);
-        level = _buildDailyChallengeLevel(day, levelNumber);
+        // Web: compute() typically shares the UI isolate — still heavy, but
+        // the loader is already on screen. Android uses a real isolate.
+        level = _dailyChallengeIsolateEntry((day, levelNumber));
       } else {
-        level = await compute(_dailyChallengeIsolateEntry, (day, levelNumber));
+        level =
+            await compute(_dailyChallengeIsolateEntry, (day, levelNumber));
       }
       _dailyCache[levelNumber] = level;
       return level;
