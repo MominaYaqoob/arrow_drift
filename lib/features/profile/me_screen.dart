@@ -70,6 +70,12 @@ class MeScreen extends ConsumerWidget {
     final levelsCleared =
         ref.watch(lastCompletedLevelProvider).valueOrNull ?? 0;
     final streak = ref.watch(currentStreakProvider).valueOrNull ?? 0;
+    final remaining =
+        ref.watch(streakRemainingProvider).valueOrNull ?? Duration.zero;
+    final streakTimer =
+        streak > 0 && remaining > Duration.zero
+            ? formatStreakRemaining(remaining)
+            : null;
 
     final nickname = nicknameAsync.when(
       data: (name) => name.trim().isEmpty ? 'Player' : name.trim(),
@@ -90,6 +96,7 @@ class MeScreen extends ConsumerWidget {
             name: nickname,
             levelsCleared: levelsCleared,
             dayStreak: streak,
+            streakTimer: streakTimer,
             onAvatarTap: () => _pickAvatar(context, ref),
             onNameTap: () => _editNickname(context, ref, nickname),
           ),
@@ -332,6 +339,7 @@ class _ProfileHeader extends StatelessWidget {
     required this.name,
     required this.levelsCleared,
     required this.dayStreak,
+    this.streakTimer,
     required this.onAvatarTap,
     required this.onNameTap,
   });
@@ -340,6 +348,7 @@ class _ProfileHeader extends StatelessWidget {
   final String name;
   final int levelsCleared;
   final int dayStreak;
+  final String? streakTimer;
   final VoidCallback onAvatarTap;
   final VoidCallback onNameTap;
 
@@ -439,7 +448,12 @@ class _ProfileHeader extends StatelessWidget {
                 margin: const EdgeInsets.symmetric(horizontal: 22),
                 color: Colors.white.withValues(alpha: 0.22),
               ),
-              _HeaderStat(value: '$dayStreak', label: 'Day streak'),
+              _HeaderStat(
+                value: '$dayStreak',
+                label: streakTimer != null
+                    ? 'Day streak · ⏳ $streakTimer'
+                    : 'Day streak',
+              ),
             ],
           ),
         ],

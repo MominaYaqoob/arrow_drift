@@ -574,7 +574,7 @@ class _DailyTip extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Play today to keep your streak. Miss a day = reset.',
+                  'Complete today\'s challenge to start a 24h streak timer. Miss the window = reset.',
                   style: AppTextStyles.body(
                     fontSize: 12,
                     color: colors.secondaryText,

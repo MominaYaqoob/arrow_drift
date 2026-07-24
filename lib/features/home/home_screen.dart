@@ -297,6 +297,12 @@ class _DailyChallengeCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final today = _formatDate(DateTime.now());
     final streak = ref.watch(currentStreakProvider).valueOrNull ?? 0;
+    final remaining =
+        ref.watch(streakRemainingProvider).valueOrNull ?? Duration.zero;
+    final timerLabel =
+        streak > 0 && remaining > Duration.zero
+            ? formatStreakRemaining(remaining)
+            : null;
 
     return Material(
       color: Colors.transparent,
@@ -348,41 +354,69 @@ class _DailyChallengeCard extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.2),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.local_fire_department_rounded,
-                            size: 14,
-                            color: streak > 0
-                                ? const Color(0xFFFFC857)
-                                : Colors.white.withValues(alpha: 0.75),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
                           ),
-                          const SizedBox(width: 5),
-                          Text(
-                            streak > 0
-                                ? '$streak day streak'
-                                : 'No streak yet',
-                            style: AppTextStyles.label(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white.withValues(alpha: 0.95),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.2),
                             ),
                           ),
-                        ],
-                      ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.local_fire_department_rounded,
+                                size: 14,
+                                color: streak > 0
+                                    ? const Color(0xFFFFC857)
+                                    : Colors.white.withValues(alpha: 0.75),
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                streak > 0
+                                    ? '$streak day streak'
+                                    : 'No streak yet',
+                                style: AppTextStyles.label(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white.withValues(alpha: 0.95),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (timerLabel != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.2),
+                              ),
+                            ),
+                            child: Text(
+                              '⏳ $timerLabel',
+                              style: AppTextStyles.label(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white.withValues(alpha: 0.95),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ],
                 ),

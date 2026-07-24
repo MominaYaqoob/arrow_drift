@@ -20,6 +20,10 @@ class ProgressRepository {
   static const String _streakKey = 'current_streak';
   /// Last calendar day that counted toward the Snapchat-style streak (`yyyy-MM-dd`).
   static const String _streakLastDateKey = 'daily_streak_last_date';
+  /// Epoch millis when the current 24h streak window ends (set only on today's clear).
+  static const String _streakDeadlineKey = 'daily_streak_deadline_ms';
+  /// Rolling window after each successful today-clear (Snapchat-style).
+  static const Duration streakWindow = Duration(hours: 24);
 
   /// Next level to resume (defaults to 1 on fresh install).
   int getCurrentLevel() {
@@ -71,27 +75,42 @@ class ProgressRepository {
     }).length;
   }
 
-  /// Snapchat-style streak: only consecutive **today** clears count.
-  /// Past-day backfills keep calendar stars but do not save the streak.
-  /// Returns 0 if yesterday was missed and today is not yet cleared.
+  /// Snapchat-style streak: alive only while the 24h window from the last
+  /// **today** clear has not expired. Past-day backfills keep calendar stars
+  /// but never start or extend the timer.
   int getCurrentStreak({DateTime? now}) {
-    final today = _dayOnly(now ?? DateTime.now());
-    final yesterday = today.subtract(const Duration(days: 1));
+    final clock = now ?? DateTime.now();
+    final deadline = getStreakDeadline(now: clock);
+    if (deadline == null || !clock.isBefore(deadline)) {
+      return 0;
+    }
     final lastKey = _prefs.getString(_streakLastDateKey);
     if (lastKey == null || lastKey.isEmpty) return 0;
-
-    final last = _parseDateKey(lastKey);
-    if (last == null) return 0;
-
-    // Still alive: cleared today, or cleared yesterday (grace until today ends).
-    if (_sameDay(last, today) || _sameDay(last, yesterday)) {
-      return _prefs.getInt(_streakKey) ?? 0;
-    }
-    // Missed a full day → streak broken.
-    return 0;
+    if (_parseDateKey(lastKey) == null) return 0;
+    return _prefs.getInt(_streakKey) ?? 0;
   }
 
-  /// Marks a calendar daily complete. Streak updates **only** for today's puzzle.
+  /// When the current streak window ends, or null if inactive / expired.
+  DateTime? getStreakDeadline({DateTime? now}) {
+    final raw = _prefs.getInt(_streakDeadlineKey);
+    if (raw == null) return null;
+    final deadline = DateTime.fromMillisecondsSinceEpoch(raw);
+    final clock = now ?? DateTime.now();
+    if (!clock.isBefore(deadline)) return null;
+    return deadline;
+  }
+
+  /// Remaining time in the active streak window, or [Duration.zero] if none.
+  Duration getStreakRemaining({DateTime? now}) {
+    final clock = now ?? DateTime.now();
+    final deadline = getStreakDeadline(now: clock);
+    if (deadline == null) return Duration.zero;
+    final left = deadline.difference(clock);
+    return left.isNegative ? Duration.zero : left;
+  }
+
+  /// Marks a calendar daily complete. Streak + 24h timer update **only** for
+  /// today's puzzle, and **only** on a successful clear (caller after win).
   Future<void> markDailyCompleted(DateTime date, {DateTime? now}) async {
     final key = _dateKey(date);
     final existing = [...getCompletedDailyDates()];
@@ -100,30 +119,41 @@ class ProgressRepository {
       await _prefs.setStringList(_dailyCompletedKey, existing);
     }
 
-    final today = _dayOnly(now ?? DateTime.now());
+    final clock = now ?? DateTime.now();
+    final today = _dayOnly(clock);
     final playDay = _dayOnly(date);
 
-    // Past / future puzzles: stars only, no streak change.
+    // Past / future puzzles: stars only, no streak / timer change.
     if (!_sameDay(playDay, today)) return;
 
     final yesterday = today.subtract(const Duration(days: 1));
     final lastKey = _prefs.getString(_streakLastDateKey);
     final last = lastKey == null ? null : _parseDateKey(lastKey);
     final stored = _prefs.getInt(_streakKey) ?? 0;
+    final deadline = getStreakDeadline(now: clock);
+    final windowOpen = deadline != null;
 
     int nextStreak;
     if (last != null && _sameDay(last, today)) {
-      // Already counted today.
+      // Already counted today — keep streak; do not restart the timer.
       nextStreak = stored > 0 ? stored : 1;
-    } else if (last != null && _sameDay(last, yesterday)) {
+      await _prefs.setInt(_streakKey, nextStreak);
+      await _prefs.setString(_streakLastDateKey, _dateKey(today));
+      return;
+    } else if (windowOpen &&
+        last != null &&
+        _sameDay(last, yesterday)) {
+      // Cleared again inside the 24h window → continue streak.
       nextStreak = stored + 1;
     } else {
-      // First play or gap → start fresh.
+      // First clear, or previous window expired → fresh streak + timer.
       nextStreak = 1;
     }
 
+    final nextDeadline = clock.add(streakWindow);
     await _prefs.setInt(_streakKey, nextStreak);
     await _prefs.setString(_streakLastDateKey, _dateKey(today));
+    await _prefs.setInt(_streakDeadlineKey, nextDeadline.millisecondsSinceEpoch);
   }
 
   DateTime _dayOnly(DateTime d) => DateTime(d.year, d.month, d.day);
@@ -244,6 +274,40 @@ final currentStreakProvider = FutureProvider<int>((ref) async {
   final repo = await ref.watch(progressRepositoryProvider.future);
   return repo.getCurrentStreak();
 });
+
+/// Live remaining time in the Snapchat-style 24h streak window.
+/// Emits every second while a window is active; `Duration.zero` when none.
+final streakRemainingProvider = StreamProvider<Duration>((ref) async* {
+  final repo = await ref.watch(progressRepositoryProvider.future);
+  // Re-emit when streak is marked complete (provider invalidated).
+  ref.watch(currentStreakProvider);
+  while (true) {
+    final left = repo.getStreakRemaining();
+    yield left;
+    if (left == Duration.zero) {
+      // Idle until streak changes again.
+      await Future<void>.delayed(const Duration(seconds: 5));
+    } else {
+      await Future<void>.delayed(const Duration(seconds: 1));
+    }
+  }
+});
+
+/// Formats a streak countdown like `14h 32m` or `45m` / `12s`.
+String formatStreakRemaining(Duration d) {
+  if (d <= Duration.zero) return '';
+  final totalSec = d.inSeconds;
+  final hours = totalSec ~/ 3600;
+  final minutes = (totalSec % 3600) ~/ 60;
+  final seconds = totalSec % 60;
+  if (hours > 0) {
+    return '${hours}h ${minutes.toString().padLeft(2, '0')}m ${seconds.toString().padLeft(2, '0')}s';
+  }
+  if (minutes > 0) {
+    return '${minutes}m ${seconds.toString().padLeft(2, '0')}s';
+  }
+  return '${seconds}s';
+}
 
 final monthlyDailyStarsProvider = FutureProvider<int>((ref) async {
   final repo = await ref.watch(progressRepositoryProvider.future);

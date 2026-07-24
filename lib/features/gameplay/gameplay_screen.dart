@@ -728,7 +728,9 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
                       showTutorialTip: tutorialArrowId != null,
                       plainTutorial: inTutorial,
                       plainBoard: isNestedPlain,
-                      playEntrance: !widget.isDaily,
+                      // Level 2+: spinner covers load; show full board at once.
+                      // Level 1 keeps staggered entrance; Daily never uses it.
+                      playEntrance: !widget.isDaily && widget.levelNumber == 1,
                       boardZoomed: _boardZoomed,
                       shakeTokens: Map<String, int>.from(_shakeTokens),
                       wrongBumpCells: Map<String, double>.from(_wrongBumpCells),
