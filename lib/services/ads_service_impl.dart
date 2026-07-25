@@ -302,7 +302,8 @@ class AdsServiceImpl implements AdsService {
   @override
   Future<void> onLevelCleared(BuildContext context) async {
     _clearsSinceInterstitial++;
-    if (_clearsSinceInterstitial < 5) return;
+    // Every 4th campaign clear → fullscreen interstitial.
+    if (_clearsSinceInterstitial < 4) return;
     _clearsSinceInterstitial = 0;
     if (!context.mounted) return;
     await showInterstitial(context);

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -277,20 +279,40 @@ final currentStreakProvider = FutureProvider<int>((ref) async {
 
 /// Live remaining time in the Snapchat-style 24h streak window.
 /// Emits every second while a window is active; `Duration.zero` when none.
-final streakRemainingProvider = StreamProvider<Duration>((ref) async* {
-  final repo = await ref.watch(progressRepositoryProvider.future);
-  // Re-emit when streak is marked complete (provider invalidated).
+final streakRemainingProvider = StreamProvider<Duration>((ref) {
+  // Re-subscribe when streak is marked complete (provider invalidated).
   ref.watch(currentStreakProvider);
-  while (true) {
-    final left = repo.getStreakRemaining();
-    yield left;
-    if (left == Duration.zero) {
-      // Idle until streak changes again.
-      await Future<void>.delayed(const Duration(seconds: 5));
-    } else {
-      await Future<void>.delayed(const Duration(seconds: 1));
+
+  final controller = StreamController<Duration>();
+  Timer? timer;
+  var disposed = false;
+
+  Future<void> start() async {
+    final repo = await ref.watch(progressRepositoryProvider.future);
+    if (disposed || controller.isClosed) return;
+
+    void tick() {
+      if (disposed || controller.isClosed) return;
+      final left = repo.getStreakRemaining();
+      controller.add(left);
+      final delay = left == Duration.zero
+          ? const Duration(seconds: 5)
+          : const Duration(seconds: 1);
+      timer = Timer(delay, tick);
     }
+
+    tick();
   }
+
+  start();
+
+  ref.onDispose(() {
+    disposed = true;
+    timer?.cancel();
+    controller.close();
+  });
+
+  return controller.stream;
 });
 
 /// Formats a streak countdown like `14h 32m` or `45m` / `12s`.

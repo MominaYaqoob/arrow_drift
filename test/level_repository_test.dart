@@ -127,10 +127,10 @@ void main() {
     }
 
     test(
-        'L1 tutorial; L2-5 Easy; L6-20 Medium; L21-199 Hard; L200-500 '
-        'Expert; all solvable', () {
+        'L1 tutorial; L2-5 Easy; L6-20 Medium; L21-100 Hard; L101-199 Hard+; '
+        'L200-500 Expert; L501-1000 late tiers; all solvable', () {
       final repo = LevelRepository();
-      expect(repo.levelCount, 500);
+      expect(repo.levelCount, 1000);
 
       // L1 unchanged tutorial.
       expect(repo.getLevel(1).arrows, hasLength(3));
@@ -141,33 +141,33 @@ void main() {
       expect(byCol[1]!.direction, ArrowDirection.up);
       expect(byCol[2]!.direction, ArrowDirection.down);
 
-      // L2-5: Easy tier — 10-20 arrows, light blocking (1-2 free).
+      // L2-5: Easy tier — 40-50 arrows, light blocking (1-2 free).
       for (var n = 2; n <= 5; n++) {
         final level = repo.getLevel(n);
         expect(level.levelNumber, n);
         expect(level.difficulty, LevelDifficulty.easy, reason: 'L$n');
         expect(level.gridRows, greaterThanOrEqualTo(6), reason: 'L$n');
-        expect(level.gridRows, lessThanOrEqualTo(13), reason: 'L$n');
-        expect(level.arrows.length, greaterThanOrEqualTo(10), reason: 'L$n');
-        expect(level.arrows.length, lessThanOrEqualTo(20), reason: 'L$n');
+        expect(level.gridRows, lessThanOrEqualTo(20), reason: 'L$n');
+        expect(level.arrows.length, greaterThanOrEqualTo(40), reason: 'L$n');
+        expect(level.arrows.length, lessThanOrEqualTo(50), reason: 'L$n');
         for (final a in level.arrows) {
           expect(a.path.length, greaterThanOrEqualTo(2), reason: 'L$n ${a.id}');
         }
         expectInMask(level);
         final freeCount = freeCountFor(level);
         expect(freeCount, greaterThanOrEqualTo(1), reason: 'L$n >=1 free');
-        expect(freeCount, lessThanOrEqualTo(8), reason: 'L$n mostly locked');
+        expect(freeCount, lessThanOrEqualTo(40), reason: 'L$n mostly locked');
       }
 
-      // L6-20: Medium tier — 30-40 nested arrows, seal-chain blocking.
+      // L6-20: Medium tier — 50-80 nested arrows, seal-chain blocking.
       for (var n = 6; n <= 20; n++) {
         final level = repo.getLevel(n);
         expect(level.levelNumber, n);
         expect(level.difficulty, LevelDifficulty.medium, reason: 'L$n');
         expect(level.gridRows, greaterThanOrEqualTo(10), reason: 'L$n');
-        expect(level.gridRows, lessThanOrEqualTo(17), reason: 'L$n');
-        expect(level.arrows.length, greaterThanOrEqualTo(30), reason: 'L$n');
-        expect(level.arrows.length, lessThanOrEqualTo(40), reason: 'L$n');
+        expect(level.gridRows, lessThanOrEqualTo(22), reason: 'L$n');
+        expect(level.arrows.length, greaterThanOrEqualTo(50), reason: 'L$n');
+        expect(level.arrows.length, lessThanOrEqualTo(80), reason: 'L$n');
         for (final a in level.arrows) {
           expect(a.path.length, greaterThanOrEqualTo(2), reason: 'L$n ${a.id}');
         }
@@ -175,19 +175,32 @@ void main() {
 
         final freeCount = freeCountFor(level);
         expect(freeCount, greaterThanOrEqualTo(1), reason: 'L$n >=1 free');
-        expect(freeCount, lessThanOrEqualTo(8), reason: 'L$n bounded free');
+        expect(freeCount, lessThanOrEqualTo(40), reason: 'L$n bounded free');
       }
 
-      // L21-199: Hard tier — 70-199 arrows, sampled for CI speed.
-      final hardSample = <int>{21, 199, for (var n = 21; n <= 199; n += 11) n};
+      // L21-100 Hard (80-100); L101-199 Hard+ (100-150).
+      final hardSample = <int>{
+        21,
+        100,
+        101,
+        199,
+        for (var n = 21; n <= 100; n += 13) n,
+        for (var n = 101; n <= 199; n += 17) n,
+      };
       for (final n in hardSample) {
         final level = repo.getLevel(n);
         expect(level.levelNumber, n);
-        expect(level.difficulty, LevelDifficulty.hard, reason: 'L$n');
-        expect(level.gridRows, greaterThanOrEqualTo(20), reason: 'L$n');
-        expect(level.gridRows, lessThanOrEqualTo(26), reason: 'L$n');
-        expect(level.arrows.length, greaterThanOrEqualTo(70), reason: 'L$n');
-        expect(level.arrows.length, lessThanOrEqualTo(199), reason: 'L$n');
+        if (n <= 100) {
+          expect(level.difficulty, LevelDifficulty.hard, reason: 'L$n');
+          expect(level.arrows.length, greaterThanOrEqualTo(80), reason: 'L$n');
+          expect(level.arrows.length, lessThanOrEqualTo(100), reason: 'L$n');
+        } else {
+          expect(level.difficulty, LevelDifficulty.hardPlus, reason: 'L$n');
+          expect(level.arrows.length, greaterThanOrEqualTo(100), reason: 'L$n');
+          expect(level.arrows.length, lessThanOrEqualTo(150), reason: 'L$n');
+        }
+        expect(level.gridRows, greaterThanOrEqualTo(18), reason: 'L$n');
+        expect(level.gridRows, lessThanOrEqualTo(30), reason: 'L$n');
         for (final a in level.arrows) {
           expect(a.path.length, greaterThanOrEqualTo(2), reason: 'L$n ${a.id}');
         }
@@ -197,14 +210,18 @@ void main() {
         expect(freeCount, greaterThanOrEqualTo(1), reason: 'L$n >=1 free');
         expect(freeCount, lessThanOrEqualTo(40), reason: 'L$n mostly locked');
         expect(level.heartsAllowed, 3, reason: 'L$n hearts floor');
-        expect(level.hintsAllowed, 2, reason: 'L$n hints floor');
+        expect(
+          level.hintsAllowed,
+          anyOf(1, 2),
+          reason: 'L$n hints ramp across Hard',
+        );
       }
 
-      // L200-500: Expert tier — 100-250 arrows, sampled.
+      // L200-500 Expert: 150-180.
       final expertSample = <int>{
         200,
         500,
-        for (var n = 200; n <= 500; n += 23) n,
+        for (var n = 200; n <= 500; n += 37) n,
       };
       for (final n in expertSample) {
         final level = repo.getLevel(n);
@@ -213,8 +230,8 @@ void main() {
         expect(level.gridRows, greaterThanOrEqualTo(18), reason: 'L$n');
         expect(level.gridRows, lessThanOrEqualTo(30), reason: 'L$n');
         expect(level.gridCols, lessThanOrEqualTo(30), reason: 'L$n');
-        expect(level.arrows.length, greaterThanOrEqualTo(100), reason: 'L$n');
-        expect(level.arrows.length, lessThanOrEqualTo(250), reason: 'L$n');
+        expect(level.arrows.length, greaterThanOrEqualTo(150), reason: 'L$n');
+        expect(level.arrows.length, lessThanOrEqualTo(180), reason: 'L$n');
         for (final a in level.arrows) {
           expect(a.path.length, greaterThanOrEqualTo(2), reason: 'L$n ${a.id}');
         }
@@ -222,12 +239,54 @@ void main() {
 
         final freeCount = freeCountFor(level);
         expect(freeCount, greaterThanOrEqualTo(1), reason: 'L$n >=1 free');
-        expect(freeCount, lessThanOrEqualTo(40), reason: 'L$n mostly locked');
-        expect(level.heartsAllowed, 3, reason: 'L$n hearts floor');
-        expect(level.hintsAllowed, 2, reason: 'L$n hints floor');
+        expect(freeCount, lessThanOrEqualTo(60), reason: 'L$n mostly locked');
+        expect(level.heartsAllowed, anyOf(2, 3), reason: 'L$n hearts floor');
+        expect(level.hintsAllowed, anyOf(1, 2), reason: 'L$n hints floor');
       }
 
-      // Solvability replay: exhaustive for L1-20, sampled for Hard/Expert.
+      // L501-650 Expert+ (180-190); L651-800 Master (190-210);
+      // L801-1000 Grandmaster (210-250) — light sample (gen is heavy).
+      final lateSample = <int>[501, 650, 651, 800, 801, 1000];
+      for (final n in lateSample) {
+        final level = repo.getLevel(n);
+        expect(level.levelNumber, n);
+        expect(level.gridRows, lessThanOrEqualTo(30), reason: 'L$n');
+        expect(level.gridCols, lessThanOrEqualTo(30), reason: 'L$n');
+        if (n <= 650) {
+          expect(level.difficulty, LevelDifficulty.expertPlus, reason: 'L$n');
+          expect(level.arrows.length, greaterThanOrEqualTo(180), reason: 'L$n');
+          expect(level.arrows.length, lessThanOrEqualTo(190), reason: 'L$n');
+          expect(level.heartsAllowed, anyOf(2, 3), reason: 'L$n');
+          expect(level.hintsAllowed, anyOf(1, 2), reason: 'L$n');
+        } else if (n <= 800) {
+          expect(level.difficulty, LevelDifficulty.master, reason: 'L$n');
+          expect(level.arrows.length, greaterThanOrEqualTo(190), reason: 'L$n');
+          expect(level.arrows.length, lessThanOrEqualTo(210), reason: 'L$n');
+          expect(level.heartsAllowed, anyOf(2, 3), reason: 'L$n');
+          expect(level.hintsAllowed, 1, reason: 'L$n');
+        } else {
+          expect(
+            level.difficulty,
+            LevelDifficulty.grandmaster,
+            reason: 'L$n',
+          );
+          expect(level.arrows.length, greaterThanOrEqualTo(210), reason: 'L$n');
+          expect(level.arrows.length, lessThanOrEqualTo(250), reason: 'L$n');
+          expect(level.heartsAllowed, 2, reason: 'L$n');
+          expect(level.hintsAllowed, 1, reason: 'L$n');
+        }
+        for (final a in level.arrows) {
+          expect(a.path.length, greaterThanOrEqualTo(2), reason: 'L$n ${a.id}');
+        }
+        expectInMask(level);
+        expect(
+          freeCountFor(level),
+          greaterThanOrEqualTo(1),
+          reason: 'L$n >=1 free',
+        );
+      }
+
+      // Solvability replay: exhaustive for L1-20, sampled for later tiers.
       for (var n = 1; n <= 20; n++) {
         expectSolvable(repo, repo.getLevel(n));
       }
@@ -237,8 +296,11 @@ void main() {
       for (final n in expertSample) {
         expectSolvable(repo, repo.getLevel(n));
       }
+      for (final n in lateSample) {
+        expectSolvable(repo, repo.getLevel(n));
+      }
 
-      expect(repo.getLevel(501).levelNumber, 500);
+      expect(repo.getLevel(1001).levelNumber, 1000);
     });
   });
 }

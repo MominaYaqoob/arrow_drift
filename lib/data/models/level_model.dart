@@ -1,13 +1,26 @@
 import 'package:arrow_drift/data/models/arrow_model.dart';
 
-enum LevelDifficulty { easy, medium, hard, expert }
+enum LevelDifficulty {
+  easy,
+  medium,
+  hard,
+  hardPlus,
+  expert,
+  expertPlus,
+  master,
+  grandmaster,
+}
 
 extension LevelDifficultyLabel on LevelDifficulty {
   String get label => switch (this) {
         LevelDifficulty.easy => 'Easy',
         LevelDifficulty.medium => 'Medium',
         LevelDifficulty.hard => 'Hard',
+        LevelDifficulty.hardPlus => 'Hard+',
         LevelDifficulty.expert => 'Expert',
+        LevelDifficulty.expertPlus => 'Expert+',
+        LevelDifficulty.master => 'Master',
+        LevelDifficulty.grandmaster => 'Grandmaster',
       };
 }
 

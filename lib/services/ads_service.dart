@@ -26,7 +26,7 @@ abstract class AdsService {
   /// Rewarded ad space for +1 life (~15–20s).
   Future<bool> showRewardedForLives(BuildContext context);
 
-  /// After campaign clear — interstitial every 5 clears.
+  /// After campaign clear — interstitial every 4 clears.
   Future<void> onLevelCleared(BuildContext context);
 
   /// After daily challenge clear — interstitial.

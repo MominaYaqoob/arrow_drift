@@ -36,10 +36,10 @@ class PlayerAvatar {
     PlayerAvatar(
       id: 'avatar_1',
       label: 'Ava',
-      background: Color(0xFFF4B45C),
-      skin: Color(0xFFE8B07A),
-      hair: Color(0xFF3B2A1A),
-      shirt: Color(0xFF2F4F8A),
+      background: Color(0xFFFFB4C8),
+      skin: Color(0xFFF1C27D),
+      hair: Color(0xFF5C3A1E),
+      shirt: Color(0xFF7EC8E3),
       hairStyle: AvatarHairStyle.longStraight,
     ),
     PlayerAvatar(
@@ -72,10 +72,10 @@ class PlayerAvatar {
     PlayerAvatar(
       id: 'avatar_5',
       label: 'Zoe',
-      background: Color(0xFFA67C52),
-      skin: Color(0xFFD4A574),
-      hair: Color(0xFF2C1810),
-      shirt: Color(0xFF8FA4B8),
+      background: Color(0xFFC9B6F2),
+      skin: Color(0xFFE8B07A),
+      hair: Color(0xFF8B4518),
+      shirt: Color(0xFFFF8FAB),
       hairStyle: AvatarHairStyle.longWavy,
     ),
   ];
@@ -225,47 +225,54 @@ class _CartoonAvatarPainter extends CustomPainter {
 
     switch (avatar.hairStyle) {
       case AvatarHairStyle.longStraight:
-        // Back hair curtain
-        final back = Path()
-          ..moveTo(cx - headRx * 1.05, headCenter.dy - headRy * 0.2)
+        // Side curtains (behind face silhouette)
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTRB(
+              cx - headRx * 1.12,
+              headCenter.dy - headRy * 0.35,
+              cx - headRx * 0.72,
+              h * 0.86,
+            ),
+            Radius.circular(w * 0.08),
+          ),
+          hair,
+        );
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTRB(
+              cx + headRx * 0.72,
+              headCenter.dy - headRy * 0.35,
+              cx + headRx * 1.12,
+              h * 0.86,
+            ),
+            Radius.circular(w * 0.08),
+          ),
+          hair,
+        );
+        // Soft rounded crown + short bangs (keeps face visible)
+        final crown = Path()
+          ..moveTo(cx - headRx * 0.98, headCenter.dy - headRy * 0.05)
           ..quadraticBezierTo(
-            cx - headRx * 1.15,
-            h * 0.78,
-            cx - headRx * 0.85,
-            h * 0.88,
-          )
-          ..lineTo(cx + headRx * 0.85, h * 0.88)
-          ..quadraticBezierTo(
-            cx + headRx * 1.15,
-            h * 0.78,
-            cx + headRx * 1.05,
-            headCenter.dy - headRy * 0.2,
-          )
-          ..quadraticBezierTo(
-            cx,
-            headCenter.dy - headRy * 1.35,
             cx - headRx * 1.05,
-            headCenter.dy - headRy * 0.2,
-          )
-          ..close();
-        canvas.drawPath(back, hair);
-        // Bangs
-        final bangs = Path()
-          ..moveTo(cx - headRx * 0.95, headCenter.dy - headRy * 0.15)
-          ..quadraticBezierTo(
+            headCenter.dy - headRy * 1.2,
             cx,
-            headCenter.dy - headRy * 1.25,
-            cx + headRx * 0.95,
-            headCenter.dy - headRy * 0.15,
+            headCenter.dy - headRy * 1.28,
+          )
+          ..quadraticBezierTo(
+            cx + headRx * 1.05,
+            headCenter.dy - headRy * 1.2,
+            cx + headRx * 0.98,
+            headCenter.dy - headRy * 0.05,
           )
           ..quadraticBezierTo(
             cx,
-            headCenter.dy - headRy * 0.35,
-            cx - headRx * 0.95,
-            headCenter.dy - headRy * 0.15,
+            headCenter.dy - headRy * 0.55,
+            cx - headRx * 0.98,
+            headCenter.dy - headRy * 0.05,
           )
           ..close();
-        canvas.drawPath(bangs, hair);
+        canvas.drawPath(crown, hair);
         break;
 
       case AvatarHairStyle.shortCrop:
@@ -349,46 +356,52 @@ class _CartoonAvatarPainter extends CustomPainter {
         break;
 
       case AvatarHairStyle.longWavy:
-        final wavy = Path()
-          ..moveTo(cx - headRx * 1.0, headCenter.dy - headRy * 0.1)
+        // Soft wavy side locks
+        canvas.drawOval(
+          Rect.fromCenter(
+            center: Offset(cx - headRx * 1.05, headCenter.dy + headRy * 0.25),
+            width: w * 0.22,
+            height: h * 0.48,
+          ),
+          hair,
+        );
+        canvas.drawOval(
+          Rect.fromCenter(
+            center: Offset(cx + headRx * 1.05, headCenter.dy + headRy * 0.25),
+            width: w * 0.22,
+            height: h * 0.48,
+          ),
+          hair,
+        );
+        // Rounded top with light fringe above the eyes
+        final wavyTop = Path()
+          ..moveTo(cx - headRx * 0.95, headCenter.dy - headRy * 0.08)
           ..quadraticBezierTo(
+            cx - headRx * 1.0,
+            headCenter.dy - headRy * 1.18,
             cx,
             headCenter.dy - headRy * 1.3,
+          )
+          ..quadraticBezierTo(
             cx + headRx * 1.0,
-            headCenter.dy - headRy * 0.1,
+            headCenter.dy - headRy * 1.18,
+            cx + headRx * 0.95,
+            headCenter.dy - headRy * 0.08,
           )
           ..quadraticBezierTo(
-            cx + headRx * 1.2,
-            h * 0.72,
-            cx + headRx * 0.7,
-            h * 0.9,
+            cx + headRx * 0.35,
+            headCenter.dy - headRy * 0.5,
+            cx,
+            headCenter.dy - headRy * 0.42,
           )
-          ..lineTo(cx - headRx * 0.7, h * 0.9)
           ..quadraticBezierTo(
-            cx - headRx * 1.2,
-            h * 0.72,
-            cx - headRx * 1.0,
-            headCenter.dy - headRy * 0.1,
+            cx - headRx * 0.35,
+            headCenter.dy - headRy * 0.5,
+            cx - headRx * 0.95,
+            headCenter.dy - headRy * 0.08,
           )
           ..close();
-        canvas.drawPath(wavy, hair);
-        // Forehead fringe
-        final fringe = Path()
-          ..moveTo(cx - headRx * 0.9, headCenter.dy - headRy * 0.2)
-          ..quadraticBezierTo(
-            cx,
-            headCenter.dy - headRy * 1.15,
-            cx + headRx * 0.9,
-            headCenter.dy - headRy * 0.2,
-          )
-          ..quadraticBezierTo(
-            cx,
-            headCenter.dy - headRy * 0.45,
-            cx - headRx * 0.9,
-            headCenter.dy - headRy * 0.2,
-          )
-          ..close();
-        canvas.drawPath(fringe, hair);
+        canvas.drawPath(wavyTop, hair);
         break;
     }
   }

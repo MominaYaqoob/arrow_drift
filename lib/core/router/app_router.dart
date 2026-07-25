@@ -19,17 +19,68 @@ import 'package:arrow_drift/features/splash/splash_loading_screen.dart';
 import 'package:arrow_drift/features/splash/splash_logo_screen.dart';
 import 'package:arrow_drift/features/tutorial/tutorial_screen.dart';
 
+/// Soft crossfade between splash screens — dark barrier avoids a white flash.
+CustomTransitionPage<void> _splashFadePage({
+  required LocalKey key,
+  required Widget child,
+}) {
+  return CustomTransitionPage<void>(
+    key: key,
+    child: child,
+    transitionDuration: const Duration(milliseconds: 480),
+    reverseTransitionDuration: const Duration(milliseconds: 360),
+    barrierColor: const Color(0xFF0E1726),
+    opaque: true,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      final fadeIn = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+      );
+      final fadeOut = Tween<double>(begin: 1, end: 0).animate(
+        CurvedAnimation(
+          parent: secondaryAnimation,
+          curve: Curves.easeInCubic,
+        ),
+      );
+      final slideIn = Tween<Offset>(
+        begin: const Offset(0, 0.018),
+        end: Offset.zero,
+      ).animate(fadeIn);
+
+      return ColoredBox(
+        color: const Color(0xFF0E1726),
+        child: FadeTransition(
+          opacity: fadeOut,
+          child: FadeTransition(
+            opacity: fadeIn,
+            child: SlideTransition(
+              position: slideIn,
+              child: child,
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
 final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: SplashLogoScreen.routePath,
     routes: [
       GoRoute(
         path: SplashLogoScreen.routePath,
-        builder: (context, state) => const SplashLogoScreen(),
+        pageBuilder: (context, state) => _splashFadePage(
+          key: state.pageKey,
+          child: const SplashLogoScreen(),
+        ),
       ),
       GoRoute(
         path: SplashLoadingScreen.routePath,
-        builder: (context, state) => const SplashLoadingScreen(),
+        pageBuilder: (context, state) => _splashFadePage(
+          key: state.pageKey,
+          child: const SplashLoadingScreen(),
+        ),
       ),
       GoRoute(
         path: ConsentScreen.routePath,

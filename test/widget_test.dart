@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -22,7 +23,10 @@ void main() {
   testWidgets('Splash chain: logo -> loading -> consent -> home',
       (WidgetTester tester) async {
     final container = ProviderContainer();
-    addTearDown(container.dispose);
+    var disposed = false;
+    addTearDown(() {
+      if (!disposed) container.dispose();
+    });
 
     await tester.pumpWidget(
       UncontrolledProviderScope(
@@ -57,6 +61,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
 
     expect(router.state.uri.path, HomeScreen.routePath);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    disposed = true;
+    container.dispose();
   });
 
   testWidgets('Returning user skips consent after splash',
@@ -66,7 +74,10 @@ void main() {
     });
 
     final container = ProviderContainer();
-    addTearDown(container.dispose);
+    var disposed = false;
+    addTearDown(() {
+      if (!disposed) container.dispose();
+    });
 
     await tester.pumpWidget(
       UncontrolledProviderScope(
@@ -83,5 +94,9 @@ void main() {
 
     final router = container.read(appRouterProvider);
     expect(router.state.uri.path, HomeScreen.routePath);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    disposed = true;
+    container.dispose();
   });
 }

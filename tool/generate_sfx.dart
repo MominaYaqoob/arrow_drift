@@ -8,17 +8,6 @@ void main() {
   final dir = Directory('assets/sounds');
   dir.createSync(recursive: true);
 
-  File('${dir.path}/tap_ok.wav').writeAsBytesSync(
-    _wav(_tone(freq: 920, ms: 70, volume: 0.28, fadeOut: true)),
-  );
-  File('${dir.path}/tap_wrong.wav').writeAsBytesSync(
-    _wav(
-      _mix([
-        _tone(freq: 160, ms: 120, volume: 0.32, fadeOut: true),
-        _tone(freq: 120, ms: 120, volume: 0.18, fadeOut: true),
-      ]),
-    ),
-  );
   File('${dir.path}/level_win.wav').writeAsBytesSync(
     _wav(
       _concat([
@@ -56,17 +45,6 @@ Float64List _tone({
     out[i] = amp *
         (math.sin(2 * math.pi * freq * t) +
             0.18 * math.sin(2 * math.pi * freq * 2 * t));
-  }
-  return out;
-}
-
-Float64List _mix(List<Float64List> parts) {
-  final n = parts.map((p) => p.length).reduce(math.max);
-  final out = Float64List(n);
-  for (final part in parts) {
-    for (var i = 0; i < part.length; i++) {
-      out[i] += part[i];
-    }
   }
   return out;
 }

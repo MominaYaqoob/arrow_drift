@@ -11,7 +11,6 @@ dependencies:
   flutter:
     sdk: flutter
 
-  cupertino_icons: ^1.0.8
   flutter_riverpod: ^2.6.1
   riverpod_annotation: ^2.6.1
   shared_preferences: ^2.5.3
@@ -53,8 +52,6 @@ flutter:
   uses-material-design: true
   assets:
     - assets/branding/app_icon.png
-    - assets/sounds/tap_ok.wav
-    - assets/sounds/tap_wrong.wav
     - assets/sounds/level_win.wav
     - assets/sounds/ui_tap.wav
     - assets/sounds/arrow_escape.wav
