@@ -71,7 +71,7 @@ void main() {
     expect(stars(1, 5), 1);
   });
 
-  test('Snapchat streak: 24h timer starts on complete; expires; restarts fresh',
+  test('Snapchat streak: midnight window; timer only while today pending',
       () async {
     final prefs = await SharedPreferences.getInstance();
     final repo = ProgressRepository(prefs);
@@ -79,62 +79,80 @@ void main() {
     final day12 = DateTime(2026, 7, 12);
     final day11 = DateTime(2026, 7, 11);
 
-    // Clear today → streak 1 + 24h window starts (not before).
+    // Before any clear: no streak, no timer.
     expect(repo.getCurrentStreak(now: day13), 0);
     expect(repo.getStreakRemaining(now: day13), Duration.zero);
+    expect(repo.isTodayStreakPending(now: day13), isFalse);
+
+    // Clear today → streak 1; timer HIDDEN (today already done).
     await repo.markDailyCompleted(day13, now: day13);
     expect(repo.getCurrentStreak(now: day13), 1);
-    expect(
-      repo.getStreakRemaining(now: day13),
-      ProgressRepository.streakWindow,
-    );
+    expect(repo.getStreakRemaining(now: day13), Duration.zero);
+    expect(repo.isTodayStreakCleared(now: day13), isTrue);
+    expect(repo.isTodayStreakPending(now: day13), isFalse);
 
-    // Past day backfill does not change streak or timer
+    // Past day backfill: stars only, no streak/timer change.
     await repo.markDailyCompleted(day12, now: day13);
     expect(repo.getCurrentStreak(now: day13), 1);
     expect(repo.isDailyCompleted(day12), isTrue);
-    expect(
-      repo.getStreakRemaining(now: day13),
-      ProgressRepository.streakWindow,
-    );
+    expect(repo.getStreakRemaining(now: day13), Duration.zero);
 
-    // Next calendar day, still inside 24h → streak 2 + fresh timer
-    final day14Morning = DateTime(2026, 7, 14, 8, 0); // +22h
-    await repo.markDailyCompleted(day14Morning, now: day14Morning);
-    expect(repo.getCurrentStreak(now: day14Morning), 2);
+    // Next calendar day morning → streak still alive, timer until midnight.
+    final day14Morning = DateTime(2026, 7, 14, 8, 0);
+    expect(repo.getCurrentStreak(now: day14Morning), 1);
+    expect(repo.isTodayStreakPending(now: day14Morning), isTrue);
     expect(
       repo.getStreakRemaining(now: day14Morning),
-      ProgressRepository.streakWindow,
+      DateTime(2026, 7, 15).difference(day14Morning),
     );
+    expect(repo.isStreakUrgent(now: day14Morning), isFalse);
 
-    // Miss the window → streak + timer reset
-    final afterExpiry = DateTime(2026, 7, 15, 9, 0); // >24h after day14 8:00
-    expect(repo.getCurrentStreak(now: afterExpiry), 0);
-    expect(repo.getStreakRemaining(now: afterExpiry), Duration.zero);
+    // Clear day 14 → streak 2; timer hides again.
+    await repo.markDailyCompleted(day14Morning, now: day14Morning);
+    expect(repo.getCurrentStreak(now: day14Morning), 2);
+    expect(repo.getStreakRemaining(now: day14Morning), Duration.zero);
 
-    // Complete again → fresh streak 1 + new timer
-    await repo.markDailyCompleted(afterExpiry, now: afterExpiry);
-    expect(repo.getCurrentStreak(now: afterExpiry), 1);
-    expect(
-      repo.getStreakRemaining(now: afterExpiry),
-      ProgressRepository.streakWindow,
-    );
+    // Miss a full calendar day → streak dies.
+    final day16 = DateTime(2026, 7, 16, 9, 0);
+    expect(repo.getCurrentStreak(now: day16), 0);
+    expect(repo.getStreakRemaining(now: day16), Duration.zero);
 
-    // Completing day11 later still no streak bump / timer restart
-    await repo.markDailyCompleted(day11, now: afterExpiry);
-    expect(repo.getCurrentStreak(now: afterExpiry), 1);
+    // Fresh clear → streak 1, no timer (today done).
+    await repo.markDailyCompleted(day16, now: day16);
+    expect(repo.getCurrentStreak(now: day16), 1);
+    expect(repo.getStreakRemaining(now: day16), Duration.zero);
+
+    // Past backfill still no bump.
+    await repo.markDailyCompleted(day11, now: day16);
+    expect(repo.getCurrentStreak(now: day16), 1);
   });
 
-  test('Snapchat streak: same-day re-complete does not restart timer', () async {
+  test('Snapchat streak: same-day re-complete keeps streak; no timer', () async {
     final prefs = await SharedPreferences.getInstance();
     final repo = ProgressRepository(prefs);
     final t0 = DateTime(2026, 7, 13, 10, 0);
     await repo.markDailyCompleted(t0, now: t0);
-    final deadline = repo.getStreakDeadline(now: t0)!;
+    expect(repo.getStreakDeadline(now: t0), isNull);
 
     final t1 = DateTime(2026, 7, 13, 15, 0);
     await repo.markDailyCompleted(t1, now: t1);
     expect(repo.getCurrentStreak(now: t1), 1);
-    expect(repo.getStreakDeadline(now: t1), deadline);
+    expect(repo.getStreakRemaining(now: t1), Duration.zero);
+    expect(repo.getStreakDeadline(now: t1), isNull);
+  });
+
+  test('Snapchat streak: last 4h of pending day is urgent', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final repo = ProgressRepository(prefs);
+    final day13 = DateTime(2026, 7, 13, 10, 0);
+    await repo.markDailyCompleted(day13, now: day13);
+
+    final day14Late = DateTime(2026, 7, 14, 21, 30); // 2.5h to midnight
+    expect(repo.isTodayStreakPending(now: day14Late), isTrue);
+    expect(repo.isStreakUrgent(now: day14Late), isTrue);
+    expect(
+      repo.getStreakRemaining(now: day14Late),
+      DateTime(2026, 7, 15).difference(day14Late),
+    );
   });
 }

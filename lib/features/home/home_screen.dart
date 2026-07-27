@@ -303,6 +303,9 @@ class _DailyChallengeCard extends ConsumerWidget {
         streak > 0 && remaining > Duration.zero
             ? formatStreakRemaining(remaining)
             : null;
+    final timerUrgent = remaining > Duration.zero &&
+        remaining <= ProgressRepository.streakUrgentWindow;
+    final todayCleared = streak > 0 && remaining == Duration.zero;
 
     return Material(
       color: Colors.transparent,
@@ -394,7 +397,7 @@ class _DailyChallengeCard extends ConsumerWidget {
                             ],
                           ),
                         ),
-                        if (timerLabel != null)
+                        if (todayCleared)
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 10,
@@ -407,8 +410,48 @@ class _DailyChallengeCard extends ConsumerWidget {
                                 color: Colors.white.withValues(alpha: 0.2),
                               ),
                             ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.check_circle_rounded,
+                                  size: 14,
+                                  color: const Color(0xFF7CFFB2),
+                                ),
+                                const SizedBox(width: 5),
+                                Text(
+                                  'Today done',
+                                  style: AppTextStyles.label(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white.withValues(alpha: 0.95),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (timerLabel != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: timerUrgent
+                                  ? const Color(0xFFE85D4C)
+                                      .withValues(alpha: 0.92)
+                                  : Colors.white.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: timerUrgent
+                                    ? Colors.white.withValues(alpha: 0.35)
+                                    : Colors.white.withValues(alpha: 0.2),
+                              ),
+                            ),
                             child: Text(
-                              '⏳ $timerLabel',
+                              timerUrgent
+                                  ? '⏳ $timerLabel · Almost lost'
+                                  : '⏳ $timerLabel',
                               style: AppTextStyles.label(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,

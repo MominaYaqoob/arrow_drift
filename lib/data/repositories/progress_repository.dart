@@ -22,10 +22,11 @@ class ProgressRepository {
   static const String _streakKey = 'current_streak';
   /// Last calendar day that counted toward the Snapchat-style streak (`yyyy-MM-dd`).
   static const String _streakLastDateKey = 'daily_streak_last_date';
-  /// Epoch millis when the current 24h streak window ends (set only on today's clear).
+  /// Legacy key from the old rolling 24h timer — no longer written; kept so
+  /// old installs don't crash if something still reads prefs.
   static const String _streakDeadlineKey = 'daily_streak_deadline_ms';
-  /// Rolling window after each successful today-clear (Snapchat-style).
-  static const Duration streakWindow = Duration(hours: 24);
+  /// Hours left in the day when the countdown turns urgent (red).
+  static const Duration streakUrgentWindow = Duration(hours: 4);
 
   /// Next level to resume (defaults to 1 on fresh install).
   int getCurrentLevel() {
@@ -77,32 +78,54 @@ class ProgressRepository {
     }).length;
   }
 
-  /// Snapchat-style streak: alive only while the 24h window from the last
-  /// **today** clear has not expired. Past-day backfills keep calendar stars
-  /// but never start or extend the timer.
+  /// Snapchat-style calendar streak: alive if the last counted clear was
+  /// **today** or **yesterday**. Miss a full calendar day → 0.
   int getCurrentStreak({DateTime? now}) {
     final clock = now ?? DateTime.now();
-    final deadline = getStreakDeadline(now: clock);
-    if (deadline == null || !clock.isBefore(deadline)) {
-      return 0;
-    }
+    final today = _dayOnly(clock);
+    final yesterday = today.subtract(const Duration(days: 1));
     final lastKey = _prefs.getString(_streakLastDateKey);
     if (lastKey == null || lastKey.isEmpty) return 0;
-    if (_parseDateKey(lastKey) == null) return 0;
-    return _prefs.getInt(_streakKey) ?? 0;
+    final last = _parseDateKey(lastKey);
+    if (last == null) return 0;
+    final stored = _prefs.getInt(_streakKey) ?? 0;
+    if (stored <= 0) return 0;
+    if (_sameDay(last, today) || _sameDay(last, yesterday)) return stored;
+    return 0;
   }
 
-  /// When the current streak window ends, or null if inactive / expired.
-  DateTime? getStreakDeadline({DateTime? now}) {
-    final raw = _prefs.getInt(_streakDeadlineKey);
-    if (raw == null) return null;
-    final deadline = DateTime.fromMillisecondsSinceEpoch(raw);
+  /// True when streak is alive and today's daily is still pending.
+  bool isTodayStreakPending({DateTime? now}) {
     final clock = now ?? DateTime.now();
-    if (!clock.isBefore(deadline)) return null;
-    return deadline;
+    final today = _dayOnly(clock);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final lastKey = _prefs.getString(_streakLastDateKey);
+    final last = lastKey == null ? null : _parseDateKey(lastKey);
+    if (last == null) return false;
+    final stored = _prefs.getInt(_streakKey) ?? 0;
+    if (stored <= 0) return false;
+    return _sameDay(last, yesterday);
   }
 
-  /// Remaining time in the active streak window, or [Duration.zero] if none.
+  /// True when today's daily already counted toward the streak.
+  bool isTodayStreakCleared({DateTime? now}) {
+    final clock = now ?? DateTime.now();
+    final today = _dayOnly(clock);
+    final lastKey = _prefs.getString(_streakLastDateKey);
+    final last = lastKey == null ? null : _parseDateKey(lastKey);
+    if (last == null) return false;
+    return _sameDay(last, today) && getCurrentStreak(now: clock) > 0;
+  }
+
+  /// Midnight that ends today's calendar window (start of tomorrow).
+  DateTime? getStreakDeadline({DateTime? now}) {
+    final clock = now ?? DateTime.now();
+    if (!isTodayStreakPending(now: clock)) return null;
+    return _dayOnly(clock).add(const Duration(days: 1));
+  }
+
+  /// Countdown until tonight's midnight — only while streak is alive and
+  /// today's daily is still pending. Zero when today is already cleared.
   Duration getStreakRemaining({DateTime? now}) {
     final clock = now ?? DateTime.now();
     final deadline = getStreakDeadline(now: clock);
@@ -111,8 +134,14 @@ class ProgressRepository {
     return left.isNegative ? Duration.zero : left;
   }
 
-  /// Marks a calendar daily complete. Streak + 24h timer update **only** for
-  /// today's puzzle, and **only** on a successful clear (caller after win).
+  /// Last few hours of the day → urgent (UI can turn red).
+  bool isStreakUrgent({DateTime? now}) {
+    final left = getStreakRemaining(now: now);
+    return left > Duration.zero && left <= streakUrgentWindow;
+  }
+
+  /// Marks a calendar daily complete. Streak updates **only** for today's
+  /// puzzle on a successful clear. Past/future dates = stars only.
   Future<void> markDailyCompleted(DateTime date, {DateTime? now}) async {
     final key = _dateKey(date);
     final existing = [...getCompletedDailyDates()];
@@ -132,30 +161,26 @@ class ProgressRepository {
     final lastKey = _prefs.getString(_streakLastDateKey);
     final last = lastKey == null ? null : _parseDateKey(lastKey);
     final stored = _prefs.getInt(_streakKey) ?? 0;
-    final deadline = getStreakDeadline(now: clock);
-    final windowOpen = deadline != null;
 
     int nextStreak;
     if (last != null && _sameDay(last, today)) {
-      // Already counted today — keep streak; do not restart the timer.
+      // Already counted today — keep streak; timer stays hidden.
       nextStreak = stored > 0 ? stored : 1;
       await _prefs.setInt(_streakKey, nextStreak);
       await _prefs.setString(_streakLastDateKey, _dateKey(today));
       return;
-    } else if (windowOpen &&
-        last != null &&
-        _sameDay(last, yesterday)) {
-      // Cleared again inside the 24h window → continue streak.
+    } else if (last != null && _sameDay(last, yesterday) && stored > 0) {
+      // Cleared again on the next calendar day → continue streak.
       nextStreak = stored + 1;
     } else {
-      // First clear, or previous window expired → fresh streak + timer.
+      // First clear, or missed a day → fresh streak.
       nextStreak = 1;
     }
 
-    final nextDeadline = clock.add(streakWindow);
     await _prefs.setInt(_streakKey, nextStreak);
     await _prefs.setString(_streakLastDateKey, _dateKey(today));
-    await _prefs.setInt(_streakDeadlineKey, nextDeadline.millisecondsSinceEpoch);
+    // Drop legacy rolling deadline if present.
+    await _prefs.remove(_streakDeadlineKey);
   }
 
   DateTime _dayOnly(DateTime d) => DateTime(d.year, d.month, d.day);
@@ -277,7 +302,7 @@ final currentStreakProvider = FutureProvider<int>((ref) async {
   return repo.getCurrentStreak();
 });
 
-/// Live remaining time in the Snapchat-style 24h streak window.
+/// Live remaining time until tonight's midnight while today's streak is pending.
 /// Emits every second while a window is active; `Duration.zero` when none.
 final streakRemainingProvider = StreamProvider<Duration>((ref) {
   // Re-subscribe when streak is marked complete (provider invalidated).

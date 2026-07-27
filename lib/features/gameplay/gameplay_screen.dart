@@ -361,11 +361,14 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     AppFeedback.buttonTap(ref);
     final controller = ref.read(gameControllerProvider(_level).notifier);
 
-    // Free hints first. At 0: Watch Ad → +2 hints, then use one.
+    // Free hints first. At 0: Watch Ad → +1 on the counter only.
+    // Do not highlight the board until the user taps the bulb again —
+    // otherwise one ad would both credit and spend a hint (2 hints felt).
     if (gameState.hintsLeft <= 0) {
       final earned = await AdsService.instance.showRewardedForHint(context);
       if (!earned || !mounted) return;
-      controller.grantExtraHint(count: 2);
+      controller.grantExtraHint(count: 1);
+      return;
     }
 
     final id = controller.useHint();

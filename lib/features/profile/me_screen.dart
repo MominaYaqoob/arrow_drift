@@ -76,6 +76,9 @@ class MeScreen extends ConsumerWidget {
         streak > 0 && remaining > Duration.zero
             ? formatStreakRemaining(remaining)
             : null;
+    final streakUrgent = remaining > Duration.zero &&
+        remaining <= ProgressRepository.streakUrgentWindow;
+    final todayCleared = streak > 0 && remaining == Duration.zero;
 
     final nickname = nicknameAsync.when(
       data: (name) => name.trim().isEmpty ? 'Player' : name.trim(),
@@ -97,6 +100,8 @@ class MeScreen extends ConsumerWidget {
             levelsCleared: levelsCleared,
             dayStreak: streak,
             streakTimer: streakTimer,
+            streakUrgent: streakUrgent,
+            todayCleared: todayCleared,
             onAvatarTap: () => _pickAvatar(context, ref),
             onNameTap: () => _editNickname(context, ref, nickname),
           ),
@@ -340,6 +345,8 @@ class _ProfileHeader extends StatelessWidget {
     required this.levelsCleared,
     required this.dayStreak,
     this.streakTimer,
+    this.streakUrgent = false,
+    this.todayCleared = false,
     required this.onAvatarTap,
     required this.onNameTap,
   });
@@ -349,6 +356,8 @@ class _ProfileHeader extends StatelessWidget {
   final int levelsCleared;
   final int dayStreak;
   final String? streakTimer;
+  final bool streakUrgent;
+  final bool todayCleared;
   final VoidCallback onAvatarTap;
   final VoidCallback onNameTap;
 
@@ -451,8 +460,12 @@ class _ProfileHeader extends StatelessWidget {
               _HeaderStat(
                 value: '$dayStreak',
                 label: streakTimer != null
-                    ? 'Day streak · ⏳ $streakTimer'
-                    : 'Day streak',
+                    ? (streakUrgent
+                        ? 'Day streak · ⏳ $streakTimer · Almost lost'
+                        : 'Day streak · ⏳ $streakTimer')
+                    : (todayCleared
+                        ? 'Day streak · ✓ Today done'
+                        : 'Day streak'),
               ),
             ],
           ),
