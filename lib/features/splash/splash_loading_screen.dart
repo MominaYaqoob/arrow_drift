@@ -74,6 +74,8 @@ class _SplashLoadingScreenState extends ConsumerState<SplashLoadingScreen>
       accepted = false;
     }
     if (!mounted) return;
+    await AdsService.instance.showAppOpenIfReady();
+    if (!mounted) return;
     context.go(
       accepted ? HomeScreen.routePath : ConsentScreen.routePath,
     );

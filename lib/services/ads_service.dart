@@ -2,17 +2,26 @@ import 'package:flutter/material.dart';
 
 import 'package:arrow_drift/services/ads_service_impl.dart';
 
-/// App-wide ads façade — banner slots + fullscreen ad spaces.
+/// Native template size: small strip vs standard (medium) card.
+enum NativeAdFormat { small, medium }
+
+/// App-wide ads façade — native slots + fullscreen ad spaces.
 abstract class AdsService {
   static AdsService get instance => AdsServiceImpl.instance;
 
   Future<void> initialize();
 
-  /// Banner / strip ad slot.
+  /// Banner / strip ad slot (kept for callers that still need a strip).
   Widget bannerPlaceholder({required double height});
 
-  /// Secondary banner/native slot.
-  Widget nativeAdPlaceholder({required double height});
+  /// Native ad slot — [NativeAdFormat.small] on Home, medium on Me.
+  Widget nativeAdPlaceholder({
+    required double height,
+    NativeAdFormat format = NativeAdFormat.small,
+  });
+
+  /// One App Open ad after splash (skips quietly if none is ready).
+  Future<void> showAppOpenIfReady();
 
   /// Full-screen interstitial ad space.
   Future<void> showInterstitial(
@@ -26,10 +35,10 @@ abstract class AdsService {
   /// Rewarded ad space for +1 life (~15–20s).
   Future<bool> showRewardedForLives(BuildContext context);
 
-  /// After campaign clear — interstitial every 4 clears.
+  /// After campaign clear — interstitial every 5 clears.
   Future<void> onLevelCleared(BuildContext context);
 
-  /// After daily challenge clear — interstitial.
+  /// After daily challenge clear — no ads on Daily.
   Future<void> onDailyChallengeCleared(BuildContext context);
 
   /// Leaving gameplay after a fail.

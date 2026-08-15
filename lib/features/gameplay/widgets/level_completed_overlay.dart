@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:arrow_drift/core/theme/app_theme.dart';
 import 'package:arrow_drift/core/widgets/app_logo.dart';
 import 'package:arrow_drift/data/models/arrow_model.dart';
-import 'package:arrow_drift/services/ads_service.dart';
 
 /// Level-complete celebration — dark teal win screen with logo (no white card).
 /// Callbacks unchanged; [previewArrows] kept for call-site compatibility.
@@ -636,9 +635,6 @@ class _LevelCompletedOverlayState extends State<LevelCompletedOverlay>
                         );
                       },
                     ),
-                    const SizedBox(height: 16),
-                    AdsService.instance.bannerPlaceholder(height: 60),
-                    const SizedBox(height: 12),
                   ],
                 ),
               ),

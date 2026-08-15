@@ -83,7 +83,7 @@ class HelpCenterScreen extends StatelessWidget {
                   title: 'Hints & lives',
                   body:
                       'Hints highlight a free arrow. Lives drop when you tap a blocked arrow. '
-                      'Watch a short ad to earn an extra hint or life when you run out.',
+                      'When lives run out, restart the level to try again.',
                   showDivider: true,
                 ),
                 _HelpTopic(

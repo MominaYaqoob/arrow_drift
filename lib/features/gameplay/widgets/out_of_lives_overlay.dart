@@ -1,18 +1,16 @@
 import 'package:flutter/material.dart';
 
 import 'package:arrow_drift/core/theme/app_theme.dart';
-import 'package:arrow_drift/services/ads_service.dart';
 
 /// Centered modal shown when [GameState.isLost] is true.
-/// Same actions as before — Get More Lives (rewarded) + Restart.
+/// Restart only for now — Get More Lives (rewarded ad) is parked
+/// for a later update.
 class OutOfLivesOverlay extends StatelessWidget {
   const OutOfLivesOverlay({
     super.key,
-    required this.onGetMoreLives,
     required this.onRestart,
   });
 
-  final VoidCallback onGetMoreLives;
   final VoidCallback onRestart;
 
   @override
@@ -134,7 +132,7 @@ class OutOfLivesOverlay extends StatelessWidget {
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              'Watch a short ad to earn +1 life\nand keep playing.',
+                              'No hearts left.\nRestart the level to try again.',
                               textAlign: TextAlign.center,
                               style: AppTextStyles.body(
                                 fontSize: 13,
@@ -163,6 +161,7 @@ class OutOfLivesOverlay extends StatelessWidget {
                               ],
                             ),
                             const SizedBox(height: 18),
+                            // Get More Lives (rewarded +1) parked for a later update.
                             SizedBox(
                               width: double.infinity,
                               height: 52,
@@ -189,77 +188,18 @@ class OutOfLivesOverlay extends StatelessWidget {
                                 child: Material(
                                   color: Colors.transparent,
                                   child: InkWell(
-                                    onTap: onGetMoreLives,
+                                    onTap: onRestart,
                                     borderRadius: BorderRadius.circular(16),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          'Get More Lives',
-                                          style: AppTextStyles.button(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w800,
-                                            color: Colors.white,
-                                          ),
+                                    child: Center(
+                                      child: Text(
+                                        'Restart Game',
+                                        style: AppTextStyles.button(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w800,
+                                          color: Colors.white,
                                         ),
-                                        const SizedBox(width: 8),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 3,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: Colors.white
-                                                .withValues(alpha: 0.2),
-                                            borderRadius:
-                                                BorderRadius.circular(999),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              const Icon(
-                                                Icons.play_arrow_rounded,
-                                                size: 16,
-                                                color: Colors.white,
-                                              ),
-                                              const SizedBox(width: 2),
-                                              Text(
-                                                '+1',
-                                                style: AppTextStyles.label(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w800,
-                                                  color: Colors.white,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
+                                      ),
                                     ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            SizedBox(
-                              width: double.infinity,
-                              height: 48,
-                              child: OutlinedButton(
-                                onPressed: onRestart,
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: colors.primaryText,
-                                  side: BorderSide(color: colors.border),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                ),
-                                child: Text(
-                                  'Restart Game',
-                                  style: AppTextStyles.body(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700,
-                                    color: colors.primaryText,
                                   ),
                                 ),
                               ),
@@ -270,8 +210,6 @@ class OutOfLivesOverlay extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(height: 14),
-                AdsService.instance.bannerPlaceholder(height: 50),
               ],
             ),
           ),

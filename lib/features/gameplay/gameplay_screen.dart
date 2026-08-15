@@ -354,22 +354,13 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     }
   }
 
-  Future<void> _onHint() async {
+  void _onHint() {
     final gameState = ref.read(gameControllerProvider(_level));
     if (gameState.isLost || gameState.isWon) return;
+    if (gameState.hintsLeft <= 0) return;
 
     AppFeedback.buttonTap(ref);
     final controller = ref.read(gameControllerProvider(_level).notifier);
-
-    // Free hints first. At 0: Watch Ad → +1 on the counter only.
-    // Do not highlight the board until the user taps the bulb again —
-    // otherwise one ad would both credit and spend a hint (2 hints felt).
-    if (gameState.hintsLeft <= 0) {
-      final earned = await AdsService.instance.showRewardedForHint(context);
-      if (!earned || !mounted) return;
-      controller.grantExtraHint(count: 1);
-      return;
-    }
 
     final id = controller.useHint();
     if (id == null) return;
@@ -492,11 +483,12 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     });
   }
 
-  Future<void> _grantExtraLife() async {
-    final earned = await AdsService.instance.showRewardedForLives(context);
-    if (!earned || !mounted) return;
-    ref.read(gameControllerProvider(_level).notifier).grantExtraLife();
-  }
+  // Parked for a later update: rewarded +1 life.
+  // Future<void> _grantExtraLife() async {
+  //   final earned = await AdsService.instance.showRewardedForLives(context);
+  //   if (!earned || !mounted) return;
+  //   ref.read(gameControllerProvider(_level).notifier).grantExtraLife();
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -748,12 +740,6 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
                     onHint: _onHint,
                     onGridBooster: _onGridBooster,
                   ),
-                  const SizedBox(height: 8),
-                  // Single gameplay ad — below hint / zoom icons
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: AdsService.instance.bannerPlaceholder(height: 50),
-                  ),
                 ],
                 const SizedBox(height: 12),
               ],
@@ -772,7 +758,6 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
             ),
           if (_showOutOfLives)
             OutOfLivesOverlay(
-              onGetMoreLives: _grantExtraLife,
               onRestart: () {
                 ref.read(gameControllerProvider(level).notifier).resetLevel();
                 setState(_resetLocalPlayState);
@@ -1162,7 +1147,10 @@ class _BottomActionsState extends State<_BottomActions>
   }
 
   void _onHintTap() {
-    // Always forward — at 0 hints, gameplay shows rewarded ad for +1 hint.
+    if (widget.hintsLeft <= 0) {
+      _hintShakeController.forward(from: 0);
+      return;
+    }
     widget.onHint();
   }
 
@@ -1183,55 +1171,26 @@ class _BottomActionsState extends State<_BottomActions>
                 child: child,
               );
             },
-            child: _ActionFab(
-              onTap: _onHintTap,
-              child: hintsEmpty
-                  ? Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        Icon(
-                          Icons.lightbulb_rounded,
-                          color: colors.primaryText,
-                        ),
-                        Positioned(
-                          right: -10,
-                          top: -8,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 5,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: colors.accentTealDeep,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              'Ad',
-                              style: AppTextStyles.label(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                  : Badge(
-                      isLabelVisible: true,
-                      backgroundColor: colors.accentTealDeep,
-                      label: Text(
-                        '${widget.hintsLeft}',
-                        style: AppTextStyles.label(
-                          fontSize: 10,
-                          color: Colors.white,
-                        ),
-                      ),
-                      child: Icon(
-                        Icons.lightbulb_rounded,
-                        color: colors.primaryText,
-                      ),
+            child: Opacity(
+              opacity: hintsEmpty ? 0.45 : 1,
+              child: _ActionFab(
+                onTap: _onHintTap,
+                child: Badge(
+                  isLabelVisible: true,
+                  backgroundColor: colors.accentTealDeep,
+                  label: Text(
+                    '${widget.hintsLeft}',
+                    style: AppTextStyles.label(
+                      fontSize: 10,
+                      color: Colors.white,
                     ),
+                  ),
+                  child: Icon(
+                    Icons.lightbulb_rounded,
+                    color: colors.primaryText,
+                  ),
+                ),
+              ),
             ),
           ),
           const Spacer(),

@@ -10,6 +10,7 @@ import 'package:arrow_drift/data/repositories/progress_repository.dart';
 import 'package:arrow_drift/data/repositories/settings_repository.dart';
 import 'package:arrow_drift/features/daily_challenge/daily_challenge_screen.dart';
 import 'package:arrow_drift/features/gameplay/gameplay_screen.dart';
+import 'package:arrow_drift/services/ads_service.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -97,6 +98,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             ref,
                             () => context.go(DailyChallengeScreen.routePath),
                           ),
+                        ),
+                        SizedBox(height: tight ? 12 : 16),
+                        AdsService.instance.nativeAdPlaceholder(
+                          height: 120,
+                          format: NativeAdFormat.small,
                         ),
                         SizedBox(height: tight ? 18 : 28),
                         const Spacer(),

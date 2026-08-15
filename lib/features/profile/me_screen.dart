@@ -107,12 +107,8 @@ class MeScreen extends ConsumerWidget {
           ),
           Padding(
             // Bottom inset adds the device's gesture-nav / system-bar safe
-            // area on top of the existing 32px design spacing, so the
-            // trailing ad slot never sits flush against (or under) Android's
-            // bottom gesture bar on devices with larger insets. This screen
-            // uses a scrolling ListView (not a fixed-height Scaffold body),
-            // so a SafeArea ancestor wouldn't reliably reserve this space —
-            // reading the inset directly is the correct fix here.
+            // area on top of the existing 32px design spacing so content
+            // never sits flush against Android's bottom gesture bar.
             padding: EdgeInsets.fromLTRB(
               16,
               20,
@@ -144,6 +140,11 @@ class MeScreen extends ConsumerWidget {
                       onTap: () => context.push(SettingsScreen.routePath),
                     ),
                   ],
+                ),
+                const SizedBox(height: 12),
+                AdsService.instance.nativeAdPlaceholder(
+                  height: 320,
+                  format: NativeAdFormat.medium,
                 ),
                 const SizedBox(height: 20),
                 Padding(
@@ -187,8 +188,6 @@ class MeScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                AdsService.instance.nativeAdPlaceholder(height: 70),
               ],
             ),
           ),
