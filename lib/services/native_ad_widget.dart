@@ -9,7 +9,8 @@ import 'package:arrow_drift/services/ads_service.dart';
 /// Loads a Google native template into a reserved slot.
 ///
 /// Empty until a real ad arrives — no fake "Sponsored" placeholder, and no
-/// leftover gap if the request fails.
+/// leftover gap if the request fails. Card chrome matches Me tiles
+/// (Awards / Settings): surface, radius 14, light border + soft shadow.
 class NativeAdWidget extends StatefulWidget {
   const NativeAdWidget({
     super.key,
@@ -51,35 +52,20 @@ class _NativeAdWidgetState extends State<NativeAdWidget> {
     }
     if (_disposed || !mounted || _loadStarted) return;
     _loadStarted = true;
-    final colors = context.appColors;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    unawaited(_load(colors, isDark));
+    unawaited(_load(isDark));
   }
 
-  Future<void> _load(AppColorScheme colors, bool isDark) async {
+  Future<void> _load(bool isDark) async {
+    final isMedium = widget.format == NativeAdFormat.medium;
     final ad = NativeAd(
       adUnitId: widget.adUnitId,
+      factoryId: 'arrow_native',
+      customOptions: <String, Object>{
+        'format': isMedium ? 'medium' : 'small',
+        'isDark': isDark,
+      },
       request: const AdRequest(),
-      nativeTemplateStyle: NativeTemplateStyle(
-        templateType: widget.format == NativeAdFormat.medium
-            ? TemplateType.medium
-            : TemplateType.small,
-        mainBackgroundColor: isDark ? colors.surface : Colors.white,
-        cornerRadius: 12,
-        callToActionTextStyle: NativeTemplateTextStyle(
-          textColor: Colors.white,
-          backgroundColor: AppColors.accentTealDeep,
-          size: 14,
-        ),
-        primaryTextStyle: NativeTemplateTextStyle(
-          textColor: colors.primaryText,
-          size: 14,
-        ),
-        secondaryTextStyle: NativeTemplateTextStyle(
-          textColor: colors.secondaryText,
-          size: 12,
-        ),
-      ),
       listener: NativeAdListener(
         onAdLoaded: (loaded) {
           if (_disposed || !mounted) {
@@ -132,10 +118,31 @@ class _NativeAdWidgetState extends State<NativeAdWidget> {
     if (!_isLoaded || _nativeAd == null) {
       return const SizedBox.shrink();
     }
-    return SizedBox(
-      width: double.infinity,
-      height: widget.height,
-      child: AdWidget(ad: _nativeAd!),
+    final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const radius = 14.0;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(
+          color: colors.border.withValues(alpha: isDark ? 1 : 0.9),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: SizedBox(
+        width: double.infinity,
+        height: widget.height,
+        child: AdWidget(ad: _nativeAd!),
+      ),
     );
   }
 }

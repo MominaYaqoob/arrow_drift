@@ -101,7 +101,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ),
                         SizedBox(height: tight ? 12 : 16),
                         AdsService.instance.nativeAdPlaceholder(
-                          height: 120,
+                          height: 168,
                           format: NativeAdFormat.small,
                         ),
                         SizedBox(height: tight ? 18 : 28),

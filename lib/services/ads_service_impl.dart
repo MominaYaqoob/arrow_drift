@@ -173,10 +173,12 @@ class AdsServiceImpl implements AdsService {
   }
 
   Future<void> _loadAppOpen() async {
-    if (!_canServeAds || _appOpenLoading || _appOpenAd != null) {
-      if (_appOpenAd != null) _completeAppOpenGate();
+    if (_appOpenAd != null) {
+      _completeAppOpenGate();
       return;
     }
+    if (!_canServeAds || _appOpenLoading) return;
+
     _appOpenLoading = true;
     _appOpenLoadGate ??= Completer<void>();
     try {
@@ -187,6 +189,7 @@ class AdsServiceImpl implements AdsService {
           onAdLoaded: (ad) {
             _appOpenLoading = false;
             _appOpenAd = ad;
+            debugPrint('AdsService: app open loaded');
             _completeAppOpenGate();
           },
           onAdFailedToLoad: (error) {
@@ -208,30 +211,46 @@ class AdsServiceImpl implements AdsService {
     }
   }
 
+  Future<void> _waitForAppOpen(Duration timeout) async {
+    if (_appOpenAd != null) return;
+    if (_appOpenLoadGate == null || _appOpenLoadGate!.isCompleted) {
+      _appOpenLoadGate = Completer<void>();
+      unawaited(_loadAppOpen());
+    }
+    try {
+      await _appOpenLoadGate!.future.timeout(timeout);
+    } on TimeoutException {
+      debugPrint('AdsService: app open wait timed out');
+    }
+  }
+
   @override
   Future<void> showAppOpenIfReady() async {
     if (_didShowAppOpen) return;
     await initialize();
     if (!_canServeAds) return;
 
-    if (_appOpenAd == null) {
-      unawaited(_loadAppOpen());
-      try {
-        await (_appOpenLoadGate?.future ?? Future<void>.value()).timeout(
-          const Duration(milliseconds: 1500),
-        );
-      } on TimeoutException {
-        // Splash must not stall if the ad is slow — skip this session.
-      }
+    await _waitForAppOpen(const Duration(seconds: 6));
+    final ad = _appOpenAd;
+    if (ad == null) {
+      debugPrint('AdsService: app open not ready — skipping');
+      return;
     }
 
-    final ad = _appOpenAd;
-    if (ad == null) return;
+    // Let the splash frame settle so Android can present a fullscreen ad.
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    if (_didShowAppOpen) return;
+
     _appOpenAd = null;
-    _didShowAppOpen = true;
     final completer = Completer<void>();
+    var presented = false;
 
     ad.fullScreenContentCallback = FullScreenContentCallback<AppOpenAd>(
+      onAdShowedFullScreenContent: (shown) {
+        presented = true;
+        _didShowAppOpen = true;
+        debugPrint('AdsService: app open showing');
+      },
       onAdDismissedFullScreenContent: (shown) {
         shown.dispose();
         if (!completer.isCompleted) completer.complete();
@@ -254,6 +273,10 @@ class AdsServiceImpl implements AdsService {
       await completer.future.timeout(const Duration(seconds: 30));
     } on TimeoutException {
       debugPrint('AdsService: app open dismiss wait timed out');
+    }
+
+    if (!presented) {
+      debugPrint('AdsService: app open did not present');
     }
   }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -51,9 +52,20 @@ class _MainShellState extends ConsumerState<MainShell> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final navigationShell = widget.navigationShell;
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      body: navigationShell,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        // Daily / Me → first return to Main. Already on Main → leave the app.
+        if (navigationShell.currentIndex != 0) {
+          navigationShell.goBranch(0);
+          return;
+        }
+        SystemNavigator.pop();
+      },
+      child: Scaffold(
+        backgroundColor: colors.background,
+        body: navigationShell,
       bottomNavigationBar: SafeArea(
         top: false,
         child: Padding(
@@ -98,6 +110,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

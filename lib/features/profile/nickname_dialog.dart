@@ -115,17 +115,29 @@ class _NicknameDialogState extends State<NicknameDialog> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isEdit = widget.initialNickname.trim().isNotEmpty;
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 28),
-        child: Material(
-          color: colors.surface,
-          elevation: 16,
-          shadowColor: Colors.black.withValues(alpha: 0.35),
-          borderRadius: BorderRadius.circular(22),
-          clipBehavior: Clip.antiAlias,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 360),
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+      padding: EdgeInsets.only(bottom: keyboardInset),
+      child: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+            child: Material(
+              color: colors.surface,
+              elevation: 16,
+              shadowColor: Colors.black.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(22),
+              clipBehavior: Clip.antiAlias,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: 360,
+                  maxHeight:
+                      (MediaQuery.sizeOf(context).height - keyboardInset - 48)
+                          .clamp(160.0, double.infinity),
+                ),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -323,6 +335,8 @@ class _NicknameDialogState extends State<NicknameDialog> {
                   ),
                 ],
               ),
+            ),
+          ),
             ),
           ),
         ),
