@@ -42,15 +42,6 @@
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-3940256099942544~3347511713" />
-        <!-- SDK default Translucent theme so interstitial draws its own
-             close (X) like the AdMob test creative (~5s, top-right). -->
-        <activity
-            android:name="com.google.android.gms.ads.AdActivity"
-            android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|uiMode|screenSize|smallestScreenSize"
-            android:exported="false"
-            android:forceDarkAllowed="false"
-            android:theme="@style/AdMobAdActivityTheme"
-            tools:replace="android:theme" />
     </application>
     <queries>
         <intent>

@@ -15,8 +15,4 @@
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">?android:colorBackground</item>
     </style>
-    <!-- Google's AdActivity theme (same chrome as AdMob sample: black bar + X). -->
-    <style name="AdMobAdActivityTheme" parent="@android:style/Theme.Translucent">
-        <item name="android:windowFullscreen">false</item>
-    </style>
 </resources>

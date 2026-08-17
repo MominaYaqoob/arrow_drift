@@ -39,7 +39,6 @@ class AdsServiceImpl with WidgetsBindingObserver implements AdsService {
   Future<void>? _initializing;
   bool _hasConnectivity = true;
   StreamSubscription<bool>? _connectivitySub;
-  int _clearsSinceInterstitial = 0;
 
   InterstitialAd? _interstitialAd;
   bool _interstitialLoading = false;
@@ -56,7 +55,6 @@ class AdsServiceImpl with WidgetsBindingObserver implements AdsService {
   DateTime? _ignoreAppOpenResumeUntil;
 
   static const Duration _interstitialDuration = Duration(seconds: 12);
-  static const int _interstitialEveryNClears = 5;
 
   // --- Google's official Android test ad unit IDs ------------------------
   // https://developers.google.com/admob/flutter/test-ads
@@ -122,15 +120,14 @@ class AdsServiceImpl with WidgetsBindingObserver implements AdsService {
         debugPrint('AdsService: connectivity changed → online=$isOnline');
       });
 
-      // Preload App Open (splash), interstitial (every 5 clears), rewarded
-      // (hint / lives) so the first trigger is not waiting on the network.
+      // Preload App Open (splash) and rewarded so the first trigger is
+      // not waiting on the network. Campaign interstitial is off.
       if (!_observingLifecycle) {
         WidgetsBinding.instance.addObserver(this);
         _observingLifecycle = true;
       }
 
       unawaited(_loadAppOpen());
-      unawaited(_loadInterstitial());
       unawaited(_loadRewarded());
     } catch (e) {
       // Ad SDK failing to initialize (no network, misconfigured app ID,
@@ -482,12 +479,7 @@ class AdsServiceImpl with WidgetsBindingObserver implements AdsService {
 
   @override
   Future<void> onLevelCleared(BuildContext context) async {
-    _clearsSinceInterstitial++;
-    // Every 5th campaign clear → fullscreen interstitial (closeable SDK ad).
-    if (_clearsSinceInterstitial < _interstitialEveryNClears) return;
-    _clearsSinceInterstitial = 0;
-    if (!context.mounted) return;
-    await showInterstitial(context);
+    // Campaign interstitial removed (was every 5 clears). Call site kept.
   }
 
   @override
