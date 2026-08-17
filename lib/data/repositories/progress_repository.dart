@@ -282,12 +282,18 @@ final progressRepositoryProvider =
   return ProgressRepository(prefs);
 });
 
+/// Bumped after campaign progress is written so Home/Me re-read prefs.
+/// FutureProvider otherwise can keep the previous int when only prefs changed.
+final campaignProgressTickProvider = StateProvider<int>((ref) => 0);
+
 final currentLevelProvider = FutureProvider<int>((ref) async {
+  ref.watch(campaignProgressTickProvider);
   final repo = await ref.watch(progressRepositoryProvider.future);
   return repo.getCurrentLevel();
 });
 
 final lastCompletedLevelProvider = FutureProvider<int>((ref) async {
+  ref.watch(campaignProgressTickProvider);
   final repo = await ref.watch(progressRepositoryProvider.future);
   return repo.getLastCompletedLevel();
 });

@@ -23,6 +23,38 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   int? _prefetchedForLevel;
+  GoRouterDelegate? _routerDelegate;
+  String? _lastRouterPath;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final router = GoRouter.of(context);
+    final delegate = router.routerDelegate;
+    if (identical(delegate, _routerDelegate)) return;
+    _routerDelegate?.removeListener(_refreshContinueLevel);
+    _routerDelegate = delegate;
+    _lastRouterPath = router.state.uri.path;
+    _routerDelegate!.addListener(_refreshContinueLevel);
+  }
+
+  @override
+  void dispose() {
+    _routerDelegate?.removeListener(_refreshContinueLevel);
+    super.dispose();
+  }
+
+  void _refreshContinueLevel() {
+    if (!mounted) return;
+    final path = GoRouter.of(context).state.uri.path;
+    final arrivedHome =
+        path == HomeScreen.routePath && _lastRouterPath != HomeScreen.routePath;
+    _lastRouterPath = path;
+    if (!arrivedHome) return;
+    // Gameplay sits on a sibling route; Home stays alive in the shell stack
+    // with a cached FutureProvider int unless we force a prefs re-read.
+    ref.read(campaignProgressTickProvider.notifier).update((tick) => tick + 1);
+  }
 
   void _prefetchAround(int level) {
     if (_prefetchedForLevel == level) return;
@@ -107,6 +139,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         SizedBox(height: tight ? 18 : 28),
                         const Spacer(),
                         currentLevelAsync.when(
+                          skipLoadingOnReload: true,
+                          skipLoadingOnRefresh: true,
                           data: (level) {
                             final levelCount =
                                 ref.watch(levelRepositoryProvider).levelCount;

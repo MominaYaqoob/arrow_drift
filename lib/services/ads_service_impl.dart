@@ -31,7 +31,7 @@ import 'package:arrow_drift/services/network_status.dart';
 /// mid-session (airplane mode, tunnel, etc.) makes ads quietly stop
 /// showing — banners keep an empty reserved slot, interstitial/
 /// rewarded calls just no-op — instead of throwing.
-class AdsServiceImpl implements AdsService {
+class AdsServiceImpl with WidgetsBindingObserver implements AdsService {
   AdsServiceImpl._();
   static final AdsServiceImpl instance = AdsServiceImpl._();
 
@@ -48,7 +48,12 @@ class AdsServiceImpl implements AdsService {
   AppOpenAd? _appOpenAd;
   bool _appOpenLoading = false;
   Completer<void>? _appOpenLoadGate;
-  bool _didShowAppOpen = false;
+  bool _isShowingAppOpen = false;
+  bool _isShowingFullscreenAd = false;
+  bool _observingLifecycle = false;
+  bool _wentBackground = false;
+  /// Swallow the resume that follows our own fullscreen ad (not a real leave).
+  DateTime? _ignoreAppOpenResumeUntil;
 
   static const Duration _interstitialDuration = Duration(seconds: 12);
   static const int _interstitialEveryNClears = 5;
@@ -119,6 +124,11 @@ class AdsServiceImpl implements AdsService {
 
       // Preload App Open (splash), interstitial (every 5 clears), rewarded
       // (hint / lives) so the first trigger is not waiting on the network.
+      if (!_observingLifecycle) {
+        WidgetsBinding.instance.addObserver(this);
+        _observingLifecycle = true;
+      }
+
       unawaited(_loadAppOpen());
       unawaited(_loadInterstitial());
       unawaited(_loadRewarded());
@@ -177,7 +187,11 @@ class AdsServiceImpl implements AdsService {
       _completeAppOpenGate();
       return;
     }
-    if (!_canServeAds || _appOpenLoading) return;
+    if (!_canServeAds) {
+      _completeAppOpenGate();
+      return;
+    }
+    if (_appOpenLoading) return;
 
     _appOpenLoading = true;
     _appOpenLoadGate ??= Completer<void>();
@@ -225,58 +239,78 @@ class AdsServiceImpl implements AdsService {
   }
 
   @override
-  Future<void> showAppOpenIfReady() async {
-    if (_didShowAppOpen) return;
-    await initialize();
-    if (!_canServeAds) return;
-
-    await _waitForAppOpen(const Duration(seconds: 6));
-    final ad = _appOpenAd;
-    if (ad == null) {
-      debugPrint('AdsService: app open not ready — skipping');
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      // App Open / interstitial pause the activity. That is not Recents/Home.
+      if (_isShowingAppOpen || _isShowingFullscreenAd) return;
+      _wentBackground = true;
       return;
     }
+    if (state != AppLifecycleState.resumed || !_wentBackground) return;
+    _wentBackground = false;
+    if (_isShowingAppOpen || _isShowingFullscreenAd) return;
+    final ignoreUntil = _ignoreAppOpenResumeUntil;
+    if (ignoreUntil != null && DateTime.now().isBefore(ignoreUntil)) return;
+    // Recents / Home se wapas: next App Open. Pehla launch splash handle karta hai.
+    unawaited(showAppOpenIfReady());
+  }
 
-    // Let the splash frame settle so Android can present a fullscreen ad.
-    await Future<void>.delayed(const Duration(milliseconds: 400));
-    if (_didShowAppOpen) return;
-
-    _appOpenAd = null;
-    final completer = Completer<void>();
-    var presented = false;
-
-    ad.fullScreenContentCallback = FullScreenContentCallback<AppOpenAd>(
-      onAdShowedFullScreenContent: (shown) {
-        presented = true;
-        _didShowAppOpen = true;
-        debugPrint('AdsService: app open showing');
-      },
-      onAdDismissedFullScreenContent: (shown) {
-        shown.dispose();
-        if (!completer.isCompleted) completer.complete();
-      },
-      onAdFailedToShowFullScreenContent: (shown, error) {
-        shown.dispose();
-        debugPrint('AdsService: app open failed to show: $error');
-        if (!completer.isCompleted) completer.complete();
-      },
-    );
-
+  @override
+  Future<void> showAppOpenIfReady() async {
+    if (_isShowingAppOpen) return;
+    _isShowingAppOpen = true;
     try {
-      await ad.show();
-    } catch (e) {
-      debugPrint('AdsService: app open show failed: $e');
-      if (!completer.isCompleted) completer.complete();
-    }
+      await initialize();
+      if (!_canServeAds) return;
 
-    try {
-      await completer.future.timeout(const Duration(seconds: 30));
-    } on TimeoutException {
-      debugPrint('AdsService: app open dismiss wait timed out');
-    }
+      await _waitForAppOpen(const Duration(seconds: 6));
+      final ad = _appOpenAd;
+      if (ad == null) {
+        debugPrint('AdsService: app open not ready — skipping');
+        return;
+      }
 
-    if (!presented) {
-      debugPrint('AdsService: app open did not present');
+      // Let the current frame settle so Android can present a fullscreen ad.
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      if (_appOpenAd != ad) return;
+
+      _appOpenAd = null;
+      final completer = Completer<void>();
+
+      ad.fullScreenContentCallback = FullScreenContentCallback<AppOpenAd>(
+        onAdShowedFullScreenContent: (shown) {
+          debugPrint('AdsService: app open showing');
+        },
+        onAdDismissedFullScreenContent: (shown) {
+          shown.dispose();
+          if (!completer.isCompleted) completer.complete();
+        },
+        onAdFailedToShowFullScreenContent: (shown, error) {
+          shown.dispose();
+          debugPrint('AdsService: app open failed to show: $error');
+          if (!completer.isCompleted) completer.complete();
+        },
+      );
+
+      try {
+        await ad.show();
+      } catch (e) {
+        debugPrint('AdsService: app open show failed: $e');
+        if (!completer.isCompleted) completer.complete();
+      }
+
+      try {
+        await completer.future.timeout(const Duration(seconds: 30));
+      } on TimeoutException {
+        debugPrint('AdsService: app open dismiss wait timed out');
+      }
+    } finally {
+      _isShowingAppOpen = false;
+      _wentBackground = false;
+      _ignoreAppOpenResumeUntil =
+          DateTime.now().add(const Duration(seconds: 4));
+      unawaited(_loadAppOpen());
     }
   }
 
@@ -330,6 +364,7 @@ class AdsServiceImpl implements AdsService {
     final ad = _interstitialAd!;
     _interstitialAd = null; // an InterstitialAd can only be shown once
     final completer = Completer<void>();
+    _isShowingFullscreenAd = true;
 
     ad.fullScreenContentCallback = FullScreenContentCallback(
       onAdDismissedFullScreenContent: (ad) {
@@ -346,11 +381,17 @@ class AdsServiceImpl implements AdsService {
 
     try {
       await ad.show();
+      return await completer.future;
     } catch (e) {
       debugPrint('AdsService: interstitial show failed: $e');
       if (!completer.isCompleted) completer.complete();
+      return;
+    } finally {
+      _isShowingFullscreenAd = false;
+      _wentBackground = false;
+      _ignoreAppOpenResumeUntil =
+          DateTime.now().add(const Duration(seconds: 4));
     }
-    return completer.future;
   }
 
   // --- Rewarded ------------------------------------------------------
@@ -395,6 +436,7 @@ class AdsServiceImpl implements AdsService {
     _rewardedAd = null; // a RewardedAd can only be shown once
     var earnedReward = false;
     final completer = Completer<bool>();
+    _isShowingFullscreenAd = true;
 
     ad.fullScreenContentCallback = FullScreenContentCallback(
       onAdDismissedFullScreenContent: (ad) {
@@ -415,11 +457,17 @@ class AdsServiceImpl implements AdsService {
           earnedReward = true;
         },
       );
+      return await completer.future;
     } catch (e) {
       debugPrint('AdsService: rewarded show failed: $e');
       if (!completer.isCompleted) completer.complete(false);
+      return false;
+    } finally {
+      _isShowingFullscreenAd = false;
+      _wentBackground = false;
+      _ignoreAppOpenResumeUntil =
+          DateTime.now().add(const Duration(seconds: 4));
     }
-    return completer.future;
   }
 
   @override

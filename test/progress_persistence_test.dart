@@ -33,6 +33,15 @@ void main() {
     expect(prefs.getBool(ProgressRepository.hasSeenTutorialKey), isTrue);
   });
 
+  test('two clears in a row: Home resume level is 3', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final repo = ProgressRepository(prefs);
+
+    await repo.saveProgress(1);
+    await repo.saveProgress(2);
+    expect(repo.getCurrentLevel(), 3);
+  });
+
   test('retry resets board state without changing stored currentLevel', () async {
     final prefs = await SharedPreferences.getInstance();
     final repo = ProgressRepository(prefs);

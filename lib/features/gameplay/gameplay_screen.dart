@@ -389,6 +389,30 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
       }
       return;
     }
+    // Back from the win overlay must persist, otherwise Home stays on the
+    // old continue level (e.g. completed 1 & 2, Home still says Level 2).
+    final won = ref.read(gameControllerProvider(_level)).isWon;
+    if (won) {
+      unawaited(_saveCampaignThenHome());
+      return;
+    }
+    context.go(HomeScreen.routePath);
+  }
+
+  void _notifyCampaignProgress() {
+    ref.read(campaignProgressTickProvider.notifier).update((tick) => tick + 1);
+    ref.invalidate(currentLevelProvider);
+    ref.invalidate(lastCompletedLevelProvider);
+  }
+
+  Future<void> _saveCampaignThenHome() async {
+    if (widget.levelNumber == 1) {
+      await _markTutorialSeen();
+    }
+    final repo = await ref.read(progressRepositoryProvider.future);
+    await repo.saveProgress(widget.levelNumber);
+    _notifyCampaignProgress();
+    if (!mounted) return;
     context.go(HomeScreen.routePath);
   }
 
@@ -444,9 +468,8 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
       await _markTutorialSeen();
     }
 
-    await repo.saveProgress(_level.levelNumber);
-    ref.invalidate(currentLevelProvider);
-    ref.invalidate(lastCompletedLevelProvider);
+    await repo.saveProgress(widget.levelNumber);
+    _notifyCampaignProgress();
     if (!mounted) return;
     await AdsService.instance.onLevelCleared(context);
 
@@ -460,27 +483,25 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     context.pushReplacement('${GameplayScreen.routePath}?level=$nextNumber');
   }
 
-  void _onMainFromComplete() {
+  Future<void> _onMainFromComplete() async {
     if (widget.levelNumber == 1 && !_hasSeenTutorial) {
-      _markTutorialSeen();
+      await _markTutorialSeen();
     }
-    ref.read(progressRepositoryProvider.future).then((repo) async {
-      if (widget.isDaily) {
-        await _markDailyIfNeeded();
-        if (!mounted) return;
-        await AdsService.instance.onDailyChallengeCleared(context);
-        if (!mounted) return;
-        context.go(DailyChallengeScreen.routePath);
-        return;
-      }
-      await repo.saveProgress(_level.levelNumber);
-      ref.invalidate(currentLevelProvider);
-      ref.invalidate(lastCompletedLevelProvider);
+    final repo = await ref.read(progressRepositoryProvider.future);
+    if (widget.isDaily) {
+      await _markDailyIfNeeded();
       if (!mounted) return;
-      await AdsService.instance.onLevelCleared(context);
+      await AdsService.instance.onDailyChallengeCleared(context);
       if (!mounted) return;
-      context.go(HomeScreen.routePath);
-    });
+      context.go(DailyChallengeScreen.routePath);
+      return;
+    }
+    await repo.saveProgress(widget.levelNumber);
+    _notifyCampaignProgress();
+    if (!mounted) return;
+    await AdsService.instance.onLevelCleared(context);
+    if (!mounted) return;
+    context.go(HomeScreen.routePath);
   }
 
   // Parked for a later update: rewarded +1 life.
@@ -663,9 +684,15 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
         ? plainPlane
         : colors.background;
 
-    return Scaffold(
-      backgroundColor: scaffoldBg,
-      body: Stack(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _leaveToHub();
+      },
+      child: Scaffold(
+        backgroundColor: scaffoldBg,
+        body: Stack(
         children: [
           if (inTutorial || isNestedPlain)
             Positioned.fill(
@@ -788,6 +815,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
             ),
         ],
       ),
+    ),
     );
   }
 

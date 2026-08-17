@@ -1,5 +1,6 @@
 package com.sid.arrowdrift.puzzlegame
 
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
@@ -20,10 +21,7 @@ class ArrowNativeAdFactory(
         customOptions: Map<String, Any>?,
     ): NativeAdView {
         val isMedium = customOptions?.get("format")?.toString() == "medium"
-        val isDark = when (val raw = customOptions?.get("isDark")) {
-            is Boolean -> raw
-            else -> raw?.toString() == "true"
-        }
+        val isDark = parseDark(customOptions?.get("isDark"))
         val layoutId = if (isMedium) R.layout.native_ad_medium else R.layout.native_ad_small
         val adView = inflater.inflate(layoutId, null) as NativeAdView
 
@@ -34,14 +32,6 @@ class ArrowNativeAdFactory(
         val stars = adView.findViewById<RatingBar>(R.id.ad_stars)
         val badge = adView.findViewById<TextView>(R.id.ad_attribution)
         val media = adView.findViewById<MediaView>(R.id.ad_media)
-
-        val primary = if (isDark) Color.WHITE else Color.parseColor("#0E1726")
-        val secondary = if (isDark) Color.parseColor("#9AA5B5") else Color.parseColor("#6B7280")
-        val badgeColor = if (isDark) Color.parseColor("#2EC4A6") else Color.parseColor("#0F8F7A")
-
-        headline.setTextColor(primary)
-        body.setTextColor(secondary)
-        badge.setTextColor(badgeColor)
 
         adView.headlineView = headline
         adView.bodyView = body
@@ -97,7 +87,34 @@ class ArrowNativeAdFactory(
             }
         }
 
+        // SDK can reset TextView colors inside setNativeAd — apply theme after.
         adView.setNativeAd(nativeAd)
+        applyContrastColors(headline, body, badge, isDark)
         return adView
+    }
+
+    private fun parseDark(raw: Any?): Boolean {
+        return when (raw) {
+            is Boolean -> raw
+            is Number -> raw.toInt() != 0
+            else -> {
+                val text = raw?.toString()?.lowercase() ?: return false
+                text == "true" || text == "1"
+            }
+        }
+    }
+
+    private fun applyContrastColors(
+        headline: TextView,
+        body: TextView,
+        badge: TextView,
+        isDark: Boolean,
+    ) {
+        val primary = if (isDark) Color.WHITE else Color.parseColor("#0E1726")
+        val secondary = if (isDark) Color.parseColor("#9AA5B5") else Color.parseColor("#6B7280")
+        val badgeColor = if (isDark) Color.parseColor("#2EC4A6") else Color.parseColor("#0F8F7A")
+        headline.setTextColor(ColorStateList.valueOf(primary))
+        body.setTextColor(ColorStateList.valueOf(secondary))
+        badge.setTextColor(ColorStateList.valueOf(badgeColor))
     }
 }

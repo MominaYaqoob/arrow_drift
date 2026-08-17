@@ -34,11 +34,22 @@ class _NativeAdWidgetState extends State<NativeAdWidget> {
   bool _isLoaded = false;
   bool _disposed = false;
   bool _loadStarted = false;
+  Brightness? _appliedBrightness;
+  int _loadGen = 0;
 
   @override
   void initState() {
     super.initState();
     _prepareAndLoad();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final brightness = Theme.of(context).brightness;
+    if (!_loadStarted) return;
+    if (_appliedBrightness == brightness) return;
+    unawaited(_reload(brightness));
   }
 
   Future<void> _prepareAndLoad() async {
@@ -52,11 +63,23 @@ class _NativeAdWidgetState extends State<NativeAdWidget> {
     }
     if (_disposed || !mounted || _loadStarted) return;
     _loadStarted = true;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    unawaited(_load(isDark));
+    final brightness = Theme.of(context).brightness;
+    _appliedBrightness = brightness;
+    unawaited(_load(brightness == Brightness.dark));
+  }
+
+  Future<void> _reload(Brightness brightness) async {
+    _appliedBrightness = brightness;
+    _nativeAd?.dispose();
+    _nativeAd = null;
+    if (mounted) {
+      setState(() => _isLoaded = false);
+    }
+    await _load(brightness == Brightness.dark);
   }
 
   Future<void> _load(bool isDark) async {
+    final gen = ++_loadGen;
     final isMedium = widget.format == NativeAdFormat.medium;
     final ad = NativeAd(
       adUnitId: widget.adUnitId,
@@ -68,7 +91,7 @@ class _NativeAdWidgetState extends State<NativeAdWidget> {
       request: const AdRequest(),
       listener: NativeAdListener(
         onAdLoaded: (loaded) {
-          if (_disposed || !mounted) {
+          if (_disposed || !mounted || gen != _loadGen) {
             loaded.dispose();
             return;
           }
@@ -83,7 +106,7 @@ class _NativeAdWidgetState extends State<NativeAdWidget> {
             '(code=${error.code}, message=${error.message})',
           );
           failed.dispose();
-          if (!_disposed && mounted) {
+          if (!_disposed && mounted && gen == _loadGen) {
             setState(() {
               _isLoaded = false;
               _nativeAd = null;
@@ -96,7 +119,7 @@ class _NativeAdWidgetState extends State<NativeAdWidget> {
       await ad.load();
     } catch (e) {
       ad.dispose();
-      if (!_disposed && mounted) {
+      if (!_disposed && mounted && gen == _loadGen) {
         setState(() {
           _isLoaded = false;
           _nativeAd = null;
