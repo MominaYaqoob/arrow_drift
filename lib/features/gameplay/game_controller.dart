@@ -392,23 +392,21 @@ class GameController extends StateNotifier<GameState> {
     return freeArrow.id;
   }
 
-  // Parked for a later update: rewarded ad → extra hint.
-  // void grantExtraHint({int count = 1}) {
-  //   if (state.isWon || state.isLost) return;
-  //   final next = state.hintsLeft + count;
-  //   state = state.copyWith(hintsLeft: next < 0 ? 0 : next);
-  // }
+  void grantExtraHint({int count = 1}) {
+    if (state.isWon || state.isLost) return;
+    final next = state.hintsLeft + count;
+    state = state.copyWith(hintsLeft: next < 0 ? 0 : next);
+  }
 
   /// Reloads the level with fresh arrows, hearts, and hints.
   void resetLevel() {
     state = createInitialGameState(_level);
   }
 
-  // Parked for a later update: rewarded ad → +1 life.
-  // void grantExtraLife() {
-  //   if (!state.isLost) return;
-  //   state = state.copyWith(heartsLeft: 1, isLost: false);
-  // }
+  void grantExtraLife() {
+    if (!state.isLost) return;
+    state = state.copyWith(heartsLeft: 1, isLost: false);
+  }
 }
 
 /// Provides a [GameController] scoped to a specific [LevelModel].

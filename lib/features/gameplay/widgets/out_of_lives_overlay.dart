@@ -3,15 +3,33 @@ import 'package:flutter/material.dart';
 import 'package:arrow_drift/core/theme/app_theme.dart';
 
 /// Centered modal shown when [GameState.isLost] is true.
-/// Restart only for now — Get More Lives (rewarded ad) is parked
-/// for a later update.
-class OutOfLivesOverlay extends StatelessWidget {
+/// Restart always available; optional rewarded ad for +1 life.
+class OutOfLivesOverlay extends StatefulWidget {
   const OutOfLivesOverlay({
     super.key,
     required this.onRestart,
+    required this.onWatchAd,
   });
 
   final VoidCallback onRestart;
+  final Future<void> Function() onWatchAd;
+
+  @override
+  State<OutOfLivesOverlay> createState() => _OutOfLivesOverlayState();
+}
+
+class _OutOfLivesOverlayState extends State<OutOfLivesOverlay> {
+  bool _watchingAd = false;
+
+  Future<void> _handleWatchAd() async {
+    if (_watchingAd) return;
+    setState(() => _watchingAd = true);
+    try {
+      await widget.onWatchAd();
+    } finally {
+      if (mounted) setState(() => _watchingAd = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -161,7 +179,46 @@ class OutOfLivesOverlay extends StatelessWidget {
                               ],
                             ),
                             const SizedBox(height: 18),
-                            // Get More Lives (rewarded +1) parked for a later update.
+                            SizedBox(
+                              width: double.infinity,
+                              height: 52,
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: _watchingAd ? null : _handleWatchAd,
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: Ink(
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color: colors.accentTeal,
+                                        width: 2,
+                                      ),
+                                    ),
+                                    child: Center(
+                                      child: _watchingAd
+                                          ? SizedBox(
+                                              width: 22,
+                                              height: 22,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2.5,
+                                                color: colors.accentTeal,
+                                              ),
+                                            )
+                                          : Text(
+                                              'Get More Lives (Watch Ad)',
+                                              style: AppTextStyles.button(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w700,
+                                                color: colors.accentTealDeep,
+                                              ),
+                                            ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
                             SizedBox(
                               width: double.infinity,
                               height: 52,
@@ -188,7 +245,9 @@ class OutOfLivesOverlay extends StatelessWidget {
                                 child: Material(
                                   color: Colors.transparent,
                                   child: InkWell(
-                                    onTap: onRestart,
+                                    onTap: _watchingAd
+                                        ? null
+                                        : widget.onRestart,
                                     borderRadius: BorderRadius.circular(16),
                                     child: Center(
                                       child: Text(

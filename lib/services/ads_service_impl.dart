@@ -4,6 +4,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:arrow_drift/services/ads_service.dart';
 import 'package:arrow_drift/services/banner_ad_widget.dart';
@@ -55,6 +56,7 @@ class AdsServiceImpl with WidgetsBindingObserver implements AdsService {
   DateTime? _ignoreAppOpenResumeUntil;
 
   static const Duration _interstitialDuration = Duration(seconds: 12);
+  static const String _clearCountKey = 'campaign_clear_count_for_interstitial';
 
   // --- Google's official Android test ad unit IDs ------------------------
   // https://developers.google.com/admob/flutter/test-ads
@@ -120,14 +122,15 @@ class AdsServiceImpl with WidgetsBindingObserver implements AdsService {
         debugPrint('AdsService: connectivity changed → online=$isOnline');
       });
 
-      // Preload App Open (splash) and rewarded so the first trigger is
-      // not waiting on the network. Campaign interstitial is off.
+      // Preload App Open (splash), interstitial (every 5 clears), rewarded
+      // so the first trigger is not waiting on the network.
       if (!_observingLifecycle) {
         WidgetsBinding.instance.addObserver(this);
         _observingLifecycle = true;
       }
 
       unawaited(_loadAppOpen());
+      unawaited(_loadInterstitial());
       unawaited(_loadRewarded());
     } catch (e) {
       // Ad SDK failing to initialize (no network, misconfigured app ID,
@@ -479,12 +482,22 @@ class AdsServiceImpl with WidgetsBindingObserver implements AdsService {
 
   @override
   Future<void> onLevelCleared(BuildContext context) async {
-    // Campaign interstitial removed (was every 5 clears). Call site kept.
+    if (!_canServeAds) return;
+    final prefs = await SharedPreferences.getInstance();
+    final count = (prefs.getInt(_clearCountKey) ?? 0) + 1;
+    await prefs.setInt(_clearCountKey, count);
+
+    if (count % 5 == 0) {
+      if (!context.mounted) return;
+      await showInterstitial(context);
+    }
   }
 
   @override
   Future<void> onDailyChallengeCleared(BuildContext context) async {
-    // Daily has no ads — call site kept so gameplay/streak logic stays intact.
+    if (!_canServeAds) return;
+    if (!context.mounted) return;
+    await showInterstitial(context);
   }
 
   @override

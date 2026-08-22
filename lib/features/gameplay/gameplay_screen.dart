@@ -373,6 +373,17 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     });
   }
 
+  Future<void> _onWatchAdForHint() async {
+    final gameState = ref.read(gameControllerProvider(_level));
+    if (gameState.isLost || gameState.isWon) return;
+
+    final earned = await AdsService.instance.showRewardedForHint(context);
+    if (!earned) return;
+
+    AppFeedback.buttonTap(ref);
+    ref.read(gameControllerProvider(_level).notifier).grantExtraHint();
+  }
+
   void _onGridBooster() {
     AppFeedback.buttonTap(ref);
     // Toggle board zoom (visibility aid only — no count / cooldown).
@@ -503,13 +514,6 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     if (!mounted) return;
     context.go(HomeScreen.routePath);
   }
-
-  // Parked for a later update: rewarded +1 life.
-  // Future<void> _grantExtraLife() async {
-  //   final earned = await AdsService.instance.showRewardedForLives(context);
-  //   if (!earned || !mounted) return;
-  //   ref.read(gameControllerProvider(_level).notifier).grantExtraLife();
-  // }
 
   @override
   Widget build(BuildContext context) {
@@ -765,6 +769,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
                   _BottomActions(
                     hintsLeft: gameState.hintsLeft,
                     onHint: _onHint,
+                    onWatchAdForHint: _onWatchAdForHint,
                     onGridBooster: _onGridBooster,
                   ),
                 ],
@@ -788,6 +793,16 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
               onRestart: () {
                 ref.read(gameControllerProvider(level).notifier).resetLevel();
                 setState(_resetLocalPlayState);
+              },
+              onWatchAd: () async {
+                final earned =
+                    await AdsService.instance.showRewardedForLives(context);
+                if (earned) {
+                  ref
+                      .read(gameControllerProvider(level).notifier)
+                      .grantExtraLife();
+                  setState(_resetLocalPlayState);
+                }
               },
             ),
           if (showRatePrompt)
@@ -1135,11 +1150,13 @@ class _BottomActions extends StatefulWidget {
   const _BottomActions({
     required this.hintsLeft,
     required this.onHint,
+    required this.onWatchAdForHint,
     required this.onGridBooster,
   });
 
   final int hintsLeft;
   final VoidCallback onHint;
+  final VoidCallback onWatchAdForHint;
   final VoidCallback onGridBooster;
 
   @override
@@ -1177,6 +1194,7 @@ class _BottomActionsState extends State<_BottomActions>
   void _onHintTap() {
     if (widget.hintsLeft <= 0) {
       _hintShakeController.forward(from: 0);
+      widget.onWatchAdForHint();
       return;
     }
     widget.onHint();
@@ -1200,14 +1218,14 @@ class _BottomActionsState extends State<_BottomActions>
               );
             },
             child: Opacity(
-              opacity: hintsEmpty ? 0.45 : 1,
+              opacity: 1,
               child: _ActionFab(
                 onTap: _onHintTap,
                 child: Badge(
                   isLabelVisible: true,
                   backgroundColor: colors.accentTealDeep,
                   label: Text(
-                    '${widget.hintsLeft}',
+                    hintsEmpty ? 'AD' : '${widget.hintsLeft}',
                     style: AppTextStyles.label(
                       fontSize: 10,
                       color: Colors.white,
