@@ -179,7 +179,7 @@ class GameBoard extends StatelessWidget {
               maxScale: 5.0,
               boundaryMargin: const EdgeInsets.all(220),
               clipBehavior: Clip.hardEdge,
-              panEnabled: true,
+              panEnabled: false,
               scaleEnabled: true,
               child: Center(
                 child: AnimatedScale(
@@ -199,7 +199,7 @@ class GameBoard extends StatelessWidget {
             maxScale: 5.0,
             boundaryMargin: const EdgeInsets.all(220),
             clipBehavior: Clip.hardEdge,
-            panEnabled: true,
+            panEnabled: false,
             scaleEnabled: true,
             child: Center(
               child: AnimatedScale(
@@ -268,7 +268,7 @@ class GameBoard extends StatelessWidget {
           maxScale: 5.0,
           boundaryMargin: const EdgeInsets.all(220),
           clipBehavior: Clip.hardEdge,
-          panEnabled: true,
+          panEnabled: false,
           scaleEnabled: true,
           child: Center(
             child: FittedBox(
