@@ -60,7 +60,7 @@ class AdsServiceImpl with WidgetsBindingObserver implements AdsService {
   static const String _bannerAdUnitId =
       'ca-app-pub-3940256099942544/6300978111';
   static const String _nativeAdUnitId =
-      'ca-app-pub-3463774223212169/5930100598';
+      'ca-app-pub-3463774223212169/9913527302';
   static const String _interstitialAdUnitId =
       'ca-app-pub-3463774223212169/9681643343';
   static const String _rewardedAdUnitId =
@@ -174,9 +174,11 @@ class AdsServiceImpl with WidgetsBindingObserver implements AdsService {
     required double height,
     NativeAdFormat format = NativeAdFormat.small,
   }) {
-    if (!_adsSupported || !_hasConnectivity) {
+    if (!_adsSupported) {
       return const SizedBox.shrink();
     }
+    // Don't gate on the connectivity snapshot from a previous frame — Home
+    // can build before init finishes. NativeAdWidget waits on initialize().
     return NativeAdWidget(
       adUnitId: _nativeAdUnitId,
       height: height,

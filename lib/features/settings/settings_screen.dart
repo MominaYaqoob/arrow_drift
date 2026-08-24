@@ -1,10 +1,15 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import 'package:arrow_drift/core/services/app_feedback.dart';
 import 'package:arrow_drift/core/theme/app_theme.dart';
 import 'package:arrow_drift/data/repositories/settings_repository.dart';
+import 'package:arrow_drift/services/ads_service.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -87,6 +92,56 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                 ],
               ),
+              if (kDebugMode) ...[
+                const SizedBox(height: 20),
+                ListTile(
+                  leading: const Icon(Icons.bug_report_outlined),
+                  title: const Text('Open Ad Inspector (debug only)'),
+                  onTap: () async {
+                    final messenger = ScaffoldMessenger.of(context);
+                    try {
+                      await AdsService.instance.initialize();
+                      await MobileAds.instance.initialize();
+                      if (!context.mounted) return;
+                      messenger.showSnackBar(
+                        const SnackBar(
+                          content: Text('Opening Ad Inspector…'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                      MobileAds.instance.openAdInspector((error) {
+                        if (error == null) return;
+                        debugPrint(
+                          'Ad Inspector closed with error: '
+                          'code=${error.code}, domain=${error.domain}, message=${error.message}',
+                        );
+                        unawaited(
+                          MobileAds.instance.openDebugMenu(
+                            'ca-app-pub-3463774223212169/9913527302',
+                          ),
+                        );
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Ad Inspector: ${error.message ?? error.code}',
+                            ),
+                          ),
+                        );
+                      });
+                    } catch (e) {
+                      debugPrint('Failed to open Ad Inspector: $e');
+                      try {
+                        await MobileAds.instance.openDebugMenu(
+                          'ca-app-pub-3463774223212169/9913527302',
+                        );
+                      } catch (_) {}
+                      messenger.showSnackBar(
+                        SnackBar(content: Text('Ad Inspector failed: $e')),
+                      );
+                    }
+                  },
+                ),
+              ],
             ],
           );
         },

@@ -42,7 +42,7 @@ class ArrowNativeAdFactory(
             adView.mediaView = media
         }
 
-        headline.text = nativeAd.headline
+        headline.text = nativeAd.headline ?: ""
 
         val bodyText = nativeAd.body
         if (bodyText.isNullOrBlank()) {

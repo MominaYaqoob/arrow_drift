@@ -36,6 +36,9 @@ class _NativeAdWidgetState extends State<NativeAdWidget> {
   bool _loadStarted = false;
   Brightness? _appliedBrightness;
   int _loadGen = 0;
+  int _failCount = 0;
+
+  static const int _maxLoadAttempts = 3;
 
   @override
   void initState() {
@@ -81,9 +84,15 @@ class _NativeAdWidgetState extends State<NativeAdWidget> {
   Future<void> _load(bool isDark) async {
     final gen = ++_loadGen;
     final isMedium = widget.format == NativeAdFormat.medium;
+    debugPrint(
+      'NativeAdWidget: loading unit=${widget.adUnitId} format=${widget.format}',
+    );
     final ad = NativeAd(
       adUnitId: widget.adUnitId,
       factoryId: 'arrow_native',
+      nativeAdOptions: NativeAdOptions(
+        mediaAspectRatio: MediaAspectRatio.any,
+      ),
       customOptions: <String, Object>{
         'format': isMedium ? 'medium' : 'small',
         'isDark': isDark,
@@ -95,6 +104,7 @@ class _NativeAdWidgetState extends State<NativeAdWidget> {
             loaded.dispose();
             return;
           }
+          _failCount = 0;
           setState(() {
             _nativeAd = loaded as NativeAd;
             _isLoaded = true;
@@ -106,10 +116,16 @@ class _NativeAdWidgetState extends State<NativeAdWidget> {
             '(code=${error.code}, message=${error.message})',
           );
           failed.dispose();
-          if (!_disposed && mounted && gen == _loadGen) {
-            setState(() {
-              _isLoaded = false;
-              _nativeAd = null;
+          if (_disposed || !mounted || gen != _loadGen) return;
+          setState(() {
+            _isLoaded = false;
+            _nativeAd = null;
+          });
+          _failCount++;
+          if (_failCount < _maxLoadAttempts) {
+            Future<void>.delayed(const Duration(seconds: 4), () {
+              if (_disposed || !mounted || gen != _loadGen) return;
+              unawaited(_load(Theme.of(context).brightness == Brightness.dark));
             });
           }
         },
