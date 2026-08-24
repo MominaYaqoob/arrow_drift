@@ -34,14 +34,10 @@
         <meta-data
             android:name="io.flutter.embedding.android.EnableImpeller"
             android:value="false" />
-        <!-- AdMob: Google's official SAMPLE app ID — safe for test ads during
-             development / the 14-day review window. Swap for your own AdMob
-             app ID (from apps.admob.com) before a real production release,
-             using the same value you set in AdsServiceImpl if you switch to
-             real ad unit IDs there too. -->
+        <!-- AdMob production App ID (matches ads_service_impl production units). -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713" />
+            android:value="ca-app-pub-3463774223212169~8251187776" />
     </application>
     <queries>
         <intent>

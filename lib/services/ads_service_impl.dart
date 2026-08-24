@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb, debugPrint;
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,13 +11,11 @@ import 'package:arrow_drift/services/banner_ad_widget.dart';
 import 'package:arrow_drift/services/native_ad_widget.dart';
 import 'package:arrow_drift/services/network_status.dart';
 
-/// Real AdMob integration, wired through Google's official **test** ad unit
-/// IDs (see https://developers.google.com/admob/flutter/test-ads). These
-/// IDs are Google's own sample units — not tied to any AdMob account — so
-/// they're always safe to ship during development and the Play Store
-/// review / test window. **Swap every `_...AdUnitId` getter below for your
-/// own AdMob ad unit ID before a real production release** (and swap the
-/// app ID in AndroidManifest.xml too).
+/// Real AdMob integration using **production** ad unit IDs (App Open, Native,
+/// Interstitial, Rewarded) plus the production App ID in AndroidManifest.xml.
+/// `_bannerAdUnitId` is unused (no active banner placement) and remains
+/// Google's official test unit. Debug builds register test device IDs so QA
+/// on a listed phone gets labeled Test Ads and does not count as invalid traffic.
 ///
 /// Android-only by design — this app does not ship on iOS, so there's no
 /// `Platform.isIOS` branching or iOS ad unit IDs anywhere in here.
@@ -58,18 +56,17 @@ class AdsServiceImpl with WidgetsBindingObserver implements AdsService {
   static const Duration _interstitialDuration = Duration(seconds: 12);
   static const String _clearCountKey = 'campaign_clear_count_for_interstitial';
 
-  // --- Google's official Android test ad unit IDs ------------------------
-  // https://developers.google.com/admob/flutter/test-ads
+  // Unused (no active banner placement) — left as Google's test ID.
   static const String _bannerAdUnitId =
       'ca-app-pub-3940256099942544/6300978111';
   static const String _nativeAdUnitId =
-      'ca-app-pub-3940256099942544/2247696110';
+      'ca-app-pub-3463774223212169/5930100598';
   static const String _interstitialAdUnitId =
-      'ca-app-pub-3940256099942544/1033173712';
+      'ca-app-pub-3463774223212169/9681643343';
   static const String _rewardedAdUnitId =
-      'ca-app-pub-3940256099942544/5224354917';
+      'ca-app-pub-3463774223212169/5241881052';
   static const String _appOpenAdUnitId =
-      'ca-app-pub-3940256099942544/9257395921';
+      'ca-app-pub-3463774223212169/6504815661';
 
   // Android-only app: gate strictly on Platform.isAndroid rather than
   // "any mobile platform" so nothing here ever attempts an iOS ad request.
@@ -109,6 +106,19 @@ class AdsServiceImpl with WidgetsBindingObserver implements AdsService {
 
     try {
       await MobileAds.instance.initialize();
+      if (kDebugMode) {
+        await MobileAds.instance.updateRequestConfiguration(
+          RequestConfiguration(
+            testDeviceIds: <String>[
+              // TODO: paste the device hash ID that appears in the debug console the
+              // first time this build runs on a real device — logcat will print a
+              // line like: "Use RequestConfiguration.Builder().setTestDeviceIds
+              // (Arrays.asList("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")) to get test ads on
+              // this device." Copy that hash here.
+            ],
+          ),
+        );
+      }
       _initialized = true;
       _hasConnectivity = true;
       debugPrint('AdsService: MobileAds initialized');
