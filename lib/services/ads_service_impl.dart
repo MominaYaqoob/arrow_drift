@@ -94,9 +94,9 @@ class AdsServiceImpl with WidgetsBindingObserver implements AdsService {
     }
 
     // Connectivity gate #1: don't even attempt SDK init without a network.
-    // The splash screen already checks this before calling initialize(),
-    // but this second check makes the guarantee hold no matter who calls
-    // initialize() (defense in depth, not trusting a single call site).
+    // Gameplay still runs offline; ads stay skipped until a connection
+    // returns (see _listenConnectivity).
+    _listenConnectivity();
     final online = await NetworkStatus.instance.isOnline();
     if (!online) {
       debugPrint('AdsService: skipped — no internet at init time');
@@ -123,15 +123,6 @@ class AdsServiceImpl with WidgetsBindingObserver implements AdsService {
       _hasConnectivity = true;
       debugPrint('AdsService: MobileAds initialized');
 
-      // Connectivity gate #2: keep tracking connectivity live for the rest
-      // of the session, so a mid-session drop (not just "offline at
-      // launch") also makes every method below back off gracefully.
-      _connectivitySub?.cancel();
-      _connectivitySub = NetworkStatus.instance.onChanged.listen((isOnline) {
-        _hasConnectivity = isOnline;
-        debugPrint('AdsService: connectivity changed → online=$isOnline');
-      });
-
       // Preload App Open (splash), interstitial (every 5 clears), rewarded
       // so the first trigger is not waiting on the network.
       if (!_observingLifecycle) {
@@ -149,6 +140,22 @@ class AdsServiceImpl with WidgetsBindingObserver implements AdsService {
       // degrades to a no-op / placeholder instead.
       debugPrint('AdsService: initialize failed: $e');
     }
+  }
+
+  /// Keep ads off while offline; init / preload when the network returns.
+  void _listenConnectivity() {
+    _connectivitySub ??= NetworkStatus.instance.onChanged.listen((isOnline) {
+      _hasConnectivity = isOnline;
+      debugPrint('AdsService: connectivity changed → online=$isOnline');
+      if (!isOnline) return;
+      if (!_initialized) {
+        unawaited(initialize());
+        return;
+      }
+      unawaited(_loadAppOpen());
+      unawaited(_loadInterstitial());
+      unawaited(_loadRewarded());
+    });
   }
 
   // --- Banner / native slots -------------------------------------------

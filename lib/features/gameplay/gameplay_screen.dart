@@ -7,8 +7,10 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:arrow_drift/core/constants/app_constants.dart';
+import 'package:arrow_drift/core/providers/connectivity_provider.dart';
 import 'package:arrow_drift/core/services/app_feedback.dart';
 import 'package:arrow_drift/core/theme/app_theme.dart';
+import 'package:arrow_drift/core/utils/online_gate.dart';
 import 'package:arrow_drift/data/models/arrow_model.dart';
 import 'package:arrow_drift/data/models/game_state.dart';
 import 'package:arrow_drift/data/models/level_model.dart';
@@ -376,6 +378,10 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
   Future<void> _onWatchAdForHint() async {
     final gameState = ref.read(gameControllerProvider(_level));
     if (gameState.isLost || gameState.isWon) return;
+    if (!ref.read(connectivityProvider)) {
+      showOfflineAdNotice(context);
+      return;
+    }
 
     final earned = await AdsService.instance.showRewardedForHint(context);
     if (!earned) return;
@@ -625,6 +631,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
         ? ref.watch(dailyLevelForDateProvider(_dailyKey))
         : ref.watch(levelByNumberProvider(widget.levelNumber));
     final gameState = ref.watch(gameControllerProvider(level));
+    final adsAvailable = ref.watch(connectivityProvider);
     final colors = context.appColors;
 
     ref.listen(gameControllerProvider(level), (previous, next) {
@@ -768,6 +775,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
                 if (!inTutorial) ...[
                   _BottomActions(
                     hintsLeft: gameState.hintsLeft,
+                    adsAvailable: adsAvailable,
                     onHint: _onHint,
                     onWatchAdForHint: _onWatchAdForHint,
                     onGridBooster: _onGridBooster,
@@ -790,6 +798,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
             ),
           if (_showOutOfLives)
             OutOfLivesOverlay(
+              adsAvailable: adsAvailable,
               onRestart: () {
                 ref.read(gameControllerProvider(level).notifier).resetLevel();
                 setState(_resetLocalPlayState);
@@ -1149,12 +1158,14 @@ class _DifficultyChip extends StatelessWidget {
 class _BottomActions extends StatefulWidget {
   const _BottomActions({
     required this.hintsLeft,
+    required this.adsAvailable,
     required this.onHint,
     required this.onWatchAdForHint,
     required this.onGridBooster,
   });
 
   final int hintsLeft;
+  final bool adsAvailable;
   final VoidCallback onHint;
   final VoidCallback onWatchAdForHint;
   final VoidCallback onGridBooster;
@@ -1193,6 +1204,10 @@ class _BottomActionsState extends State<_BottomActions>
 
   void _onHintTap() {
     if (widget.hintsLeft <= 0) {
+      if (!widget.adsAvailable) {
+        showOfflineAdNotice(context);
+        return;
+      }
       _hintShakeController.forward(from: 0);
       widget.onWatchAdForHint();
       return;
@@ -1204,6 +1219,30 @@ class _BottomActionsState extends State<_BottomActions>
   Widget build(BuildContext context) {
     final colors = context.appColors;
     final hintsEmpty = widget.hintsLeft <= 0;
+    final adHintOffline = hintsEmpty && !widget.adsAvailable;
+
+    Widget hintFab = _ActionFab(
+      onTap: _onHintTap,
+      child: Badge(
+        isLabelVisible: true,
+        backgroundColor:
+            adHintOffline ? colors.border : colors.accentTealDeep,
+        label: Text(
+          hintsEmpty ? 'AD' : '${widget.hintsLeft}',
+          style: AppTextStyles.label(
+            fontSize: 10,
+            color: Colors.white,
+          ),
+        ),
+        child: Icon(
+          Icons.lightbulb_rounded,
+          color: adHintOffline ? colors.secondaryText : colors.primaryText,
+        ),
+      ),
+    );
+    if (adHintOffline) {
+      hintFab = Opacity(opacity: 0.45, child: hintFab);
+    }
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
@@ -1217,27 +1256,7 @@ class _BottomActionsState extends State<_BottomActions>
                 child: child,
               );
             },
-            child: Opacity(
-              opacity: 1,
-              child: _ActionFab(
-                onTap: _onHintTap,
-                child: Badge(
-                  isLabelVisible: true,
-                  backgroundColor: colors.accentTealDeep,
-                  label: Text(
-                    hintsEmpty ? 'AD' : '${widget.hintsLeft}',
-                    style: AppTextStyles.label(
-                      fontSize: 10,
-                      color: Colors.white,
-                    ),
-                  ),
-                  child: Icon(
-                    Icons.lightbulb_rounded,
-                    color: colors.primaryText,
-                  ),
-                ),
-              ),
-            ),
+            child: hintFab,
           ),
           const Spacer(),
           _ActionFab(

@@ -5,6 +5,7 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import 'package:arrow_drift/core/theme/app_theme.dart';
 import 'package:arrow_drift/services/ads_service.dart';
+import 'package:arrow_drift/services/network_status.dart';
 
 /// Loads a Google native template into a reserved slot.
 ///
@@ -37,12 +38,21 @@ class _NativeAdWidgetState extends State<NativeAdWidget> {
   Brightness? _appliedBrightness;
   int _loadGen = 0;
   int _failCount = 0;
+  StreamSubscription<bool>? _connectivitySub;
 
   static const int _maxLoadAttempts = 3;
 
   @override
   void initState() {
     super.initState();
+    _connectivitySub = NetworkStatus.instance.onChanged.listen((online) {
+      if (!online || _disposed || !mounted || _isLoaded) return;
+      if (!_loadStarted) {
+        unawaited(_prepareAndLoad());
+        return;
+      }
+      unawaited(_load(Theme.of(context).brightness == Brightness.dark));
+    });
     _prepareAndLoad();
   }
 
@@ -82,6 +92,9 @@ class _NativeAdWidgetState extends State<NativeAdWidget> {
   }
 
   Future<void> _load(bool isDark) async {
+    final online = await NetworkStatus.instance.isOnline();
+    if (!online || _disposed || !mounted) return;
+
     final gen = ++_loadGen;
     final isMedium = widget.format == NativeAdFormat.medium;
     debugPrint(
@@ -148,6 +161,7 @@ class _NativeAdWidgetState extends State<NativeAdWidget> {
   @override
   void dispose() {
     _disposed = true;
+    _connectivitySub?.cancel();
     _nativeAd?.dispose();
     super.dispose();
   }

@@ -6,7 +6,6 @@ import 'package:arrow_drift/core/constants/app_constants.dart';
 import 'package:arrow_drift/core/providers/connectivity_provider.dart';
 import 'package:arrow_drift/core/router/app_router.dart';
 import 'package:arrow_drift/core/theme/app_theme.dart';
-import 'package:arrow_drift/core/widgets/connectivity_gate.dart';
 import 'package:arrow_drift/data/repositories/settings_repository.dart';
 
 void main() async {
@@ -36,9 +35,6 @@ class ArrowDriftApp extends ConsumerWidget {
       darkTheme: AppTheme.dark,
       themeMode: themeMode,
       routerConfig: router,
-      builder: (context, child) {
-        return ConnectivityGate(child: child ?? const SizedBox.shrink());
-      },
     );
   }
 }

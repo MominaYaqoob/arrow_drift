@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:arrow_drift/core/theme/app_theme.dart';
-import 'package:arrow_drift/core/utils/online_gate.dart';
 import 'package:arrow_drift/core/widgets/app_logo.dart';
 import 'package:arrow_drift/data/repositories/level_repository.dart';
 import 'package:arrow_drift/data/repositories/progress_repository.dart';
@@ -67,20 +66,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     ]);
   }
 
-  Future<void> _openWhenOnline(
-    BuildContext context,
-    WidgetRef ref,
-    VoidCallback open,
-  ) async {
-    final online = await requireOnline(ref);
-    if (!context.mounted) return;
-    if (!online) {
-      await showNoInternetDialog(context);
-      return;
-    }
-    open();
-  }
-
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
@@ -125,11 +110,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         const _BrandBlock(),
                         SizedBox(height: tight ? 14 : 22),
                         _DailyChallengeCard(
-                          onPlay: () => _openWhenOnline(
-                            context,
-                            ref,
-                            () => context.go(DailyChallengeScreen.routePath),
-                          ),
+                          onPlay: () =>
+                              context.go(DailyChallengeScreen.routePath),
                         ),
                         SizedBox(height: tight ? 12 : 16),
                         AdsService.instance.nativeAdPlaceholder(
@@ -148,33 +130,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 level > levelCount ? levelCount : level;
                             return _ContinueButton(
                               level: resumeLevel,
-                              onPressed: () => _openWhenOnline(
-                                context,
-                                ref,
-                                () => context.push(
-                                  '${GameplayScreen.routePath}?level=$resumeLevel',
-                                ),
+                              onPressed: () => context.push(
+                                '${GameplayScreen.routePath}?level=$resumeLevel',
                               ),
                             );
                           },
                           loading: () => _ContinueButton(
                             level: 1,
-                            onPressed: () => _openWhenOnline(
-                              context,
-                              ref,
-                              () => context.push(
-                                '${GameplayScreen.routePath}?level=1',
-                              ),
+                            onPressed: () => context.push(
+                              '${GameplayScreen.routePath}?level=1',
                             ),
                           ),
                           error: (_, _) => _ContinueButton(
                             level: 1,
-                            onPressed: () => _openWhenOnline(
-                              context,
-                              ref,
-                              () => context.push(
-                                '${GameplayScreen.routePath}?level=1',
-                              ),
+                            onPressed: () => context.push(
+                              '${GameplayScreen.routePath}?level=1',
                             ),
                           ),
                         ),

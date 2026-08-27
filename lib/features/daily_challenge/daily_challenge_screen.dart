@@ -1,12 +1,8 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:arrow_drift/core/providers/connectivity_provider.dart';
 import 'package:arrow_drift/core/theme/app_theme.dart';
-import 'package:arrow_drift/core/utils/online_gate.dart';
 import 'package:arrow_drift/data/repositories/level_repository.dart';
 import 'package:arrow_drift/data/repositories/progress_repository.dart';
 import 'package:arrow_drift/features/gameplay/gameplay_screen.dart';
@@ -66,12 +62,6 @@ class _DailyChallengeScreenState extends ConsumerState<DailyChallengeScreen> {
 
     // Future days stay faded; no bottom snackbar.
     if (day.isAfter(today)) return;
-
-    // Offline: dialog only. Do not block open with a network probe.
-    if (!ref.read(connectivityProvider)) {
-      unawaited(showNoInternetDialog(context));
-      return;
-    }
 
     // Instant navigation — all board wait happens on the Daily loader screen.
     ScaffoldMessenger.of(context).clearSnackBars();

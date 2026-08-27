@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:arrow_drift/core/theme/app_theme.dart';
+import 'package:arrow_drift/core/utils/online_gate.dart';
 
 /// Centered modal shown when [GameState.isLost] is true.
 /// Restart always available; optional rewarded ad for +1 life.
@@ -9,10 +10,12 @@ class OutOfLivesOverlay extends StatefulWidget {
     super.key,
     required this.onRestart,
     required this.onWatchAd,
+    this.adsAvailable = true,
   });
 
   final VoidCallback onRestart;
   final Future<void> Function() onWatchAd;
+  final bool adsAvailable;
 
   @override
   State<OutOfLivesOverlay> createState() => _OutOfLivesOverlayState();
@@ -23,6 +26,10 @@ class _OutOfLivesOverlayState extends State<OutOfLivesOverlay> {
 
   Future<void> _handleWatchAd() async {
     if (_watchingAd) return;
+    if (!widget.adsAvailable) {
+      showOfflineAdNotice(context);
+      return;
+    }
     setState(() => _watchingAd = true);
     try {
       await widget.onWatchAd();
@@ -182,37 +189,44 @@ class _OutOfLivesOverlayState extends State<OutOfLivesOverlay> {
                             SizedBox(
                               width: double.infinity,
                               height: 52,
-                              child: Material(
-                                color: Colors.transparent,
-                                child: InkWell(
-                                  onTap: _watchingAd ? null : _handleWatchAd,
-                                  borderRadius: BorderRadius.circular(16),
-                                  child: Ink(
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(
-                                        color: colors.accentTeal,
-                                        width: 2,
+                              child: Opacity(
+                                opacity: widget.adsAvailable ? 1 : 0.45,
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: _watchingAd ? null : _handleWatchAd,
+                                    borderRadius: BorderRadius.circular(16),
+                                    child: Ink(
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(
+                                          color: widget.adsAvailable
+                                              ? colors.accentTeal
+                                              : colors.border,
+                                          width: 2,
+                                        ),
                                       ),
-                                    ),
-                                    child: Center(
-                                      child: _watchingAd
-                                          ? SizedBox(
-                                              width: 22,
-                                              height: 22,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2.5,
-                                                color: colors.accentTeal,
+                                      child: Center(
+                                        child: _watchingAd
+                                            ? SizedBox(
+                                                width: 22,
+                                                height: 22,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2.5,
+                                                  color: colors.accentTeal,
+                                                ),
+                                              )
+                                            : Text(
+                                                'Get More Lives (Watch Ad)',
+                                                style: AppTextStyles.button(
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: widget.adsAvailable
+                                                      ? colors.accentTealDeep
+                                                      : colors.secondaryText,
+                                                ),
                                               ),
-                                            )
-                                          : Text(
-                                              'Get More Lives (Watch Ad)',
-                                              style: AppTextStyles.button(
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.w700,
-                                                color: colors.accentTealDeep,
-                                              ),
-                                            ),
+                                      ),
                                     ),
                                   ),
                                 ),
