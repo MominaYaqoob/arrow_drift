@@ -17,6 +17,525 @@ LevelModel _dailyChallengeIsolateEntry((DateTime, int) args) {
   return LevelRepository._buildDailyChallengeLevel(args.$1, args.$2);
 }
 
+LevelModel _heartPatternPreviewIsolateEntry((int, int) args) {
+  return buildHeartPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _carPatternPreviewIsolateEntry((int, int) args) {
+  return buildCarPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _starPatternPreviewIsolateEntry((int, int) args) {
+  return buildStarPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+/// Preview-only heart: same silhouette as Daily, but small interior holes and
+/// a too-wide top cleft are closed so arrows can cover the middle gap.
+List<List<bool>> _patternPreviewHeartMask(int size) {
+  final mask = generateHeartShapeMask(size);
+
+  void closeNeighbors() {
+    final extra = <(int, int)>[];
+    for (var r = 0; r < size; r++) {
+      for (var c = 0; c < size; c++) {
+        if (mask[r][c]) continue;
+        var n = 0;
+        for (var dr = -1; dr <= 1; dr++) {
+          for (var dc = -1; dc <= 1; dc++) {
+            if (dr == 0 && dc == 0) continue;
+            final rr = r + dr;
+            final cc = c + dc;
+            if (rr < 0 || cc < 0 || rr >= size || cc >= size) continue;
+            if (mask[rr][cc]) n++;
+          }
+        }
+        if (n >= 5) extra.add((r, c));
+      }
+    }
+    for (final (r, c) in extra) {
+      mask[r][c] = true;
+    }
+  }
+
+  closeNeighbors();
+  closeNeighbors();
+
+  // Tighten the top cleft: fill short gaps between the two lobes so the
+  // middle isn't a hollow bite, while a small V remains if the gap is wide.
+  final cleftRows = (size * 0.42).ceil();
+  for (var r = 0; r < cleftRows; r++) {
+    var c = 0;
+    while (c < size) {
+      while (c < size && mask[r][c]) {
+        c++;
+      }
+      if (c >= size) break;
+      final gapStart = c;
+      while (c < size && !mask[r][c]) {
+        c++;
+      }
+      final gapEnd = c;
+      final boundedLeft = gapStart > 0 && mask[r][gapStart - 1];
+      final boundedRight = gapEnd < size && gapEnd > gapStart && mask[r][gapEnd];
+      final width = gapEnd - gapStart;
+      if (boundedLeft && boundedRight && width <= 7) {
+        for (var i = gapStart; i < gapEnd; i++) {
+          mask[r][i] = true;
+        }
+      }
+    }
+  }
+
+  closeNeighbors();
+  return mask;
+}
+
+/// Visual-only mop: cover leftover in-mask cells with winding arrows.
+/// Preview has no GameController, so these extras don't need to be solvable.
+LevelModel _fillPreviewHeartGaps(
+  LevelModel level, {
+  int maxGrowLen = 10,
+  bool preferTurns = false,
+  int turnEvery = 1,
+  int minGrowLen = 1,
+  int? minArrows,
+  int? maxArrows,
+}) {
+  final mask = level.shapeMask;
+  if (mask == null) return level;
+  final rows = level.gridRows;
+  final cols = level.gridCols;
+  final occupied = <String>{};
+  for (final arrow in level.arrows) {
+    for (final cell in arrow.path) {
+      occupied.add('${cell.row}:${cell.col}');
+    }
+  }
+
+  bool inMask(int r, int c) =>
+      r >= 0 &&
+      c >= 0 &&
+      r < rows &&
+      c < cols &&
+      r < mask.length &&
+      c < mask[r].length &&
+      mask[r][c];
+
+  bool isEmpty(int r, int c) =>
+      inMask(r, c) && !occupied.contains('$r:$c');
+
+  List<GridCell> grow({
+    required int startR,
+    required int startC,
+    required ArrowDirection startDir,
+  }) {
+    final path = <GridCell>[GridCell(startR, startC)];
+    final used = <String>{'$startR:$startC'};
+    var r = startR;
+    var c = startC;
+    var dir = startDir;
+
+    bool free(int rr, int cc) =>
+        isEmpty(rr, cc) && !used.contains('$rr:$cc');
+
+    List<(ArrowDirection, int, int)> neighbors(ArrowDirection from) {
+      final (dr, dc) = _dirDelta(from);
+      final opts = <(ArrowDirection, int, int)>[];
+      void add(ArrowDirection d) {
+        final (tdr, tdc) = _dirDelta(d);
+        if (tdr == -dr && tdc == -dc && path.length > 1) return;
+        final tr = r + tdr;
+        final tc = c + tdc;
+        if (free(tr, tc)) opts.add((d, tr, tc));
+      }
+
+      final tryTurnFirst = preferTurns &&
+          path.length >= 2 &&
+          (turnEvery <= 1 || path.length % turnEvery == 0);
+      if (tryTurnFirst) {
+        for (final d in ArrowDirection.values) {
+          if (d != from) add(d);
+        }
+        add(from);
+      } else {
+        add(from);
+        for (final d in ArrowDirection.values) {
+          if (d != from) add(d);
+        }
+      }
+      return opts;
+    }
+
+    while (path.length < maxGrowLen) {
+      final opts = neighbors(dir);
+      if (opts.isEmpty) break;
+      final (nextDir, nr, nc) = opts.first;
+      dir = nextDir;
+      r = nr;
+      c = nc;
+      path.add(GridCell(r, c));
+      used.add('$r:$c');
+    }
+    return path;
+  }
+
+  int score(List<GridCell> path) {
+    if (!preferTurns) return path.length;
+    return path.length * 2 + _pathTurnCount(path) * 4;
+  }
+
+  final extra = <ArrowModel>[];
+  var seq = 0;
+  var requireMin = minGrowLen;
+
+  void place(List<GridCell> placed, ArrowDirection bestDir) {
+    final tip = placed.last;
+    final facing = placed.length == 1
+        ? bestDir
+        : () {
+            final prev = placed[placed.length - 2];
+            final dr = tip.row - prev.row;
+            final dc = tip.col - prev.col;
+            if (dr < 0) return ArrowDirection.up;
+            if (dr > 0) return ArrowDirection.down;
+            if (dc < 0) return ArrowDirection.left;
+            return ArrowDirection.right;
+          }();
+    extra.add(
+      ArrowModel(
+        id: 'preview-fill-$seq',
+        row: tip.row,
+        col: tip.col,
+        direction: facing,
+        path: placed,
+      ),
+    );
+    seq++;
+    for (final cell in placed) {
+      occupied.add('${cell.row}:${cell.col}');
+    }
+  }
+
+  while (true) {
+    final total = level.arrows.length + extra.length;
+    if (maxArrows != null && total >= maxArrows) break;
+
+    List<GridCell>? best;
+    ArrowDirection? bestDir;
+    var bestScore = -1;
+    for (var r = 0; r < rows; r++) {
+      for (var c = 0; c < cols; c++) {
+        if (!isEmpty(r, c)) continue;
+        for (final dir in ArrowDirection.values) {
+          final path = grow(startR: r, startC: c, startDir: dir);
+          if (path.length < requireMin) continue;
+          final s = score(path);
+          if (best == null || s > bestScore) {
+            best = path;
+            bestDir = dir;
+            bestScore = s;
+          }
+        }
+      }
+    }
+    if (best == null || bestDir == null) {
+      if (requireMin > 1 &&
+          (minArrows == null || level.arrows.length + extra.length < minArrows)) {
+        requireMin = 1;
+        continue;
+      }
+      break;
+    }
+    place(best, bestDir);
+  }
+
+  if (extra.isEmpty) return level;
+  return level.copyWith(arrows: [...level.arrows, ...extra]);
+}
+
+/// Internal [LevelModel.levelNumber] for Patterns puzzles. Must stay outside
+/// the campaign range so [gameControllerProvider] family keys never collide.
+const int kHeartPatternLevelId = 900001;
+const int kCarPatternLevelId = 900002;
+const int kStarPatternLevelId = 900003;
+
+/// Patterns Level-1 heart maze. Nested hard-pack (~100 winding arrows).
+/// Daily / campaign generation is unchanged.
+LevelModel buildHeartPatternPreviewLevel({
+  int levelNumber = kHeartPatternLevelId,
+  int seed = 1,
+}) {
+  const targetMin = 100;
+  const targetMax = 110;
+  StateError? lastError;
+
+  LevelModel? tryBuild({
+    required int size,
+    required int buildSeed,
+    required double fill,
+    int floor = targetMin,
+    int cap = targetMax,
+    int minPath = 6,
+    int maxPath = 12,
+    double bias = 1.7,
+  }) {
+    try {
+      final packed = generateNestedSolvableLevel(
+        levelNumber,
+        size,
+        size,
+        3,
+        2,
+        difficulty: LevelDifficulty.expert,
+        seed: buildSeed,
+        shapeMask: _patternPreviewHeartMask(size),
+        fillTarget: fill,
+        minPathLen: minPath,
+        maxPathLen: maxPath,
+        minArrows: floor,
+        maxArrows: cap,
+        hardNest: true,
+        mixPathSizes: true,
+        maxFreeAtStart: null,
+        turnBias: bias,
+      ).level;
+
+      bool hasFree(LevelModel level) =>
+          findFirstFreeArrow(
+            arrows: level.arrows,
+            gridRows: level.gridRows,
+            gridCols: level.gridCols,
+            shapeMask: level.shapeMask,
+          ) !=
+          null;
+
+      // Extra mop fill can seal every escape — hints then do nothing.
+      final filled = _fillPreviewHeartGaps(
+        packed,
+        maxGrowLen: maxPath,
+        preferTurns: true,
+        turnEvery: 2,
+        minGrowLen: minPath,
+        minArrows: floor,
+        maxArrows: cap,
+      );
+      if (hasFree(filled)) return filled;
+      if (hasFree(packed)) return packed;
+      return null;
+    } on StateError catch (e) {
+      lastError = e;
+      return null;
+    }
+  }
+
+  // Dense nested heart — longer hooks, ~100 arrows.
+  for (var attempt = 0; attempt < 12; attempt++) {
+    final level = tryBuild(
+      size: 36,
+      buildSeed: seed + attempt * 211,
+      fill: 0.995,
+      minPath: 6,
+      maxPath: 12,
+      bias: 1.75,
+    );
+    if (level != null) return level;
+  }
+
+  for (var attempt = 0; attempt < 10; attempt++) {
+    final level = tryBuild(
+      size: 38,
+      buildSeed: seed + 9000 + attempt * 131,
+      fill: 0.99,
+      minPath: 6,
+      maxPath: 12,
+      bias: 1.65,
+    );
+    if (level != null) return level;
+  }
+
+  for (var attempt = 0; attempt < 10; attempt++) {
+    final level = tryBuild(
+      size: 34,
+      buildSeed: seed + 17000 + attempt * 97,
+      fill: 0.995,
+      minPath: 5,
+      maxPath: 11,
+      bias: 1.6,
+    );
+    if (level != null) return level;
+  }
+
+  for (var attempt = 0; attempt < 8; attempt++) {
+    final level = tryBuild(
+      size: 32,
+      buildSeed: seed + 29000 + attempt * 37,
+      fill: 0.99,
+      floor: 95,
+      minPath: 5,
+      maxPath: 10,
+      bias: 1.5,
+    );
+    if (level != null) return level;
+  }
+
+  // Known-good nested pack so hints always have a free arrow.
+  for (var attempt = 0; attempt < 12; attempt++) {
+    final level = tryBuild(
+      size: 32,
+      buildSeed: seed + 41000 + attempt * 41,
+      fill: 0.995,
+      floor: 80,
+      cap: 85,
+      minPath: 5,
+      maxPath: 8,
+      bias: 1.55,
+    );
+    if (level != null) return level;
+  }
+
+  throw lastError ??
+      StateError(
+        'Failed to build nested heart pattern preview for $levelNumber',
+      );
+}
+
+List<List<bool>> _patternPreviewCarMask(int size) {
+  final mask = generateCarShapeMask(size);
+  void closeNeighbors() {
+    final extra = <(int, int)>[];
+    for (var r = 0; r < size; r++) {
+      for (var c = 0; c < size; c++) {
+        if (mask[r][c]) continue;
+        var n = 0;
+        for (var dr = -1; dr <= 1; dr++) {
+          for (var dc = -1; dc <= 1; dc++) {
+            if (dr == 0 && dc == 0) continue;
+            final rr = r + dr;
+            final cc = c + dc;
+            if (rr < 0 || cc < 0 || rr >= size || cc >= size) continue;
+            if (mask[rr][cc]) n++;
+          }
+        }
+        if (n >= 5) extra.add((r, c));
+      }
+    }
+    for (final (r, c) in extra) {
+      mask[r][c] = true;
+    }
+  }
+
+  closeNeighbors();
+  closeNeighbors();
+  return mask;
+}
+
+List<List<bool>> _patternPreviewStarMask(int size) {
+  final mask = generateStarShapeMask(size);
+  void closeNeighbors() {
+    final extra = <(int, int)>[];
+    for (var r = 0; r < size; r++) {
+      for (var c = 0; c < size; c++) {
+        if (mask[r][c]) continue;
+        var n = 0;
+        for (var dr = -1; dr <= 1; dr++) {
+          for (var dc = -1; dc <= 1; dc++) {
+            if (dr == 0 && dc == 0) continue;
+            final rr = r + dr;
+            final cc = c + dc;
+            if (rr < 0 || cc < 0 || rr >= size || cc >= size) continue;
+            if (mask[rr][cc]) n++;
+          }
+        }
+        // Strict: don't fill the valleys between star points.
+        if (n >= 6) extra.add((r, c));
+      }
+    }
+    for (final (r, c) in extra) {
+      mask[r][c] = true;
+    }
+  }
+
+  closeNeighbors();
+  return mask;
+}
+
+/// Patterns Level-3 star maze. Visual fill (not a playable puzzle).
+/// Daily / campaign generation is unchanged.
+LevelModel buildStarPatternPreviewLevel({
+  int levelNumber = kStarPatternLevelId,
+  int seed = 3,
+}) {
+  return _visualFillPatternMask(
+    levelNumber: levelNumber,
+    size: 40,
+    mask: _patternPreviewStarMask(40),
+    preferTurns: true,
+    maxGrowLen: 7,
+    turnEvery: 3,
+    minGrowLen: 4,
+    minArrows: 100,
+    maxArrows: 110,
+  );
+}
+
+/// Patterns Level-2 car maze. Visual fill (not a playable puzzle).
+/// Daily / campaign generation is unchanged.
+LevelModel buildCarPatternPreviewLevel({
+  int levelNumber = kCarPatternLevelId,
+  int seed = 2,
+}) {
+  return _visualFillPatternMask(
+    levelNumber: levelNumber,
+    size: 36,
+    mask: _patternPreviewCarMask(36),
+    targetArrows: 100,
+    preferTurns: true,
+  );
+}
+
+LevelModel _visualFillPatternMask({
+  required int levelNumber,
+  required int size,
+  required List<List<bool>> mask,
+  int? targetArrows,
+  bool preferTurns = false,
+  int? maxGrowLen,
+  int turnEvery = 1,
+  int minGrowLen = 1,
+  int? minArrows,
+  int? maxArrows,
+}) {
+  var growLen = maxGrowLen ?? 10;
+  if (maxGrowLen == null && targetArrows != null && targetArrows > 0) {
+    var playable = 0;
+    for (final row in mask) {
+      for (final on in row) {
+        if (on) playable++;
+      }
+    }
+    growLen = (playable / targetArrows).round().clamp(2, 5);
+  }
+  final empty = LevelModel(
+    levelNumber: levelNumber,
+    gridRows: size,
+    gridCols: size,
+    arrows: const [],
+    heartsAllowed: 3,
+    hintsAllowed: 2,
+    difficulty: LevelDifficulty.expert,
+    shapeMask: mask,
+  );
+  return _fillPreviewHeartGaps(
+    empty,
+    maxGrowLen: growLen,
+    preferTurns: preferTurns,
+    turnEvery: turnEvery,
+    minGrowLen: minGrowLen,
+    minArrows: minArrows,
+    maxArrows: maxArrows,
+  );
+}
+
 /// Result of [generateSolvableLevel], including placement order for tests.
 class SolvableLevelResult {
   const SolvableLevelResult({
@@ -1771,6 +2290,137 @@ class LevelRepository {
       return await future;
     } finally {
       _inflightDaily.remove(levelNumber);
+    }
+  }
+
+  static LevelModel? _heartPreviewCache;
+  static Future<LevelModel>? _heartPreviewInflight;
+  static LevelModel? _carPreviewCache;
+  static Future<LevelModel>? _carPreviewInflight;
+  static LevelModel? _starPreviewCache;
+  static Future<LevelModel>? _starPreviewInflight;
+
+  /// Patterns Level-1 heart maze on a background isolate. Separate from Daily.
+  static Future<LevelModel> loadHeartPatternPreviewLevel({
+    int levelNumber = kHeartPatternLevelId,
+    int seed = 1,
+  }) async {
+    final cached = _heartPreviewCache;
+    final cachedHasHint = cached != null &&
+        findFirstFreeArrow(
+              arrows: cached.arrows,
+              gridRows: cached.gridRows,
+              gridCols: cached.gridCols,
+              shapeMask: cached.shapeMask,
+            ) !=
+            null;
+    if (cached != null &&
+        cachedHasHint &&
+        cached.levelNumber == levelNumber &&
+        cached.gridRows <= 40 &&
+        cached.gridRows >= 32 &&
+        cached.arrows.length >= 80) {
+      return cached;
+    }
+    _heartPreviewCache = null;
+    final inflight = _heartPreviewInflight;
+    if (inflight != null) return inflight;
+
+    final future = () async {
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(const Duration(milliseconds: 32));
+      final LevelModel level;
+      if (kIsWeb) {
+        level = buildHeartPatternPreviewLevel(
+          levelNumber: levelNumber,
+          seed: seed,
+        );
+      } else {
+        level = await compute(
+          _heartPatternPreviewIsolateEntry,
+          (levelNumber, seed),
+        );
+      }
+      _heartPreviewCache = level;
+      return level;
+    }();
+    _heartPreviewInflight = future;
+    try {
+      return await future;
+    } finally {
+      _heartPreviewInflight = null;
+    }
+  }
+
+  /// Patterns Level-2 car maze on a background isolate. Separate from Daily.
+  static Future<LevelModel> loadCarPatternPreviewLevel({
+    int levelNumber = kCarPatternLevelId,
+    int seed = 2,
+  }) async {
+    final cached = _carPreviewCache;
+    if (cached != null) return cached;
+    final inflight = _carPreviewInflight;
+    if (inflight != null) return inflight;
+
+    final future = () async {
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(const Duration(milliseconds: 32));
+      final LevelModel level;
+      if (kIsWeb) {
+        level = buildCarPatternPreviewLevel(
+          levelNumber: levelNumber,
+          seed: seed,
+        );
+      } else {
+        level = await compute(
+          _carPatternPreviewIsolateEntry,
+          (levelNumber, seed),
+        );
+      }
+      _carPreviewCache = level;
+      return level;
+    }();
+    _carPreviewInflight = future;
+    try {
+      return await future;
+    } finally {
+      _carPreviewInflight = null;
+    }
+  }
+
+  /// Patterns Level-3 star maze on a background isolate. Separate from Daily.
+  static Future<LevelModel> loadStarPatternPreviewLevel({
+    int levelNumber = kStarPatternLevelId,
+    int seed = 3,
+  }) async {
+    final cached = _starPreviewCache;
+    if (cached != null) return cached;
+    final inflight = _starPreviewInflight;
+    if (inflight != null) return inflight;
+
+    final future = () async {
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(const Duration(milliseconds: 32));
+      final LevelModel level;
+      if (kIsWeb) {
+        level = buildStarPatternPreviewLevel(
+          levelNumber: levelNumber,
+          seed: seed,
+        );
+      } else {
+        level = await compute(
+          _starPatternPreviewIsolateEntry,
+          (levelNumber, seed),
+        );
+      }
+      _starPreviewCache = level;
+      return level;
+    }();
+    _starPreviewInflight = future;
+    try {
+      return await future;
+    } finally {
+      _starPreviewInflight = null;
     }
   }
 

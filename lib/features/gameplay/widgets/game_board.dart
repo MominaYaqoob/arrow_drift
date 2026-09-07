@@ -23,6 +23,9 @@ class GameBoard extends StatelessWidget {
     this.shakeTokens = const {},
     this.wrongBumpCells = const {},
     this.cellSize = 52,
+    this.boardBackgroundOverride,
+    this.arrowColorResolver,
+    this.hideDots = false,
   });
 
   final GameState gameState;
@@ -49,6 +52,15 @@ class GameBoard extends StatelessWidget {
   final Map<String, double> wrongBumpCells;
   final double cellSize;
 
+  /// When set, used instead of the default cream/white (or dark background) card.
+  final Color? boardBackgroundOverride;
+
+  /// When set, [ArrowTile] uses this color per arrow instead of the theme default.
+  final Color? Function(ArrowModel arrow, int index)? arrowColorResolver;
+
+  /// When true, skip the dotted grid behind arrows. Default false (campaign/Daily).
+  final bool hideDots;
+
   bool get _plain => plainTutorial || plainBoard;
 
   @override
@@ -56,7 +68,8 @@ class GameBoard extends StatelessWidget {
     final colors = context.appColors;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // Light: white card · Dark: deep navy so #EEF3F8 arrows stay readable.
-    final boardBg = isDark ? colors.background : Colors.white;
+    final boardBg = boardBackgroundOverride ??
+        (isDark ? colors.background : Colors.white);
     final boardShadow = isDark
         ? Colors.black.withValues(alpha: 0.45)
         : const Color(0xFF0E1726).withValues(alpha: 0.06);
@@ -97,7 +110,7 @@ class GameBoard extends StatelessWidget {
           child: Stack(
             clipBehavior: Clip.hardEdge,
             children: [
-              if (!plainTutorial)
+              if (!plainTutorial && !hideDots)
                 Positioned.fill(
                   child: CustomPaint(
                     painter: _DotGridPainter(
@@ -107,6 +120,7 @@ class GameBoard extends StatelessWidget {
                           ? colors.border
                           : const Color(0xFFB8B0A0),
                       shapeMask: gameState.level.shapeMask,
+                      fillColor: boardBackgroundOverride,
                     ),
                   ),
                 ),
@@ -132,6 +146,10 @@ class GameBoard extends StatelessWidget {
                         wrongBumpCells[gameState.arrows[i].id] ?? 0,
                     entranceIndex: i,
                     playEntrance: playEntrance,
+                    colorOverride: arrowColorResolver?.call(
+                      gameState.arrows[i],
+                      i,
+                    ),
                     onTap: () => onArrowTap(gameState.arrows[i].id),
                   ),
                 ),
@@ -433,12 +451,14 @@ class _DotGridPainter extends CustomPainter {
     required this.cols,
     required this.color,
     this.shapeMask,
+    this.fillColor,
   });
 
   final int rows;
   final int cols;
   final Color color;
   final List<List<bool>>? shapeMask;
+  final Color? fillColor;
 
   bool _cellInMask(int r, int c) {
     if (shapeMask == null) return true;
@@ -451,6 +471,10 @@ class _DotGridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (rows <= 0 || cols <= 0 || size.isEmpty) return;
+
+    if (fillColor != null) {
+      canvas.drawRect(Offset.zero & size, Paint()..color = fillColor!);
+    }
 
     final paint = Paint()..color = color.withValues(alpha: 0.55);
     const radius = 1.6;
@@ -484,6 +508,7 @@ class _DotGridPainter extends CustomPainter {
     return oldDelegate.rows != rows ||
         oldDelegate.cols != cols ||
         oldDelegate.color != color ||
-        oldDelegate.shapeMask != shapeMask;
+        oldDelegate.shapeMask != shapeMask ||
+        oldDelegate.fillColor != fillColor;
   }
 }

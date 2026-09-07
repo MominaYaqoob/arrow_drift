@@ -9,11 +9,13 @@ class PauseSheet extends StatelessWidget {
     required this.onResume,
     required this.onRestart,
     required this.onQuit,
+    this.quitLabel = 'Quit to Home',
   });
 
   final VoidCallback onResume;
   final VoidCallback onRestart;
   final VoidCallback onQuit;
+  final String quitLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +59,7 @@ class PauseSheet extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             _SheetButton(
-              label: 'Quit to Home',
+              label: quitLabel,
               icon: Icons.home_rounded,
               onTap: onQuit,
             ),

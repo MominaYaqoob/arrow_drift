@@ -19,6 +19,7 @@ class ProgressRepository {
   static const String _legacyCurrentLevelKey = 'current_level';
   static const String _lastCompletedLevelKey = 'last_completed_level';
   static const String _dailyCompletedKey = 'daily_completed_dates';
+  static const String _patternCompletedKey = 'pattern_completed_levels';
   static const String _streakKey = 'current_streak';
   /// Last calendar day that counted toward the Snapchat-style streak (`yyyy-MM-dd`).
   static const String _streakLastDateKey = 'daily_streak_last_date';
@@ -51,6 +52,28 @@ class ProgressRepository {
 
   Future<void> setHasAcceptedTerms(bool value) async {
     await _prefs.setBool(hasAcceptedTermsKey, value);
+  }
+
+  /// Gallery numbers (1, 2, 3…) the player has cleared in Patterns.
+  /// Does not write campaign [saveProgress] keys.
+  List<int> getCompletedPatternLevels() {
+    return (_prefs.getStringList(_patternCompletedKey) ?? const [])
+        .map(int.tryParse)
+        .whereType<int>()
+        .toList();
+  }
+
+  bool isPatternCompleted(int patternNumber) =>
+      getCompletedPatternLevels().contains(patternNumber);
+
+  Future<void> markPatternCompleted(int patternNumber) async {
+    final stored = [
+      ...(_prefs.getStringList(_patternCompletedKey) ?? const <String>[]),
+    ];
+    final key = '$patternNumber';
+    if (stored.contains(key)) return;
+    stored.add(key);
+    await _prefs.setStringList(_patternCompletedKey, stored);
   }
 
   /// Marks [completedLevel] done and sets [currentLevel] to the next number.
@@ -285,6 +308,15 @@ final progressRepositoryProvider =
 /// Bumped after campaign progress is written so Home/Me re-read prefs.
 /// FutureProvider otherwise can keep the previous int when only prefs changed.
 final campaignProgressTickProvider = StateProvider<int>((ref) => 0);
+
+/// Bumped after a Patterns puzzle is cleared (separate from campaign).
+final patternProgressTickProvider = StateProvider<int>((ref) => 0);
+
+final completedPatternLevelsProvider = FutureProvider<List<int>>((ref) async {
+  ref.watch(patternProgressTickProvider);
+  final repo = await ref.watch(progressRepositoryProvider.future);
+  return repo.getCompletedPatternLevels();
+});
 
 final currentLevelProvider = FutureProvider<int>((ref) async {
   ref.watch(campaignProgressTickProvider);

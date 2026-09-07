@@ -1,3 +1,5 @@
+import 'dart:math';
+
 /// Grid shape masks for special campaign levels (e.g. heart silhouette).
 
 List<List<bool>> generateHeartShapeMask(int gridSize) {
@@ -368,6 +370,107 @@ List<List<bool>> catFaceMask(int rows, int cols) {
       return inFace || inLeftEar || inRightEar || inChin;
     });
   });
+}
+
+/// Side-view car facing right (cabin + chassis + two wheels, connected).
+List<List<bool>> generateCarShapeMask(int gridSize) {
+  final mask = List.generate(
+    gridSize,
+    (_) => List<bool>.filled(gridSize, false),
+  );
+
+  for (var row = 0; row < gridSize; row++) {
+    for (var col = 0; col < gridSize; col++) {
+      // Fill most of the square so the car stays prominent on a 32 grid.
+      final nx = ((col + 0.5) / gridSize) * 2.05 - 1.025;
+      final ny = ((row + 0.5) / gridSize) * 2.05 - 1.025;
+      if (_isInsideCar(nx, ny)) {
+        mask[row][col] = true;
+      }
+    }
+  }
+
+  return mask;
+}
+
+bool _isInsideCar(double nx, double ny) {
+  // Cabin / greenhouse — taller, windshield slants forward.
+  final cabinT = ((ny + 0.50) / 0.58).clamp(0.0, 1.0);
+  final cabinLeft = -0.42;
+  final cabinRight = -0.06 + 0.50 * cabinT;
+  final inCabin = ny >= -0.52 &&
+      ny <= 0.12 &&
+      nx >= cabinLeft &&
+      nx <= cabinRight;
+
+  // Main chassis — long rounded body.
+  final inBody = ny >= -0.06 &&
+      ny <= 0.50 &&
+      nx >= -0.94 &&
+      nx <= 0.90 &&
+      (ny - 0.22).abs() <= 0.30;
+
+  // Front nose.
+  final inNose = nx >= 0.58 &&
+      nx <= 1.00 &&
+      ny >= 0.02 &&
+      ny <= 0.44 &&
+      (ny - 0.23).abs() <= 0.22 * (1.0 - (nx - 0.58) / 0.48);
+
+  // Rear bumper.
+  final inRear = nx <= -0.70 &&
+      nx >= -1.04 &&
+      ny >= 0.02 &&
+      ny <= 0.44 &&
+      (ny - 0.23).abs() <= 0.20 * (1.0 - (-0.70 - nx) / 0.36);
+
+  // Wheels overlap the body so the silhouette stays one piece.
+  final rearWheel =
+      (nx + 0.52) * (nx + 0.52) + (ny - 0.52) * (ny - 0.52) <= 0.22 * 0.22;
+  final frontWheel =
+      (nx - 0.48) * (nx - 0.48) + (ny - 0.52) * (ny - 0.52) <= 0.22 * 0.22;
+
+  return inCabin || inBody || inNose || inRear || rearWheel || frontWheel;
+}
+
+/// 5-point star, point-up — Patterns Level 3 silhouette.
+List<List<bool>> generateStarShapeMask(int gridSize) {
+  final mask = List.generate(
+    gridSize,
+    (_) => List<bool>.filled(gridSize, false),
+  );
+
+  for (var row = 0; row < gridSize; row++) {
+    for (var col = 0; col < gridSize; col++) {
+      final nx = ((col + 0.5) / gridSize) * 2.15 - 1.075;
+      final ny = ((row + 0.5) / gridSize) * 2.15 - 1.075;
+      if (_isInsideStar(nx, ny)) {
+        mask[row][col] = true;
+      }
+    }
+  }
+
+  return mask;
+}
+
+bool _isInsideStar(double nx, double ny) {
+  // Screen y grows down; flip so a tip points up.
+  final px = nx;
+  final py = -ny;
+  final r = sqrt(px * px + py * py);
+  if (r < 0.12) return true;
+  var ang = atan2(py, px) + pi / 2;
+  if (ang < 0) ang += 2 * pi;
+  const spikes = 5;
+  const outer = 1.0;
+  const inner = 0.38;
+  final slice = 2 * pi / spikes;
+  final a = ang % slice;
+  final half = slice / 2;
+  final edgeR = a <= half
+      ? outer + (inner - outer) * (a / half)
+      : inner + (outer - inner) * ((a - half) / half);
+  return r <= edgeR * 0.98;
 }
 
 void debugPrintHeartMask(int gridSize) {

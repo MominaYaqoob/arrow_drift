@@ -25,6 +25,7 @@ class ArrowTile extends StatefulWidget {
     this.onShakeCompleted,
     this.entranceIndex = 0,
     this.playEntrance = false,
+    this.colorOverride,
   });
 
   final ArrowModel arrow;
@@ -47,6 +48,9 @@ class ArrowTile extends StatefulWidget {
 
   /// When true, fade+scale in on first appear.
   final bool playEntrance;
+
+  /// When set, used instead of the theme default stroke color.
+  final Color? colorOverride;
 
   /// Default arrow stroke in light theme (#0E1726).
   static const Color referenceArrowColor = Color(0xFF0E1726);
@@ -513,8 +517,8 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
     final colors = context.appColors;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // Light: #0E1726 · Dark: #EEF3F8
-    final baseColor =
-        isDark ? colors.arrowLight : ArrowTile.referenceArrowColor;
+    final baseColor = widget.colorOverride ??
+        (isDark ? colors.arrowLight : ArrowTile.referenceArrowColor);
     final cell = widget.cellSize;
     // Unity reference uses a thin, uniform stroke relative to its grid step
     // (Line prefab widthMultiplier: 0.1) rather than the thicker ~0.2 ratio

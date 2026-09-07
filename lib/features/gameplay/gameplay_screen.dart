@@ -20,6 +20,9 @@ import 'package:arrow_drift/features/daily_challenge/daily_challenge_screen.dart
 import 'package:arrow_drift/features/daily_challenge/daily_loading_view.dart';
 import 'package:arrow_drift/features/gameplay/game_controller.dart';
 import 'package:arrow_drift/features/gameplay/widgets/game_board.dart';
+import 'package:arrow_drift/features/gameplay/widgets/game_bottom_actions.dart';
+import 'package:arrow_drift/features/gameplay/widgets/game_stats_row.dart';
+import 'package:arrow_drift/features/gameplay/widgets/game_top_row.dart';
 import 'package:arrow_drift/features/gameplay/widgets/halfway_complete_toast.dart';
 import 'package:arrow_drift/features/gameplay/widgets/level_completed_overlay.dart';
 import 'package:arrow_drift/features/gameplay/widgets/out_of_lives_overlay.dart';
@@ -714,7 +717,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
               children: [
                 FadeTransition(
                   opacity: _chromeOpacity,
-                  child: _TopRow(
+                  child: GameTopRow(
                     title: widget.isDaily
                         ? 'Daily'
                         : 'Level ${level.levelNumber}',
@@ -737,7 +740,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
                   const SizedBox(height: 10),
                   FadeTransition(
                     opacity: _chromeOpacity,
-                    child: _StatsRow(
+                    child: GameStatsRow(
                       remainingArrows: remainingArrows,
                       heartsLeft: gameState.heartsLeft,
                       heartsAllowed: level.heartsAllowed,
@@ -773,7 +776,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
                 ),
                 if (inTutorial) const Spacer(flex: 2),
                 if (!inTutorial) ...[
-                  _BottomActions(
+                  GameBottomActions(
                     hintsLeft: gameState.hintsLeft,
                     adsAvailable: adsAvailable,
                     onHint: _onHint,
@@ -867,80 +870,6 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
   }
 }
 
-class _TopRow extends StatelessWidget {
-  const _TopRow({
-    required this.title,
-    required this.onBack,
-    required this.onSettings,
-    this.minimal = false,
-  });
-
-  final String title;
-  final VoidCallback onBack;
-  final VoidCallback? onSettings;
-  final bool minimal;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-
-    if (minimal) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(8, 16, 8, 0),
-        child: SizedBox(
-          height: 44,
-          child: Center(
-            child: Text(
-              title,
-              textAlign: TextAlign.center,
-              style: AppTextStyles.body(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: colors.primaryText,
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: onBack,
-            icon: Icon(
-              Icons.chevron_left_rounded,
-              size: 32,
-              color: colors.primaryText,
-            ),
-          ),
-          Expanded(
-            child: Text(
-              title,
-              textAlign: TextAlign.center,
-              style: AppTextStyles.heading(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: colors.primaryText,
-              ),
-            ),
-          ),
-          IconButton(
-            onPressed: onSettings,
-            icon: Icon(
-              Icons.settings_rounded,
-              size: 24,
-              color: colors.primaryText,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _LevelProgressBar extends StatelessWidget {
   const _LevelProgressBar({required this.progress});
 
@@ -977,336 +906,6 @@ class _LevelProgressBar extends StatelessWidget {
               );
             },
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _StatsRow extends StatefulWidget {
-  const _StatsRow({
-    required this.remainingArrows,
-    required this.heartsLeft,
-    required this.heartsAllowed,
-    required this.difficulty,
-  });
-
-  final int remainingArrows;
-  final int heartsLeft;
-  final int heartsAllowed;
-  final LevelDifficulty difficulty;
-
-  @override
-  State<_StatsRow> createState() => _StatsRowState();
-}
-
-class _StatsRowState extends State<_StatsRow>
-    with SingleTickerProviderStateMixin {
-  late int _prevHearts;
-  int? _pulseIndex;
-  late final AnimationController _pulseController;
-  late final Animation<double> _pulseScale;
-
-  @override
-  void initState() {
-    super.initState();
-    _prevHearts = widget.heartsLeft;
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 200),
-    );
-    _pulseScale = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.28), weight: 1),
-      TweenSequenceItem(tween: Tween(begin: 1.28, end: 1.0), weight: 1),
-    ]).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeOut),
-    );
-    _pulseController.addStatusListener((status) {
-      if (status == AnimationStatus.completed && mounted) {
-        setState(() => _pulseIndex = null);
-      }
-    });
-  }
-
-  @override
-  void didUpdateWidget(covariant _StatsRow oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.heartsLeft < _prevHearts) {
-      // Rightmost heart that just emptied (0-based fill from left).
-      setState(() => _pulseIndex = widget.heartsLeft);
-      _pulseController.forward(from: 0);
-    }
-    _prevHearts = widget.heartsLeft;
-  }
-
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    final totalHearts = widget.heartsAllowed.clamp(1, 5);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          _Pill(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('🚀', style: TextStyle(fontSize: 14)),
-                const SizedBox(width: 6),
-                Text(
-                  '${widget.remainingArrows}',
-                  style: AppTextStyles.label(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: colors.primaryText,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Spacer(),
-          AnimatedBuilder(
-            animation: _pulseController,
-            builder: (context, _) {
-              return Row(
-                mainAxisSize: MainAxisSize.min,
-                children: List.generate(totalHearts, (index) {
-                  final filled = index < widget.heartsLeft;
-                  final pulsing = _pulseIndex == index;
-                  final icon = Icon(
-                    Icons.favorite_rounded,
-                    size: 22,
-                    color: filled
-                        ? colors.heartRed
-                        : colors.border.withValues(alpha: 0.85),
-                  );
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                    child: pulsing
-                        ? Transform.scale(
-                            scale: _pulseScale.value,
-                            child: icon,
-                          )
-                        : icon,
-                  );
-                }),
-              );
-            },
-          ),
-          const Spacer(),
-          _DifficultyChip(label: widget.difficulty.label),
-        ],
-      ),
-    );
-  }
-}
-
-class _Pill extends StatelessWidget {
-  const _Pill({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: colors.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: colors.border, width: 0.5),
-      ),
-      child: child,
-    );
-  }
-}
-
-class _DifficultyChip extends StatelessWidget {
-  const _DifficultyChip({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF2FBF8),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFD9F5EE), width: 1),
-      ),
-      child: Text(
-        label,
-        style: AppTextStyles.label(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          color: const Color(0xFF0F8F7A),
-        ),
-      ),
-    );
-  }
-}
-
-class _BottomActions extends StatefulWidget {
-  const _BottomActions({
-    required this.hintsLeft,
-    required this.adsAvailable,
-    required this.onHint,
-    required this.onWatchAdForHint,
-    required this.onGridBooster,
-  });
-
-  final int hintsLeft;
-  final bool adsAvailable;
-  final VoidCallback onHint;
-  final VoidCallback onWatchAdForHint;
-  final VoidCallback onGridBooster;
-
-  @override
-  State<_BottomActions> createState() => _BottomActionsState();
-}
-
-class _BottomActionsState extends State<_BottomActions>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _hintShakeController;
-  late final Animation<double> _hintShake;
-
-  @override
-  void initState() {
-    super.initState();
-    _hintShakeController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 280),
-    );
-    _hintShake = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween(begin: 0, end: -5), weight: 1),
-      TweenSequenceItem(tween: Tween(begin: -5, end: 5), weight: 1),
-      TweenSequenceItem(tween: Tween(begin: 5, end: -4), weight: 1),
-      TweenSequenceItem(tween: Tween(begin: -4, end: 0), weight: 1),
-    ]).animate(
-      CurvedAnimation(parent: _hintShakeController, curve: Curves.linear),
-    );
-  }
-
-  @override
-  void dispose() {
-    _hintShakeController.dispose();
-    super.dispose();
-  }
-
-  void _onHintTap() {
-    if (widget.hintsLeft <= 0) {
-      if (!widget.adsAvailable) {
-        showOfflineAdNotice(context);
-        return;
-      }
-      _hintShakeController.forward(from: 0);
-      widget.onWatchAdForHint();
-      return;
-    }
-    widget.onHint();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    final hintsEmpty = widget.hintsLeft <= 0;
-    final adHintOffline = hintsEmpty && !widget.adsAvailable;
-
-    Widget hintFab = _ActionFab(
-      onTap: _onHintTap,
-      child: Badge(
-        isLabelVisible: true,
-        backgroundColor:
-            adHintOffline ? colors.border : colors.accentTealDeep,
-        label: Text(
-          hintsEmpty ? 'AD' : '${widget.hintsLeft}',
-          style: AppTextStyles.label(
-            fontSize: 10,
-            color: Colors.white,
-          ),
-        ),
-        child: Icon(
-          Icons.lightbulb_rounded,
-          color: adHintOffline ? colors.secondaryText : colors.primaryText,
-        ),
-      ),
-    );
-    if (adHintOffline) {
-      hintFab = Opacity(opacity: 0.45, child: hintFab);
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-      child: Row(
-        children: [
-          AnimatedBuilder(
-            animation: _hintShakeController,
-            builder: (context, child) {
-              return Transform.translate(
-                offset: Offset(_hintShake.value, 0),
-                child: child,
-              );
-            },
-            child: hintFab,
-          ),
-          const Spacer(),
-          _ActionFab(
-            onTap: widget.onGridBooster,
-            child: Icon(
-              Icons.grid_view_rounded,
-              color: colors.primaryText,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ActionFab extends StatelessWidget {
-  const _ActionFab({
-    required this.child,
-    required this.onTap,
-  });
-
-  final Widget child;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: Ink(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            color: isDark ? colors.surface2 : Colors.white,
-            shape: BoxShape.circle,
-            border: isDark ? Border.all(color: colors.border) : null,
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF0E1726)
-                    .withValues(alpha: isDark ? 0.35 : 0.08),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Center(child: child),
         ),
       ),
     );

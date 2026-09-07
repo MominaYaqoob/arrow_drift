@@ -1,7 +1,13 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:arrow_drift/core/theme/app_theme.dart';
+import 'package:arrow_drift/data/models/arrow_model.dart';
+import 'package:arrow_drift/data/models/level_model.dart';
+import 'package:arrow_drift/data/repositories/level_repository.dart';
+import 'package:arrow_drift/data/repositories/shape_masks.dart';
 import 'package:arrow_drift/features/patterns/pattern_preview_screen.dart';
 
 /// Dummy pattern gallery — static UI only, no unlock / data logic.
@@ -121,10 +127,22 @@ class _PatternCard extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => context.push(
-          PatternPreviewScreen.routePath,
-          extra: level,
-        ),
+        onTap: locked
+            ? () {
+                ScaffoldMessenger.of(context)
+                  ..hideCurrentSnackBar()
+                  ..showSnackBar(
+                    const SnackBar(
+                      content: Text('Coming soon'),
+                      behavior: SnackBarBehavior.floating,
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+              }
+            : () => context.push(
+                  PatternPreviewScreen.routePath,
+                  extra: level,
+                ),
         borderRadius: BorderRadius.circular(16),
         child: Ink(
           decoration: BoxDecoration(
@@ -156,47 +174,430 @@ class _PatternCard extends StatelessWidget {
                   width: 1.2,
                 ),
               ),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
-                child: Column(
-                  children: [
-                    Text(
-                      'Level $level',
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.label(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: locked
-                            ? colors.secondaryText
-                            : colors.primaryText,
-                      ),
+              child: Stack(
+                clipBehavior: Clip.antiAlias,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
+                    child: Column(
+                      children: [
+                        Text(
+                          'Level $level',
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.label(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: locked
+                                ? colors.secondaryText
+                                : colors.primaryText,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Expanded(
+                          child: locked
+                              ? const SizedBox.expand()
+                              : switch (level) {
+                                  1 => const _Level1BoardPreview(),
+                                  2 => const _Level2BoardPreview(),
+                                  3 => const _Level3BoardPreview(),
+                                  _ => _DummyMazePreview(
+                                      seed: level,
+                                      teal: colors.accentTeal,
+                                      tealDeep: colors.accentTealDeep,
+                                    ),
+                                },
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 6),
-                    Expanded(
-                      child: locked
-                          ? Center(
+                  ),
+                  if (locked)
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: colors.surface2.withValues(alpha: 0.9),
+                          borderRadius: BorderRadius.circular(11),
+                        ),
+                        child: Column(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                'Level $level',
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTextStyles.label(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: colors.secondaryText,
+                                ),
+                              ),
+                            ),
+                            Expanded(
                               child: Icon(
                                 Icons.lock_rounded,
-                                size: 36,
+                                size: 32,
                                 color: colors.secondaryText,
                               ),
-                            )
-                          : _DummyMazePreview(
-                              seed: level,
-                              teal: colors.accentTeal,
-                              tealDeep: colors.accentTealDeep,
                             ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    Positioned(
+                      right: 6,
+                      bottom: 6,
+                      child: Container(
+                        width: 22,
+                        height: 22,
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.black.withValues(alpha: 0.4)
+                              : colors.surface2,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: colors.border, width: 0.6),
+                        ),
+                        child: Icon(
+                          Icons.lock_rounded,
+                          size: 12,
+                          color: colors.gold,
+                        ),
+                      ),
                     ),
-                  ],
-                ),
+                ],
               ),
             ),
           ),
         ),
       ),
     );
+  }
+}
+
+/// Mini Level-1 board: same heart arrows as PatternPreviewScreen.
+class _Level1BoardPreview extends StatelessWidget {
+  const _Level1BoardPreview();
+
+  static final _future = LevelRepository.loadHeartPatternPreviewLevel();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const paletteBlue = Color(0xFF4C7EF3);
+    final palette = [
+      colors.accentTeal,
+      colors.gold,
+      colors.heartRed,
+      paletteBlue,
+    ];
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF16262B) : const Color(0xFF1C2C32),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: FutureBuilder<LevelModel>(
+        future: _future,
+        builder: (context, snap) {
+          final level = snap.data;
+          if (level == null) {
+            return CustomPaint(
+              painter: _ShapeMaskPainter(
+                mask: _ShapeMaskPainter.heart,
+                color: colors.accentTeal,
+              ),
+              child: const SizedBox.expand(),
+            );
+          }
+          return CustomPaint(
+            painter: _PreviewArrowsPainter(level: level, palette: palette),
+            child: const SizedBox.expand(),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Mini Level-2 board: same car arrows as PatternPreviewScreen.
+class _Level2BoardPreview extends StatelessWidget {
+  const _Level2BoardPreview();
+
+  static final _future = LevelRepository.loadCarPatternPreviewLevel();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const paletteBlue = Color(0xFF4C7EF3);
+    final palette = [
+      colors.accentTeal,
+      colors.gold,
+      colors.heartRed,
+      paletteBlue,
+    ];
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF16262B) : const Color(0xFF1C2C32),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: FutureBuilder<LevelModel>(
+        future: _future,
+        builder: (context, snap) {
+          final level = snap.data;
+          if (level == null) {
+            return CustomPaint(
+              painter: _ShapeMaskPainter(
+                mask: _ShapeMaskPainter.car,
+                color: colors.accentTeal,
+              ),
+              child: const SizedBox.expand(),
+            );
+          }
+          return CustomPaint(
+            painter: _PreviewArrowsPainter(level: level, palette: palette),
+            child: const SizedBox.expand(),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Mini Level-3 board: same star arrows as PatternPreviewScreen.
+class _Level3BoardPreview extends StatelessWidget {
+  const _Level3BoardPreview();
+
+  static final _future = LevelRepository.loadStarPatternPreviewLevel();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const paletteBlue = Color(0xFF4C7EF3);
+    final palette = [
+      colors.accentTeal,
+      colors.gold,
+      colors.heartRed,
+      paletteBlue,
+    ];
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF16262B) : const Color(0xFF1C2C32),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: FutureBuilder<LevelModel>(
+        future: _future,
+        builder: (context, snap) {
+          final level = snap.data;
+          if (level == null) {
+            return CustomPaint(
+              painter: _ShapeMaskPainter(
+                mask: _ShapeMaskPainter.star,
+                color: colors.accentTeal,
+              ),
+              child: const SizedBox.expand(),
+            );
+          }
+          return CustomPaint(
+            painter: _PreviewArrowsPainter(level: level, palette: palette),
+            child: const SizedBox.expand(),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _PreviewArrowsPainter extends CustomPainter {
+  _PreviewArrowsPainter({required this.level, required this.palette});
+
+  final LevelModel level;
+  final List<Color> palette;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty || level.arrows.isEmpty) return;
+
+    var minR = level.gridRows;
+    var maxR = 0;
+    var minC = level.gridCols;
+    var maxC = 0;
+    for (final arrow in level.arrows) {
+      for (final cell in arrow.path) {
+        if (cell.row < minR) minR = cell.row;
+        if (cell.row > maxR) maxR = cell.row;
+        if (cell.col < minC) minC = cell.col;
+        if (cell.col > maxC) maxC = cell.col;
+      }
+    }
+    if (maxR < minR || maxC < minC) return;
+
+    final cellsW = maxC - minC + 1;
+    final cellsH = maxR - minR + 1;
+    const pad = 3.0;
+    final cell = ((size.width - pad * 2) / cellsW)
+        .clamp(0.0, (size.height - pad * 2) / cellsH);
+    if (cell <= 0) return;
+    final originX = (size.width - cellsW * cell) / 2;
+    final originY = (size.height - cellsH * cell) / 2;
+
+    Offset center(GridCell grid) {
+      return Offset(
+        originX + (grid.col - minC + 0.5) * cell,
+        originY + (grid.row - minR + 0.5) * cell,
+      );
+    }
+
+    final strokeWidth = (cell * 0.42).clamp(1.05, 2.4);
+
+    for (var i = 0; i < level.arrows.length; i++) {
+      final arrow = level.arrows[i];
+      if (arrow.isRemoved || arrow.path.isEmpty) continue;
+      final color = palette[i % palette.length];
+      final points = [for (final grid in arrow.path) center(grid)];
+      if (points.length == 1) {
+        final nudge = cell * 0.32;
+        final delta = switch (arrow.direction) {
+          ArrowDirection.up => Offset(0, -nudge),
+          ArrowDirection.down => Offset(0, nudge),
+          ArrowDirection.left => Offset(-nudge, 0),
+          ArrowDirection.right => Offset(nudge, 0),
+        };
+        points.add(points.first + delta);
+      }
+      _paintArrow(canvas, points, color, strokeWidth, arrow.direction);
+    }
+  }
+
+  void _paintArrow(
+    Canvas canvas,
+    List<Offset> points,
+    Color color,
+    double strokeWidth,
+    ArrowDirection direction,
+  ) {
+    if (points.length < 2) return;
+
+    final stroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.butt
+      ..strokeJoin = StrokeJoin.miter
+      ..isAntiAlias = true;
+
+    final tip = points.last;
+    final headLen = (strokeWidth * 2.4).clamp(3.2, 7.0);
+    final unit = tip - points[points.length - 2];
+    final len = unit.distance;
+    final dir = len == 0 ? Offset.zero : unit / len;
+    final shaftEnd = tip - dir * (headLen * 0.45);
+
+    final path = Path()..moveTo(points.first.dx, points.first.dy);
+    for (var i = 1; i < points.length - 1; i++) {
+      path.lineTo(points[i].dx, points[i].dy);
+    }
+    path.lineTo(shaftEnd.dx, shaftEnd.dy);
+    canvas.drawPath(path, stroke);
+
+    final angle = len < 1e-6
+        ? switch (direction) {
+            ArrowDirection.up => -math.pi / 2,
+            ArrowDirection.down => math.pi / 2,
+            ArrowDirection.left => math.pi,
+            ArrowDirection.right => 0.0,
+          }
+        : math.atan2(unit.dy, unit.dx);
+    final headHalf = headLen * 0.5;
+    Offset rot(double x, double y) {
+      final c = math.cos(angle);
+      final s = math.sin(angle);
+      return Offset(tip.dx + x * c - y * s, tip.dy + x * s + y * c);
+    }
+
+    canvas.drawPath(
+      Path()
+        ..moveTo(tip.dx, tip.dy)
+        ..lineTo(rot(-headLen, -headHalf).dx, rot(-headLen, -headHalf).dy)
+        ..lineTo(rot(-headLen, headHalf).dx, rot(-headLen, headHalf).dy)
+        ..close(),
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.fill
+        ..isAntiAlias = true,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _PreviewArrowsPainter oldDelegate) {
+    return oldDelegate.level != level || oldDelegate.palette != palette;
+  }
+}
+
+class _ShapeMaskPainter extends CustomPainter {
+  _ShapeMaskPainter({required this.mask, required this.color});
+
+  final List<List<bool>> mask;
+  final Color color;
+
+  static final List<List<bool>> heart = generateHeartShapeMask(28);
+  static final List<List<bool>> car = generateCarShapeMask(28);
+  static final List<List<bool>> star = generateStarShapeMask(28);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+
+    var minR = mask.length;
+    var maxR = 0;
+    var minC = mask.first.length;
+    var maxC = 0;
+    for (var r = 0; r < mask.length; r++) {
+      for (var c = 0; c < mask[r].length; c++) {
+        if (!mask[r][c]) continue;
+        if (r < minR) minR = r;
+        if (r > maxR) maxR = r;
+        if (c < minC) minC = c;
+        if (c > maxC) maxC = c;
+      }
+    }
+    if (maxR < minR || maxC < minC) return;
+
+    final cellsW = maxC - minC + 1;
+    final cellsH = maxR - minR + 1;
+    const pad = 3.0;
+    final cell = ((size.width - pad * 2) / cellsW)
+        .clamp(0.0, (size.height - pad * 2) / cellsH);
+    final originX = (size.width - cellsW * cell) / 2;
+    final originY = (size.height - cellsH * cell) / 2;
+    final paint = Paint()..color = color;
+
+    for (var r = minR; r <= maxR; r++) {
+      for (var c = minC; c <= maxC; c++) {
+        if (!mask[r][c]) continue;
+        canvas.drawRect(
+          Rect.fromLTWH(
+            originX + (c - minC) * cell,
+            originY + (r - minR) * cell,
+            cell + 0.4,
+            cell + 0.4,
+          ),
+          paint,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ShapeMaskPainter oldDelegate) {
+    return oldDelegate.color != color || oldDelegate.mask != mask;
   }
 }
 
