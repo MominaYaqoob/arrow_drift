@@ -13,6 +13,8 @@ import 'package:arrow_drift/features/daily_challenge/daily_challenge_screen.dart
 import 'package:arrow_drift/features/gameplay/gameplay_screen.dart';
 import 'package:arrow_drift/features/home/home_screen.dart';
 import 'package:arrow_drift/features/home/main_shell.dart';
+import 'package:arrow_drift/features/patterns/pattern_preview_screen.dart';
+import 'package:arrow_drift/features/patterns/patterns_screen.dart';
 import 'package:arrow_drift/features/profile/me_screen.dart';
 import 'package:arrow_drift/features/settings/settings_screen.dart';
 import 'package:arrow_drift/features/splash/splash_loading_screen.dart';
@@ -110,6 +112,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
+                path: PatternsScreen.routePath,
+                builder: (context, state) => const PatternsScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
                 path: MeScreen.routePath,
                 builder: (context, state) => const MeScreen(),
               ),
@@ -120,6 +130,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: TutorialScreen.routePath,
         builder: (context, state) => const TutorialScreen(),
+      ),
+      GoRoute(
+        path: PatternPreviewScreen.routePath,
+        builder: (context, state) {
+          final extra = state.extra;
+          final level = extra is int ? extra : 1;
+          return PatternPreviewScreen(levelNumber: level);
+        },
       ),
       GoRoute(
         path: GameplayScreen.routePath,

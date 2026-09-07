@@ -7,7 +7,7 @@ import 'package:arrow_drift/core/theme/app_theme.dart';
 import 'package:arrow_drift/data/repositories/progress_repository.dart';
 import 'package:arrow_drift/features/profile/nickname_dialog.dart';
 
-/// Shell that hosts Main / Daily / Me tabs via [StatefulNavigationShell].
+/// Shell that hosts Main / Daily / Patterns / Me tabs via [StatefulNavigationShell].
 /// Floating pill tab bar matches the HTML design board.
 class MainShell extends ConsumerStatefulWidget {
   const MainShell({super.key, required this.navigationShell});
@@ -56,7 +56,7 @@ class _MainShellState extends ConsumerState<MainShell> {
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
-        // Daily / Me → first return to Main. Already on Main → leave the app.
+        // Daily / Patterns / Me → first return to Main. Already on Main → leave.
         if (navigationShell.currentIndex != 0) {
           navigationShell.goBranch(0);
           return;
@@ -100,10 +100,16 @@ class _MainShellState extends ConsumerState<MainShell> {
                     onTap: () => navigationShell.goBranch(1),
                   ),
                   _ShellTab(
-                    label: 'Me',
-                    icon: Icons.person_rounded,
+                    label: 'Patterns',
+                    icon: Icons.grid_view_rounded,
                     selected: navigationShell.currentIndex == 2,
                     onTap: () => navigationShell.goBranch(2),
+                  ),
+                  _ShellTab(
+                    label: 'Me',
+                    icon: Icons.person_rounded,
+                    selected: navigationShell.currentIndex == 3,
+                    onTap: () => navigationShell.goBranch(3),
                   ),
                 ],
               ),
@@ -144,6 +150,8 @@ class _ShellTab extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: AppTextStyles.label(
                 fontSize: 11,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
