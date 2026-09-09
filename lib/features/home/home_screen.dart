@@ -368,13 +368,13 @@ class _DailyChallengeCard extends ConsumerWidget {
                     ),
                     const SizedBox(height: 10),
                     Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+                      spacing: 6,
+                      runSpacing: 6,
                       children: [
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 5,
+                            horizontal: 8,
+                            vertical: 4,
                           ),
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: 0.14),
@@ -388,63 +388,54 @@ class _DailyChallengeCard extends ConsumerWidget {
                             children: [
                               Icon(
                                 Icons.local_fire_department_rounded,
-                                size: 14,
+                                size: 12,
                                 color: streak > 0
                                     ? const Color(0xFFFFC857)
                                     : Colors.white.withValues(alpha: 0.75),
                               ),
-                              const SizedBox(width: 5),
+                              const SizedBox(width: 4),
                               Text(
                                 streak > 0
                                     ? '$streak day streak'
                                     : 'No streak yet',
                                 style: AppTextStyles.label(
-                                  fontSize: 12,
+                                  fontSize: 11,
                                   fontWeight: FontWeight.w700,
                                   color: Colors.white.withValues(alpha: 0.95),
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
-                        if (todayCleared)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.14),
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.2),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.check_circle_rounded,
-                                  size: 14,
-                                  color: const Color(0xFF7CFFB2),
-                                ),
-                                const SizedBox(width: 5),
+                              if (streak > 0 && todayCleared) ...[
                                 Text(
-                                  'Today done',
+                                  ' · ',
                                   style: AppTextStyles.label(
-                                    fontSize: 12,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white.withValues(alpha: 0.95),
+                                  ),
+                                ),
+                                const Icon(
+                                  Icons.check_circle_rounded,
+                                  size: 12,
+                                  color: Color(0xFF7CFFB2),
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  'Done',
+                                  style: AppTextStyles.label(
+                                    fontSize: 11,
                                     fontWeight: FontWeight.w700,
                                     color: Colors.white.withValues(alpha: 0.95),
                                   ),
                                 ),
                               ],
-                            ),
+                            ],
                           ),
+                        ),
                         if (timerLabel != null)
                           Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 5,
+                              horizontal: 8,
+                              vertical: 4,
                             ),
                             decoration: BoxDecoration(
                               color: timerUrgent
@@ -463,7 +454,7 @@ class _DailyChallengeCard extends ConsumerWidget {
                                   ? '⏳ $timerLabel · Almost lost'
                                   : '⏳ $timerLabel',
                               style: AppTextStyles.label(
-                                fontSize: 12,
+                                fontSize: 11,
                                 fontWeight: FontWeight.w700,
                                 color: Colors.white.withValues(alpha: 0.95),
                               ),

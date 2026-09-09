@@ -6,8 +6,8 @@ import 'package:go_router/go_router.dart';
 import 'package:arrow_drift/core/theme/app_theme.dart';
 import 'package:arrow_drift/data/models/arrow_model.dart';
 import 'package:arrow_drift/data/models/level_model.dart';
-import 'package:arrow_drift/data/repositories/level_repository.dart';
 import 'package:arrow_drift/data/repositories/shape_masks.dart';
+import 'package:arrow_drift/data/repositories/synthetic_arrows.dart';
 import 'package:arrow_drift/features/patterns/pattern_preview_screen.dart';
 
 /// Dummy pattern gallery — static UI only, no unlock / data logic.
@@ -17,7 +17,7 @@ class PatternsScreen extends StatelessWidget {
   static const String routePath = '/patterns';
 
   static const int _totalLevels = 200;
-  static const int _unlockedThrough = 100;
+  static const int _unlockedThrough = 50;
 
   @override
   Widget build(BuildContext context) {
@@ -198,16 +198,17 @@ class _PatternCard extends StatelessWidget {
                         Expanded(
                           child: locked
                               ? const SizedBox.expand()
-                              : switch (level) {
-                                  1 => const _Level1BoardPreview(),
-                                  2 => const _Level2BoardPreview(),
-                                  3 => const _Level3BoardPreview(),
-                                  _ => _DummyMazePreview(
+                              : level >= 1 && level <= 50
+                                  ? _ShapeCardPreview(
+                                      maskBuilder: () =>
+                                          _maskForGalleryLevel(level),
+                                      seed: level,
+                                    )
+                                  : _DummyMazePreview(
                                       seed: level,
                                       teal: colors.accentTeal,
                                       tealDeep: colors.accentTealDeep,
                                     ),
-                                },
                         ),
                       ],
                     ),
@@ -277,16 +278,22 @@ class _PatternCard extends StatelessWidget {
   }
 }
 
-/// Mini Level-1 board: same heart arrows as PatternPreviewScreen.
-class _Level1BoardPreview extends StatelessWidget {
-  const _Level1BoardPreview();
+/// Instant synthetic-arrow thumbnail — never loads a nested maze.
+class _ShapeCardPreview extends StatelessWidget {
+  const _ShapeCardPreview({
+    required this.maskBuilder,
+    required this.seed,
+  });
 
-  static final _future = LevelRepository.loadHeartPatternPreviewLevel();
+  final List<List<bool>> Function() maskBuilder;
+  final int seed;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final mask = maskBuilder();
+    final arrows = buildSyntheticDecorativeArrows(mask, seed: seed);
     const paletteBlue = Color(0xFF4C7EF3);
     final palette = [
       colors.accentTeal,
@@ -295,124 +302,94 @@ class _Level1BoardPreview extends StatelessWidget {
       paletteBlue,
     ];
 
+    final CustomPainter painter;
+    if (arrows.isEmpty || mask.isEmpty || mask.first.isEmpty) {
+      painter = _ShapeMaskPainter(
+        mask: mask,
+        color: colors.accentTeal,
+      );
+    } else {
+      painter = _PreviewArrowsPainter(
+        level: LevelModel(
+          levelNumber: 909000 + seed,
+          gridRows: mask.length,
+          gridCols: mask.first.length,
+          arrows: arrows,
+          heartsAllowed: 3,
+          hintsAllowed: 2,
+          shapeMask: mask,
+        ),
+        palette: palette,
+      );
+    }
+
     return DecoratedBox(
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF16262B) : const Color(0xFF1C2C32),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: FutureBuilder<LevelModel>(
-        future: _future,
-        builder: (context, snap) {
-          final level = snap.data;
-          if (level == null) {
-            return CustomPaint(
-              painter: _ShapeMaskPainter(
-                mask: _ShapeMaskPainter.heart,
-                color: colors.accentTeal,
-              ),
-              child: const SizedBox.expand(),
-            );
-          }
-          return CustomPaint(
-            painter: _PreviewArrowsPainter(level: level, palette: palette),
-            child: const SizedBox.expand(),
-          );
-        },
+      child: CustomPaint(
+        painter: painter,
+        child: const SizedBox.expand(),
       ),
     );
   }
 }
 
-/// Mini Level-2 board: same car arrows as PatternPreviewScreen.
-class _Level2BoardPreview extends StatelessWidget {
-  const _Level2BoardPreview();
-
-  static final _future = LevelRepository.loadCarPatternPreviewLevel();
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    const paletteBlue = Color(0xFF4C7EF3);
-    final palette = [
-      colors.accentTeal,
-      colors.gold,
-      colors.heartRed,
-      paletteBlue,
-    ];
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF16262B) : const Color(0xFF1C2C32),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: FutureBuilder<LevelModel>(
-        future: _future,
-        builder: (context, snap) {
-          final level = snap.data;
-          if (level == null) {
-            return CustomPaint(
-              painter: _ShapeMaskPainter(
-                mask: _ShapeMaskPainter.car,
-                color: colors.accentTeal,
-              ),
-              child: const SizedBox.expand(),
-            );
-          }
-          return CustomPaint(
-            painter: _PreviewArrowsPainter(level: level, palette: palette),
-            child: const SizedBox.expand(),
-          );
-        },
-      ),
-    );
-  }
-}
-
-/// Mini Level-3 board: same star arrows as PatternPreviewScreen.
-class _Level3BoardPreview extends StatelessWidget {
-  const _Level3BoardPreview();
-
-  static final _future = LevelRepository.loadStarPatternPreviewLevel();
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    const paletteBlue = Color(0xFF4C7EF3);
-    final palette = [
-      colors.accentTeal,
-      colors.gold,
-      colors.heartRed,
-      paletteBlue,
-    ];
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF16262B) : const Color(0xFF1C2C32),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: FutureBuilder<LevelModel>(
-        future: _future,
-        builder: (context, snap) {
-          final level = snap.data;
-          if (level == null) {
-            return CustomPaint(
-              painter: _ShapeMaskPainter(
-                mask: _ShapeMaskPainter.star,
-                color: colors.accentTeal,
-              ),
-              child: const SizedBox.expand(),
-            );
-          }
-          return CustomPaint(
-            painter: _PreviewArrowsPainter(level: level, palette: palette),
-            child: const SizedBox.expand(),
-          );
-        },
-      ),
-    );
-  }
+List<List<bool>> _maskForGalleryLevel(int level) {
+  return switch (level) {
+    1 => generateHeartShapeMask(24),
+    2 => generateCarShapeMask(24),
+    3 => generateStarShapeMask(24),
+    4 => generateDogShapeMask(24),
+    5 => generateOwlShapeMask(24),
+    6 => generateSportsCarShapeMask(24),
+    7 => generateBicycleShapeMask(24),
+    8 => ringMask(24, 24),
+    9 => generateAppleShapeMask(24),
+    10 => crescentMask(24, 24),
+    11 => generateAirplaneShapeMask(24),
+    12 => generateRabbitShapeMask(24),
+    13 => generatePeacockShapeMask(24),
+    14 => generateSuvShapeMask(24),
+    15 => generateMotorbikeShapeMask(24),
+    16 => thickRingMask(24, 24),
+    17 => generateBananaShapeMask(24),
+    18 => generateSixPointStarShapeMask(24),
+    19 => generatePaperPlaneShapeMask(24),
+    20 => generateElephantShapeMask(24),
+    21 => generateLeftArrowShapeMask(24),
+    22 => generateLightningBoltShapeMask(24),
+    23 => generateRightArrowShapeMask(24),
+    24 => generateWheelShapeMask(24),
+    25 => generateFigureEightShapeMask(24),
+    26 => generateCatShapeMask(24),
+    27 => generateBirdShapeMask(24),
+    28 => generateTruckShapeMask(24),
+    29 => generateScooterShapeMask(24),
+    30 => hourglassMask(24, 24),
+    31 => generateGrapesShapeMask(24),
+    32 => generateShootingStarShapeMask(24),
+    33 => generateHelicopterShapeMask(24),
+    34 => generateLionShapeMask(24),
+    35 => generateDuckShapeMask(24),
+    36 => generateVanShapeMask(24),
+    37 => generateSportsBikeShapeMask(24),
+    38 => plusMask(24, 24),
+    39 => generateStrawberryShapeMask(24),
+    40 => generateStarBurstShapeMask(24),
+    41 => generateJetFighterShapeMask(24),
+    42 => generateBearShapeMask(24),
+    43 => generateParrotShapeMask(24),
+    44 => generateJeepShapeMask(24),
+    45 => generateCruiserBikeShapeMask(24),
+    46 => shieldMask(24, 24),
+    47 => generateWatermelonShapeMask(24),
+    48 => generateFullMoonShapeMask(24),
+    49 => generateGliderShapeMask(24),
+    50 => generateFoxShapeMask(24),
+    _ => generateHeartShapeMask(24),
+  };
 }
 
 class _PreviewArrowsPainter extends CustomPainter {
@@ -546,10 +523,6 @@ class _ShapeMaskPainter extends CustomPainter {
 
   final List<List<bool>> mask;
   final Color color;
-
-  static final List<List<bool>> heart = generateHeartShapeMask(28);
-  static final List<List<bool>> car = generateCarShapeMask(28);
-  static final List<List<bool>> star = generateStarShapeMask(28);
 
   @override
   void paint(Canvas canvas, Size size) {

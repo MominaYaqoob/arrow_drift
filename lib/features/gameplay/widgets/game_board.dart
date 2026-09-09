@@ -254,6 +254,7 @@ class GameBoard extends StatelessWidget {
 
         // Card padding: 14 + ~8 = 22 so arrows aren't cramped at the edges.
         const cardPad = 22.0;
+        final decorated = boardBackgroundOverride != null;
         final cardChild = AnimatedScale(
           scale: zoom,
           duration: const Duration(milliseconds: 300),
@@ -261,23 +262,64 @@ class GameBoard extends StatelessWidget {
           child: Container(
             width: boardWidth + cardPad * 2,
             height: boardHeight + cardPad * 2,
-            padding: const EdgeInsets.all(cardPad),
-            decoration: BoxDecoration(
-              color: boardBg,
-              borderRadius: BorderRadius.circular(22),
-              border: isDark
-                  ? Border.all(color: colors.border.withValues(alpha: 0.6))
-                  : null,
-              boxShadow: [
-                BoxShadow(
-                  color: boardShadow,
-                  blurRadius: 24,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
+            padding: decorated ? null : const EdgeInsets.all(cardPad),
+            decoration: decorated
+                ? BoxDecoration(
+                    borderRadius: BorderRadius.circular(22),
+                    gradient: RadialGradient(
+                      center: Alignment.center,
+                      radius: 0.95,
+                      colors: isDark
+                          ? const [Color(0xFF1B2E34), Color(0xFF16262B)]
+                          : const [Color(0xFF223840), Color(0xFF1C2C32)],
+                    ),
+                    border: Border.all(
+                      color: colors.accentTeal.withValues(alpha: 0.28),
+                      width: 1.25,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: colors.accentTeal.withValues(alpha: 0.15),
+                        blurRadius: 20,
+                      ),
+                    ],
+                  )
+                : BoxDecoration(
+                    color: boardBg,
+                    borderRadius: BorderRadius.circular(22),
+                    border: isDark
+                        ? Border.all(
+                            color: colors.border.withValues(alpha: 0.6),
+                          )
+                        : null,
+                    boxShadow: [
+                      BoxShadow(
+                        color: boardShadow,
+                        blurRadius: 24,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
             clipBehavior: Clip.antiAlias,
-            child: boardStack,
+            child: decorated
+                ? Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      const IgnorePointer(child: _PatternBoardVignette()),
+                      IgnorePointer(
+                        child: CustomPaint(
+                          painter: _PatternBoardTexturePainter(
+                            color: colors.accentTeal.withValues(alpha: 0.04),
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(cardPad),
+                        child: boardStack,
+                      ),
+                    ],
+                  )
+                : boardStack,
           ),
         );
 
@@ -291,7 +333,7 @@ class GameBoard extends StatelessWidget {
           child: Center(
             child: FittedBox(
               fit: BoxFit.contain,
-              clipBehavior: Clip.hardEdge,
+              clipBehavior: decorated ? Clip.none : Clip.hardEdge,
               child: cardChild,
             ),
           ),
@@ -443,6 +485,76 @@ class _CaretPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _CaretPainter oldDelegate) =>
       oldDelegate.color != color || oldDelegate.pointUp != pointUp;
+}
+
+/// Corner darkening for Patterns boards — behind arrows, no hit testing.
+class _PatternBoardVignette extends StatelessWidget {
+  const _PatternBoardVignette();
+
+  @override
+  Widget build(BuildContext context) {
+    return const CustomPaint(
+      painter: _PatternBoardVignettePainter(),
+    );
+  }
+}
+
+class _PatternBoardVignettePainter extends CustomPainter {
+  const _PatternBoardVignettePainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+    const alpha = 0.18;
+    final radius = math.max(size.width, size.height) * 0.42;
+    final corners = <Offset>[
+      Offset.zero,
+      Offset(size.width, 0),
+      Offset(0, size.height),
+      Offset(size.width, size.height),
+    ];
+    for (final origin in corners) {
+      final paint = Paint()
+        ..shader = RadialGradient(
+          colors: [
+            Colors.black.withValues(alpha: alpha),
+            Colors.transparent,
+          ],
+        ).createShader(Rect.fromCircle(center: origin, radius: radius));
+      canvas.drawRect(Offset.zero & size, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PatternBoardVignettePainter oldDelegate) =>
+      false;
+}
+
+class _PatternBoardTexturePainter extends CustomPainter {
+  const _PatternBoardTexturePainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
+    const step = 22.0;
+    for (var x = -size.height; x < size.width; x += step) {
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x + size.height, size.height),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PatternBoardTexturePainter oldDelegate) =>
+      oldDelegate.color != color;
 }
 
 class _DotGridPainter extends CustomPainter {

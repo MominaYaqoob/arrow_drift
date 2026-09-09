@@ -15,6 +15,7 @@ import 'package:arrow_drift/data/models/level_model.dart';
 import 'package:arrow_drift/data/repositories/level_repository.dart';
 import 'package:arrow_drift/data/repositories/progress_repository.dart';
 import 'package:arrow_drift/data/repositories/shape_masks.dart';
+import 'package:arrow_drift/data/repositories/synthetic_arrows.dart';
 import 'package:arrow_drift/features/daily_challenge/daily_loading_view.dart';
 import 'package:arrow_drift/features/gameplay/game_controller.dart';
 import 'package:arrow_drift/features/gameplay/widgets/game_board.dart';
@@ -26,7 +27,7 @@ import 'package:arrow_drift/features/gameplay/widgets/out_of_lives_overlay.dart'
 import 'package:arrow_drift/features/gameplay/widgets/pause_sheet.dart';
 import 'package:arrow_drift/services/ads_service.dart';
 
-/// Pattern preview. Level 1 is a real nested puzzle; 2–3 stay visual-only.
+/// Pattern preview. Levels 1–50 are real nested puzzles via GameController.
 class PatternPreviewScreen extends ConsumerStatefulWidget {
   const PatternPreviewScreen({super.key, required this.levelNumber});
 
@@ -44,10 +45,10 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
   bool _loading = true;
   Object? _loadError;
 
-  /// Loaded heart LevelModel for playable Level 1.
+  /// Loaded nested LevelModel for playable levels 1–50.
   LevelModel? _playLevel;
 
-  /// Static board for visual-only levels (2–3 and placeholders).
+  /// Static board fallback when no loader exists (levels 51+).
   GameState? _previewState;
 
   String? _highlightedArrowId;
@@ -60,14 +61,13 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
   bool _showWinOverlay = false;
   bool _didPersistWin = false;
 
-  bool get _isPlayable => widget.levelNumber == 1;
+  bool get _isPlayable =>
+      widget.levelNumber >= 1 && widget.levelNumber <= 50;
 
   @override
   void initState() {
     super.initState();
-    if (widget.levelNumber == 1 ||
-        widget.levelNumber == 2 ||
-        widget.levelNumber == 3) {
+    if (widget.levelNumber >= 1 && widget.levelNumber <= 50) {
       _loadBoard();
     } else {
       _loading = false;
@@ -91,8 +91,9 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
       _playLevel = null;
     });
     try {
-      if (widget.levelNumber == 1) {
-        final level = await LevelRepository.loadHeartPatternPreviewLevel();
+      final loader = patternLevelLoaders[widget.levelNumber];
+      if (loader != null) {
+        final level = await loader();
         if (!mounted) return;
         ref.invalidate(gameControllerProvider(level));
         setState(() {
@@ -102,29 +103,9 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
         return;
       }
 
-      final GameState state;
-      if (widget.levelNumber == 2) {
-        final level = await LevelRepository.loadCarPatternPreviewLevel();
-        state = GameState(
-          level: level,
-          arrows: level.arrows,
-          heartsLeft: 3,
-          hintsLeft: 2,
-        );
-      } else if (widget.levelNumber == 3) {
-        final level = await LevelRepository.loadStarPatternPreviewLevel();
-        state = GameState(
-          level: level,
-          arrows: level.arrows,
-          heartsLeft: 3,
-          hintsLeft: 2,
-        );
-      } else {
-        state = _buildHeartPreviewPlaceholder();
-      }
       if (!mounted) return;
       setState(() {
-        _previewState = state;
+        _previewState = _buildHeartPreviewPlaceholder();
         _loading = false;
       });
     } catch (error) {
@@ -309,7 +290,7 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
   }
 
   void _onNextPattern() {
-    if (widget.levelNumber >= 200) {
+    if (widget.levelNumber >= 50) {
       _leaveToPatterns();
       return;
     }
@@ -554,61 +535,11 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
   }
 }
 
-/// Fallback placeholder for levels other than 1–3.
+/// Fallback placeholder when no pattern loader is registered.
 GameState _buildHeartPreviewPlaceholder() {
   const size = 12;
   final mask = generateHeartShapeMask(size);
-  final occupied = <String>{};
-
-  bool inMask(int r, int c) =>
-      r >= 0 && c >= 0 && r < size && c < size && mask[r][c];
-
-  bool free(int r, int c) => inMask(r, c) && !occupied.contains('$r,$c');
-
-  void mark(int r, int c) => occupied.add('$r,$c');
-
-  (int, int) delta(ArrowDirection dir) => switch (dir) {
-        ArrowDirection.up => (-1, 0),
-        ArrowDirection.down => (1, 0),
-        ArrowDirection.left => (0, -1),
-        ArrowDirection.right => (0, 1),
-      };
-
-  final arrows = <ArrowModel>[];
-  var id = 0;
-  const dirs = ArrowDirection.values;
-
-  for (var r = 0; r < size; r++) {
-    for (var c = 0; c < size; c++) {
-      if (!free(r, c)) continue;
-      final dir = dirs[(r * 3 + c * 5) % dirs.length];
-      final (dr, dc) = delta(dir);
-      final path = <GridCell>[GridCell(r, c)];
-      mark(r, c);
-      var cr = r;
-      var cc = c;
-      for (var step = 0; step < 2; step++) {
-        final nr = cr + dr;
-        final nc = cc + dc;
-        if (!free(nr, nc)) break;
-        path.add(GridCell(nr, nc));
-        mark(nr, nc);
-        cr = nr;
-        cc = nc;
-      }
-      final tip = path.last;
-      arrows.add(
-        ArrowModel(
-          id: 'preview-$id',
-          row: tip.row,
-          col: tip.col,
-          direction: dir,
-          path: path,
-        ),
-      );
-      id++;
-    }
-  }
+  final arrows = buildSyntheticDecorativeArrows(mask);
 
   final level = LevelModel(
     levelNumber: 909999,

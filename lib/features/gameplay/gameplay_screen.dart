@@ -238,6 +238,20 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     _showWinOverlay = false;
   }
 
+  /// Extra-life continue: keep the 50% toast flag for this attempt.
+  void _resetLocalPlayStateKeepingHalfway() {
+    _highlightedArrowId = null;
+    _shakeTokens.clear();
+    _wrongBumpCells.clear();
+    _boardZoomed = false;
+    _outOfLivesTimer?.cancel();
+    _outOfLivesTimer = null;
+    _showOutOfLives = false;
+    _winOverlayTimer?.cancel();
+    _winOverlayTimer = null;
+    _showWinOverlay = false;
+  }
+
   void _scheduleOutOfLivesOverlay() {
     _outOfLivesTimer?.cancel();
     setState(() => _showOutOfLives = false);
@@ -813,7 +827,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
                   ref
                       .read(gameControllerProvider(level).notifier)
                       .grantExtraLife();
-                  setState(_resetLocalPlayState);
+                  setState(_resetLocalPlayStateKeepingHalfway);
                 }
               },
             ),
