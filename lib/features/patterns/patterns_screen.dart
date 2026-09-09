@@ -6,8 +6,8 @@ import 'package:go_router/go_router.dart';
 import 'package:arrow_drift/core/theme/app_theme.dart';
 import 'package:arrow_drift/data/models/arrow_model.dart';
 import 'package:arrow_drift/data/models/level_model.dart';
-import 'package:arrow_drift/data/repositories/shape_masks.dart';
-import 'package:arrow_drift/data/repositories/synthetic_arrows.dart';
+import 'package:arrow_drift/data/repositories/level_repository.dart';
+import 'package:arrow_drift/features/gameplay/widgets/arrow_tile.dart';
 import 'package:arrow_drift/features/patterns/pattern_preview_screen.dart';
 
 /// Dummy pattern gallery — static UI only, no unlock / data logic.
@@ -43,9 +43,16 @@ class PatternsScreen extends StatelessWidget {
           child: Column(
             children: [
               Expanded(
-                child: CustomScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  slivers: [
+                child: NotificationListener<ScrollNotification>(
+                  onNotification: (notification) {
+                    if (notification.depth == 0) {
+                      LevelRepository.notifyGalleryViewportChanged();
+                    }
+                    return false;
+                  },
+                  child: CustomScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    slivers: [
                     SliverPadding(
                       padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                       sliver: SliverToBoxAdapter(
@@ -53,7 +60,7 @@ class PatternsScreen extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Level Patterns',
+                              'Custom Levels',
                               style: AppTextStyles.heading(
                                 fontSize: 28,
                                 fontWeight: FontWeight.w700,
@@ -63,7 +70,7 @@ class PatternsScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'Collect shapes as you clear levels',
+                              'Collect shapes as you clear custom levels',
                               style: AppTextStyles.body(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
@@ -94,10 +101,12 @@ class PatternsScreen extends StatelessWidget {
                             );
                           },
                           childCount: _totalLevels,
+                          addAutomaticKeepAlives: false,
                         ),
                       ),
                     ),
                   ],
+                ),
                 ),
               ),
               const Padding(
@@ -198,12 +207,8 @@ class _PatternCard extends StatelessWidget {
                         Expanded(
                           child: locked
                               ? const SizedBox.expand()
-                              : level >= 1 && level <= 50
-                                  ? _ShapeCardPreview(
-                                      maskBuilder: () =>
-                                          _maskForGalleryLevel(level),
-                                      seed: level,
-                                    )
+                              : level <= 50
+                                  ? _PlayBoardCardPreview(galleryLevel: level)
                                   : _DummyMazePreview(
                                       seed: level,
                                       teal: colors.accentTeal,
@@ -278,22 +283,66 @@ class _PatternCard extends StatelessWidget {
   }
 }
 
-/// Instant synthetic-arrow thumbnail — never loads a nested maze.
-class _ShapeCardPreview extends StatelessWidget {
-  const _ShapeCardPreview({
-    required this.maskBuilder,
-    required this.seed,
-  });
+/// Real play-board thumbnail — same maze as inside the level, cached after load.
+class _PlayBoardCardPreview extends StatefulWidget {
+  const _PlayBoardCardPreview({required this.galleryLevel});
 
-  final List<List<bool>> Function() maskBuilder;
-  final int seed;
+  final int galleryLevel;
+
+  @override
+  State<_PlayBoardCardPreview> createState() => _PlayBoardCardPreviewState();
+}
+
+class _PlayBoardCardPreviewState extends State<_PlayBoardCardPreview> {
+  LevelModel? _level;
+
+  @override
+  void initState() {
+    super.initState();
+    _level =
+        LevelRepository.peekGalleryPatternPreviewLevel(widget.galleryLevel);
+    LevelRepository.galleryPreviewEpoch.addListener(_onGalleryEpoch);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncPreview());
+  }
+
+  @override
+  void dispose() {
+    LevelRepository.galleryPreviewEpoch.removeListener(_onGalleryEpoch);
+    super.dispose();
+  }
+
+  void _onGalleryEpoch() => _syncPreview();
+
+  bool _isOnScreen() {
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return false;
+    final origin = box.localToGlobal(Offset.zero);
+    final rect = origin & box.size;
+    final view = View.of(context);
+    final screen = Offset.zero &
+        (view.physicalSize / view.devicePixelRatio);
+    return rect.overlaps(screen);
+  }
+
+  void _syncPreview() {
+    if (!mounted) return;
+    final peek =
+        LevelRepository.peekGalleryPatternPreviewLevel(widget.galleryLevel);
+    if (peek != null) {
+      if (!identical(_level, peek)) {
+        setState(() => _level = peek);
+      }
+      return;
+    }
+    if (_isOnScreen()) {
+      LevelRepository.scheduleGalleryPreview(widget.galleryLevel);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final mask = maskBuilder();
-    final arrows = buildSyntheticDecorativeArrows(mask, seed: seed);
     const paletteBlue = Color(0xFF4C7EF3);
     final palette = [
       colors.accentTeal,
@@ -301,124 +350,81 @@ class _ShapeCardPreview extends StatelessWidget {
       colors.heartRed,
       paletteBlue,
     ];
+    final level = _level;
+    final boardColor =
+        isDark ? const Color(0xFF16262B) : const Color(0xFF1C2C32);
 
-    final CustomPainter painter;
-    if (arrows.isEmpty || mask.isEmpty || mask.first.isEmpty) {
-      painter = _ShapeMaskPainter(
-        mask: mask,
-        color: colors.accentTeal,
-      );
-    } else {
-      painter = _PreviewArrowsPainter(
-        level: LevelModel(
-          levelNumber: 909000 + seed,
-          gridRows: mask.length,
-          gridCols: mask.first.length,
-          arrows: arrows,
-          heartsAllowed: 3,
-          hintsAllowed: 2,
-          shapeMask: mask,
-        ),
-        palette: palette,
-      );
-    }
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF16262B) : const Color(0xFF1C2C32),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: CustomPaint(
-        painter: painter,
-        child: const SizedBox.expand(),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: ColoredBox(
+        color: boardColor,
+        child: level == null
+            ? Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.2,
+                    color: colors.accentTeal,
+                  ),
+                ),
+              )
+            : Padding(
+                padding: const EdgeInsets.all(4),
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    painter: _PreviewArrowsPainter(
+                      level: level,
+                      palette: palette,
+                      playBoardStyle: true,
+                    ),
+                    child: const SizedBox.expand(),
+                  ),
+                ),
+              ),
       ),
     );
   }
 }
 
-List<List<bool>> _maskForGalleryLevel(int level) {
-  return switch (level) {
-    1 => generateHeartShapeMask(24),
-    2 => generateCarShapeMask(24),
-    3 => generateStarShapeMask(24),
-    4 => generateDogShapeMask(24),
-    5 => generateOwlShapeMask(24),
-    6 => generateSportsCarShapeMask(24),
-    7 => generateBicycleShapeMask(24),
-    8 => ringMask(24, 24),
-    9 => generateAppleShapeMask(24),
-    10 => crescentMask(24, 24),
-    11 => generateAirplaneShapeMask(24),
-    12 => generateRabbitShapeMask(24),
-    13 => generatePeacockShapeMask(24),
-    14 => generateSuvShapeMask(24),
-    15 => generateMotorbikeShapeMask(24),
-    16 => thickRingMask(24, 24),
-    17 => generateBananaShapeMask(24),
-    18 => generateSixPointStarShapeMask(24),
-    19 => generatePaperPlaneShapeMask(24),
-    20 => generateElephantShapeMask(24),
-    21 => generateLeftArrowShapeMask(24),
-    22 => generateLightningBoltShapeMask(24),
-    23 => generateRightArrowShapeMask(24),
-    24 => generateWheelShapeMask(24),
-    25 => generateFigureEightShapeMask(24),
-    26 => generateCatShapeMask(24),
-    27 => generateBirdShapeMask(24),
-    28 => generateTruckShapeMask(24),
-    29 => generateScooterShapeMask(24),
-    30 => hourglassMask(24, 24),
-    31 => generateGrapesShapeMask(24),
-    32 => generateShootingStarShapeMask(24),
-    33 => generateHelicopterShapeMask(24),
-    34 => generateLionShapeMask(24),
-    35 => generateDuckShapeMask(24),
-    36 => generateVanShapeMask(24),
-    37 => generateSportsBikeShapeMask(24),
-    38 => plusMask(24, 24),
-    39 => generateStrawberryShapeMask(24),
-    40 => generateStarBurstShapeMask(24),
-    41 => generateJetFighterShapeMask(24),
-    42 => generateBearShapeMask(24),
-    43 => generateParrotShapeMask(24),
-    44 => generateJeepShapeMask(24),
-    45 => generateCruiserBikeShapeMask(24),
-    46 => shieldMask(24, 24),
-    47 => generateWatermelonShapeMask(24),
-    48 => generateFullMoonShapeMask(24),
-    49 => generateGliderShapeMask(24),
-    50 => generateFoxShapeMask(24),
-    _ => generateHeartShapeMask(24),
-  };
-}
-
 class _PreviewArrowsPainter extends CustomPainter {
-  _PreviewArrowsPainter({required this.level, required this.palette});
+  _PreviewArrowsPainter({
+    required this.level,
+    required this.palette,
+    this.playBoardStyle = false,
+  });
 
   final LevelModel level;
   final List<Color> palette;
+  final bool playBoardStyle;
 
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty || level.arrows.isEmpty) return;
 
-    var minR = level.gridRows;
-    var maxR = 0;
-    var minC = level.gridCols;
-    var maxC = 0;
-    for (final arrow in level.arrows) {
-      for (final cell in arrow.path) {
-        if (cell.row < minR) minR = cell.row;
-        if (cell.row > maxR) maxR = cell.row;
-        if (cell.col < minC) minC = cell.col;
-        if (cell.col > maxC) maxC = cell.col;
+    var minR = 0;
+    var maxR = level.gridRows - 1;
+    var minC = 0;
+    var maxC = level.gridCols - 1;
+    if (!playBoardStyle) {
+      minR = level.gridRows;
+      maxR = 0;
+      minC = level.gridCols;
+      maxC = 0;
+      for (final arrow in level.arrows) {
+        for (final cell in arrow.path) {
+          if (cell.row < minR) minR = cell.row;
+          if (cell.row > maxR) maxR = cell.row;
+          if (cell.col < minC) minC = cell.col;
+          if (cell.col > maxC) maxC = cell.col;
+        }
       }
     }
     if (maxR < minR || maxC < minC) return;
 
     final cellsW = maxC - minC + 1;
     final cellsH = maxR - minR + 1;
-    const pad = 3.0;
+    final pad = playBoardStyle ? 1.0 : 3.0;
     final cell = ((size.width - pad * 2) / cellsW)
         .clamp(0.0, (size.height - pad * 2) / cellsH);
     if (cell <= 0) return;
@@ -432,28 +438,41 @@ class _PreviewArrowsPainter extends CustomPainter {
       );
     }
 
-    final strokeWidth = (cell * 0.42).clamp(1.05, 2.4);
+    final strokeWidth = playBoardStyle
+        ? (cell * 0.15).clamp(0.45, 1.5)
+        : (cell * 0.15).clamp(0.85, 1.8);
 
     for (var i = 0; i < level.arrows.length; i++) {
       final arrow = level.arrows[i];
       if (arrow.isRemoved || arrow.path.isEmpty) continue;
       final color = palette[i % palette.length];
       final points = [for (final grid in arrow.path) center(grid)];
+      final nudge = cell * 0.28;
+      final tipNudge = switch (arrow.direction) {
+        ArrowDirection.up => Offset(0, -nudge),
+        ArrowDirection.down => Offset(0, nudge),
+        ArrowDirection.left => Offset(-nudge, 0),
+        ArrowDirection.right => Offset(nudge, 0),
+      };
       if (points.length == 1) {
-        final nudge = cell * 0.32;
-        final delta = switch (arrow.direction) {
-          ArrowDirection.up => Offset(0, -nudge),
-          ArrowDirection.down => Offset(0, nudge),
-          ArrowDirection.left => Offset(-nudge, 0),
-          ArrowDirection.right => Offset(nudge, 0),
-        };
-        points.add(points.first + delta);
+        points.add(points.first + tipNudge);
+      } else {
+        points.add(points.last + tipNudge);
       }
-      _paintArrow(canvas, points, color, strokeWidth, arrow.direction);
+      if (playBoardStyle) {
+        _paintScaledArrow(canvas, points, color, strokeWidth, arrow.direction);
+      } else {
+        ArrowPolylinePainter(
+          points: points,
+          color: color,
+          direction: arrow.direction,
+          strokeWidth: strokeWidth,
+        ).paint(canvas, size);
+      }
     }
   }
 
-  void _paintArrow(
+  void _paintScaledArrow(
     Canvas canvas,
     List<Offset> points,
     Color color,
@@ -461,7 +480,6 @@ class _PreviewArrowsPainter extends CustomPainter {
     ArrowDirection direction,
   ) {
     if (points.length < 2) return;
-
     final stroke = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
@@ -471,7 +489,7 @@ class _PreviewArrowsPainter extends CustomPainter {
       ..isAntiAlias = true;
 
     final tip = points.last;
-    final headLen = (strokeWidth * 2.4).clamp(3.2, 7.0);
+    final headLen = strokeWidth * 2.6;
     final unit = tip - points[points.length - 2];
     final len = unit.distance;
     final dir = len == 0 ? Offset.zero : unit / len;
@@ -514,63 +532,9 @@ class _PreviewArrowsPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _PreviewArrowsPainter oldDelegate) {
-    return oldDelegate.level != level || oldDelegate.palette != palette;
-  }
-}
-
-class _ShapeMaskPainter extends CustomPainter {
-  _ShapeMaskPainter({required this.mask, required this.color});
-
-  final List<List<bool>> mask;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (size.isEmpty) return;
-
-    var minR = mask.length;
-    var maxR = 0;
-    var minC = mask.first.length;
-    var maxC = 0;
-    for (var r = 0; r < mask.length; r++) {
-      for (var c = 0; c < mask[r].length; c++) {
-        if (!mask[r][c]) continue;
-        if (r < minR) minR = r;
-        if (r > maxR) maxR = r;
-        if (c < minC) minC = c;
-        if (c > maxC) maxC = c;
-      }
-    }
-    if (maxR < minR || maxC < minC) return;
-
-    final cellsW = maxC - minC + 1;
-    final cellsH = maxR - minR + 1;
-    const pad = 3.0;
-    final cell = ((size.width - pad * 2) / cellsW)
-        .clamp(0.0, (size.height - pad * 2) / cellsH);
-    final originX = (size.width - cellsW * cell) / 2;
-    final originY = (size.height - cellsH * cell) / 2;
-    final paint = Paint()..color = color;
-
-    for (var r = minR; r <= maxR; r++) {
-      for (var c = minC; c <= maxC; c++) {
-        if (!mask[r][c]) continue;
-        canvas.drawRect(
-          Rect.fromLTWH(
-            originX + (c - minC) * cell,
-            originY + (r - minR) * cell,
-            cell + 0.4,
-            cell + 0.4,
-          ),
-          paint,
-        );
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _ShapeMaskPainter oldDelegate) {
-    return oldDelegate.color != color || oldDelegate.mask != mask;
+    return oldDelegate.level != level ||
+        oldDelegate.palette != palette ||
+        oldDelegate.playBoardStyle != playBoardStyle;
   }
 }
 
@@ -712,7 +676,7 @@ class _UnlockPromoBanner extends StatelessWidget {
             ),
             child: Center(
               child: Text(
-                'Unlock More Patterns',
+                'Unlock More Custom Levels',
                 style: AppTextStyles.button(
                   fontSize: 16,
                   fontWeight: FontWeight.w800,

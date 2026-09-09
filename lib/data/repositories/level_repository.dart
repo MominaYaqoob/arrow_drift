@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart' show compute, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show compute, debugPrint, kIsWeb, ValueNotifier;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:arrow_drift/data/models/arrow_model.dart';
@@ -560,7 +561,7 @@ const int kFullMoonPatternLevelId = 900048;
 const int kGliderPatternLevelId = 900049;
 const int kFoxPatternLevelId = 900050;
 
-/// Patterns Level-1 heart maze. Nested hard-pack (90–200 winding arrows).
+/// Patterns Level-1 heart maze. Nested hard-pack (90–150 winding arrows).
 /// Daily / campaign generation is unchanged.
 LevelModel buildHeartPatternPreviewLevel({
   int levelNumber = kHeartPatternLevelId,
@@ -573,6 +574,13 @@ LevelModel buildHeartPatternPreviewLevel({
     primarySize: 42,
     requireFreeArrow: true,
     closeNeighbors: false,
+    minPathLen: 5,
+    minFillRatio: 0.88,
+    targetMax: 150,
+    lastResortMin: 80,
+    initialFloor: 120,
+    allowDownsize: true,
+    fillLeftoverGaps: false,
   );
 }
 
@@ -646,7 +654,6 @@ LevelModel buildStarPatternPreviewLevel({
     levelNumber: levelNumber,
     seed: seed,
     maskForSize: _patternPreviewStarMask,
-    primarySize: 40,
     closeNeighbors: false,
   );
 }
@@ -661,8 +668,17 @@ LevelModel buildCarPatternPreviewLevel({
     levelNumber: levelNumber,
     seed: seed,
     maskForSize: _patternPreviewCarMask,
-    primarySize: 40,
+    primarySize: 42,
+    requireFreeArrow: true,
     closeNeighbors: false,
+    minPathLen: 5,
+    minFillRatio: 0.88,
+    targetMin: 90,
+    targetMax: 200,
+    lastResortMin: 90,
+    initialFloor: 90,
+    allowDownsize: false,
+    fillLeftoverGaps: true,
   );
 }
 
@@ -700,25 +716,52 @@ List<List<bool>> _closePatternMaskNeighbors(
   return mask;
 }
 
-/// Dense nested Patterns maze: 90–200 arrows, mixed paths of length 2–14.
-/// Future gallery builders (levels 21–200) should use this helper.
+/// Dense nested Patterns maze: 90–200 arrows, mixed long nested paths.
+/// Future gallery builders (levels 51–200) should use this helper.
 LevelModel _buildDenseNestedPatternLevel({
   required int levelNumber,
   required int seed,
   required List<List<bool>> Function(int size) maskForSize,
-  int primarySize = 40,
+  int primarySize = 42,
   bool requireFreeArrow = false,
   bool closeNeighbors = true,
   int closeMinNeighbors = 5,
+  int minPathLen = 5,
+  double minFillRatio = 0.88,
+  int targetMin = 90,
+  int targetMax = 200,
+  int lastResortMin = 90,
+  int initialFloor = 90,
+  bool allowDownsize = false,
+  bool fillLeftoverGaps = true,
 }) {
-  const targetMin = 90;
-  const targetMax = 200;
   StateError? lastError;
+  LevelModel? best;
 
   List<List<bool>> maskAt(int size) {
     final mask = maskForSize(size);
     if (!closeNeighbors) return mask;
     return _closePatternMaskNeighbors(mask, minNeighbors: closeMinNeighbors);
+  }
+
+  void consider(LevelModel? packed) {
+    if (packed == null) return;
+    if (minFillRatio > 0) {
+      if (best == null) {
+        best = packed;
+        return;
+      }
+      final nextFill = _patternMaskFillRatio(packed);
+      final bestFill = _patternMaskFillRatio(best!);
+      if (nextFill > bestFill + 0.015 ||
+          ((nextFill - bestFill).abs() <= 0.015 &&
+              packed.arrows.length > best!.arrows.length)) {
+        best = packed;
+      }
+      return;
+    }
+    final n = packed.arrows.length;
+    if (best == null || n > best!.arrows.length) best = packed;
   }
 
   LevelModel? tryBuild({
@@ -750,6 +793,7 @@ LevelModel _buildDenseNestedPatternLevel({
         mixPathSizes: true,
         maxFreeAtStart: null,
         turnBias: bias,
+        fillLeftoverGaps: fillLeftoverGaps,
       ).level;
       if (requireFreeArrow &&
           findFirstFreeArrow(
@@ -761,6 +805,11 @@ LevelModel _buildDenseNestedPatternLevel({
               null) {
         return null;
       }
+      consider(packed);
+      if (minFillRatio > 0 &&
+          _patternMaskFillRatio(packed) < minFillRatio) {
+        return null;
+      }
       return packed;
     } on StateError catch (e) {
       lastError = e;
@@ -768,20 +817,34 @@ LevelModel _buildDenseNestedPatternLevel({
     }
   }
 
+  LevelModel finish(LevelModel level) {
+    if (level.arrows.length < targetMin) {
+      debugPrint(
+        'Patterns density warning: ${_patternShapeLabel(levelNumber)} '
+        'packed ${level.arrows.length} arrows (want $targetMin–$targetMax)',
+      );
+    }
+    return level;
+  }
+
   final sizeHi = (primarySize + 2).clamp(34, 44);
   final sizeLo = (primarySize - 2).clamp(32, 42);
+  int capFor(int waveCap) => allowDownsize ? waveCap : targetMax;
+  int floorFor(int waveFloor) =>
+      waveFloor < lastResortMin ? lastResortMin : waveFloor;
 
   for (var attempt = 0; attempt < 8; attempt++) {
     final level = tryBuild(
       size: primarySize,
       buildSeed: seed + attempt * 211,
       fill: 0.99,
-      floor: 150,
-      cap: targetMax,
+      floor: floorFor(initialFloor),
+      cap: capFor(targetMax),
+      minPath: minPathLen,
       maxPath: 14,
       bias: 1.6,
     );
-    if (level != null) return level;
+    if (level != null) return finish(level);
   }
 
   for (var attempt = 0; attempt < 6; attempt++) {
@@ -789,12 +852,13 @@ LevelModel _buildDenseNestedPatternLevel({
       size: sizeHi,
       buildSeed: seed + 9000 + attempt * 131,
       fill: 0.98,
-      floor: 130,
-      cap: 170,
+      floor: floorFor(110),
+      cap: capFor(targetMax),
+      minPath: minPathLen,
       maxPath: 13,
       bias: 1.55,
     );
-    if (level != null) return level;
+    if (level != null) return finish(level);
   }
 
   for (var attempt = 0; attempt < 8; attempt++) {
@@ -802,59 +866,191 @@ LevelModel _buildDenseNestedPatternLevel({
       size: primarySize,
       buildSeed: seed + 17000 + attempt * 97,
       fill: 0.97,
-      floor: 110,
-      cap: 140,
+      floor: floorFor(100),
+      cap: capFor(140),
+      minPath: minPathLen > 2 ? (minPathLen - 1).clamp(2, 14) : 2,
       maxPath: 12,
       bias: 1.5,
     );
-    if (level != null) return level;
+    if (level != null) return finish(level);
   }
 
   for (var attempt = 0; attempt < 8; attempt++) {
     final level = tryBuild(
-      size: sizeLo,
+      size: allowDownsize ? sizeLo : primarySize,
       buildSeed: seed + 29000 + attempt * 37,
       fill: 0.96,
-      floor: 100,
-      cap: 120,
+      floor: floorFor(targetMin),
+      cap: capFor(130),
+      minPath: minPathLen > 2 ? (minPathLen - 1).clamp(2, 14) : 2,
       maxPath: 11,
       bias: 1.45,
     );
-    if (level != null) return level;
+    if (level != null) return finish(level);
   }
 
-  for (var attempt = 0; attempt < 10; attempt++) {
-    final level = tryBuild(
-      size: 34,
-      buildSeed: seed + 41000 + attempt * 41,
-      fill: 0.95,
-      floor: targetMin,
-      cap: 110,
-      maxPath: 10,
-      bias: 1.4,
-    );
-    if (level != null) return level;
+  if (allowDownsize) {
+    for (var attempt = 0; attempt < 10; attempt++) {
+      final level = tryBuild(
+        size: 34,
+        buildSeed: seed + 41000 + attempt * 41,
+        fill: 0.95,
+        floor: floorFor(targetMin),
+        cap: capFor(120),
+        minPath: minPathLen > 2 ? 3 : 2,
+        maxPath: 10,
+        bias: 1.4,
+      );
+      if (level != null) return finish(level);
+    }
+
+    for (var attempt = 0; attempt < 8; attempt++) {
+      final level = tryBuild(
+        size: 34,
+        buildSeed: seed + 52000 + attempt * 53,
+        fill: 0.94,
+        floor: lastResortMin,
+        cap: capFor(110),
+        minPath: 2,
+        maxPath: 10,
+        bias: 1.35,
+      );
+      if (level != null) return finish(level);
+    }
+  } else {
+    for (var attempt = 0; attempt < 12; attempt++) {
+      final level = tryBuild(
+        size: primarySize,
+        buildSeed: seed + 41000 + attempt * 41,
+        fill: 0.95,
+        floor: targetMin,
+        cap: targetMax,
+        minPath: 3,
+        maxPath: 12,
+        bias: 1.4,
+      );
+      if (level != null) return finish(level);
+    }
+
+    for (var attempt = 0; attempt < 10; attempt++) {
+      final level = tryBuild(
+        size: primarySize,
+        buildSeed: seed + 52000 + attempt * 53,
+        fill: 0.94,
+        floor: lastResortMin,
+        cap: targetMax,
+        minPath: 2,
+        maxPath: 10,
+        bias: 1.35,
+      );
+      if (level != null) return finish(level);
+    }
   }
 
   if (!requireFreeArrow) {
     final size = primarySize;
-    return _visualFillPatternMask(
+    final filled = _visualFillPatternMask(
       levelNumber: levelNumber,
       size: size,
       mask: maskAt(size),
       preferTurns: true,
-      maxGrowLen: 14,
+      maxGrowLen: 8,
       turnEvery: 2,
       minGrowLen: 2,
       minArrows: targetMin,
       maxArrows: targetMax,
     );
+    consider(filled);
+    return finish(filled);
+  }
+
+  final fallback = best;
+  if (fallback != null && fallback.arrows.length >= lastResortMin) {
+    return finish(fallback);
   }
 
   throw lastError ??
       StateError(
         'Failed to build nested pattern preview for $levelNumber',
       );
+}
+
+double _patternMaskFillRatio(LevelModel level) {
+  final mask = level.shapeMask;
+  if (mask == null || mask.isEmpty) return 1;
+  final occupied = <String>{};
+  for (final arrow in level.arrows) {
+    for (final cell in arrow.path) {
+      occupied.add('${cell.row}:${cell.col}');
+    }
+  }
+  var playable = 0;
+  var filled = 0;
+  for (var r = 0; r < mask.length; r++) {
+    for (var c = 0; c < mask[r].length; c++) {
+      if (!mask[r][c]) continue;
+      playable++;
+      if (occupied.contains('$r:$c')) filled++;
+    }
+  }
+  if (playable == 0) return 1;
+  return filled / playable;
+}
+
+String _patternShapeLabel(int levelNumber) {
+  return switch (levelNumber) {
+    kHeartPatternLevelId => 'heart',
+    kCarPatternLevelId => 'car',
+    kStarPatternLevelId => 'star',
+    kDogPatternLevelId => 'dog',
+    kOwlPatternLevelId => 'owl',
+    kSportsCarPatternLevelId => 'sportsCar',
+    kBicyclePatternLevelId => 'bicycle',
+    kThinRingPatternLevelId => 'thinRing',
+    kApplePatternLevelId => 'apple',
+    kCrescentMoonPatternLevelId => 'crescentMoon',
+    kAirplanePatternLevelId => 'airplane',
+    kRabbitPatternLevelId => 'rabbit',
+    kPeacockPatternLevelId => 'peacock',
+    kSuvPatternLevelId => 'suv',
+    kMotorbikePatternLevelId => 'motorbike',
+    kThickRingPatternLevelId => 'thickRing',
+    kBananaPatternLevelId => 'banana',
+    kSixPointStarPatternLevelId => 'sixPointStar',
+    kPaperPlanePatternLevelId => 'paperPlane',
+    kElephantPatternLevelId => 'elephant',
+    kLeftArrowPatternLevelId => 'leftArrow',
+    kLightningBoltPatternLevelId => 'lightningBolt',
+    kRightArrowPatternLevelId => 'rightArrow',
+    kWheelPatternLevelId => 'wheel',
+    kFigureEightPatternLevelId => 'figureEight',
+    kCatPatternLevelId => 'cat',
+    kBirdPatternLevelId => 'bird',
+    kTruckPatternLevelId => 'truck',
+    kScooterPatternLevelId => 'scooter',
+    kHourglassPatternLevelId => 'hourglass',
+    kGrapesPatternLevelId => 'grapes',
+    kShootingStarPatternLevelId => 'shootingStar',
+    kHelicopterPatternLevelId => 'helicopter',
+    kLionPatternLevelId => 'lion',
+    kDuckPatternLevelId => 'duck',
+    kVanPatternLevelId => 'van',
+    kSportsBikePatternLevelId => 'sportsBike',
+    kPlusPatternLevelId => 'plus',
+    kStrawberryPatternLevelId => 'strawberry',
+    kStarBurstPatternLevelId => 'starBurst',
+    kJetFighterPatternLevelId => 'jetFighter',
+    kBearPatternLevelId => 'bear',
+    kParrotPatternLevelId => 'parrot',
+    kJeepPatternLevelId => 'jeep',
+    kCruiserBikePatternLevelId => 'cruiserBike',
+    kShieldPatternLevelId => 'shield',
+    kWatermelonPatternLevelId => 'watermelon',
+    kFullMoonPatternLevelId => 'fullMoon',
+    kGliderPatternLevelId => 'glider',
+    kFoxPatternLevelId => 'fox',
+    _ => 'pattern-$levelNumber',
+  };
 }
 
 LevelModel buildDogPatternPreviewLevel({
@@ -1820,6 +2016,9 @@ SolvableLevelResult generateNestedSolvableLevel(
   /// toward multi-bend U/C hooks for the densest late-campaign levels.
   /// 1.0 = existing behavior; only raise for L16+ so L1–15 feel is untouched.
   double turnBias = 1.0,
+  /// After nested long paths, pack leftover mask cells with short shafts
+  /// so arrow count can still hit [minArrows]. Default false (campaign/Daily).
+  bool fillLeftoverGaps = false,
 }) {
   final random = Random(
     seed ?? levelNumber * 9973 + rows * 131 + cols * 17,
@@ -2835,8 +3034,10 @@ SolvableLevelResult generateNestedSolvableLevel(
   }
 
   // Phase 5: pack leftover gaps with short shafts (esp. daily size-mix packs).
-  // Disabled for strict hard nests — short stubs are the broken-arrow look.
-  if ((mixPathSizes || maxArrows != null) && mopMin < 5) {
+  // Disabled for strict hard nests — short stubs are the broken-arrow look
+  // unless [fillLeftoverGaps] is set (Patterns count floor).
+  if (fillLeftoverGaps ||
+      ((mixPathSizes || maxArrows != null) && mopMin < 5)) {
     for (var pass = 0; pass < 20 && underArrowCap(); pass++) {
       var placed = false;
       for (var r = 0; r < rows && underArrowCap(); r++) {
@@ -3194,8 +3395,36 @@ class LevelRepository {
   static Future<LevelModel>? _heartPreviewInflight;
   static LevelModel? _carPreviewCache;
   static Future<LevelModel>? _carPreviewInflight;
-  static LevelModel? _starPreviewCache;
-  static Future<LevelModel>? _starPreviewInflight;
+  static final Map<int, LevelModel> _galleryVisualCache = {};
+  static final Map<int, Future<LevelModel>> _galleryVisualInflight = {};
+  static Future<void> _patternComputeTail = Future<void>.value();
+  static final ValueNotifier<int> galleryPreviewEpoch = ValueNotifier<int>(0);
+  static final Set<int> _scheduledGalleryPreviews = <int>{};
+  static bool _galleryPreviewPumping = false;
+
+  static Future<T> _enqueuePatternCompute<T>(
+    Future<T> Function() job,
+  ) {
+    final previous = _patternComputeTail;
+    final released = Completer<void>();
+    _patternComputeTail = released.future;
+    return () async {
+      await previous;
+      try {
+        return await job();
+      } finally {
+        released.complete();
+      }
+    }();
+  }
+
+  static bool _galleryDenseCacheOk(LevelModel level) {
+    return level.gridRows >= 40 &&
+        level.gridRows <= 44 &&
+        level.arrows.length >= 90 &&
+        level.arrows.length <= 200 &&
+        _patternMaskFillRatio(level) >= 0.88;
+  }
 
   /// Patterns Level-1 heart maze on a background isolate. Separate from Daily.
   static Future<LevelModel> loadHeartPatternPreviewLevel({
@@ -3216,7 +3445,8 @@ class LevelRepository {
         cached.levelNumber == levelNumber &&
         cached.gridRows <= 44 &&
         cached.gridRows >= 32 &&
-        cached.arrows.length >= 90) {
+        cached.arrows.length >= 90 &&
+        _patternMaskFillRatio(cached) >= 0.88) {
       return cached;
     }
     _heartPreviewCache = null;
@@ -3233,12 +3463,15 @@ class LevelRepository {
           seed: seed,
         );
       } else {
-        level = await compute(
-          _heartPatternPreviewIsolateEntry,
-          (levelNumber, seed),
+        level = await _enqueuePatternCompute(
+          () => compute(
+            _heartPatternPreviewIsolateEntry,
+            (levelNumber, seed),
+          ),
         );
       }
       _heartPreviewCache = level;
+      galleryPreviewEpoch.value++;
       return level;
     }();
     _heartPreviewInflight = future;
@@ -3249,13 +3482,33 @@ class LevelRepository {
     }
   }
 
+  static LevelModel? peekHeartPatternPreviewLevel() => _heartPreviewCache;
+
   /// Patterns Level-2 car maze on a background isolate. Separate from Daily.
   static Future<LevelModel> loadCarPatternPreviewLevel({
     int levelNumber = kCarPatternLevelId,
     int seed = 2,
   }) async {
     final cached = _carPreviewCache;
-    if (cached != null) return cached;
+    final cachedHasHint = cached != null &&
+        findFirstFreeArrow(
+              arrows: cached.arrows,
+              gridRows: cached.gridRows,
+              gridCols: cached.gridCols,
+              shapeMask: cached.shapeMask,
+            ) !=
+            null;
+    if (cached != null &&
+        cachedHasHint &&
+        cached.levelNumber == levelNumber &&
+        cached.gridRows <= 44 &&
+        cached.gridRows >= 40 &&
+        cached.arrows.length >= 90 &&
+        cached.arrows.length <= 200 &&
+        _patternMaskFillRatio(cached) >= 0.88) {
+      return cached;
+    }
+    _carPreviewCache = null;
     final inflight = _carPreviewInflight;
     if (inflight != null) return inflight;
 
@@ -3269,12 +3522,15 @@ class LevelRepository {
           seed: seed,
         );
       } else {
-        level = await compute(
-          _carPatternPreviewIsolateEntry,
-          (levelNumber, seed),
+        level = await _enqueuePatternCompute(
+          () => compute(
+            _carPatternPreviewIsolateEntry,
+            (levelNumber, seed),
+          ),
         );
       }
       _carPreviewCache = level;
+      galleryPreviewEpoch.value++;
       return level;
     }();
     _carPreviewInflight = future;
@@ -3285,44 +3541,21 @@ class LevelRepository {
     }
   }
 
+  static LevelModel? peekCarPatternPreviewLevel() => _carPreviewCache;
+
   /// Patterns Level-3 star maze on a background isolate. Separate from Daily.
   static Future<LevelModel> loadStarPatternPreviewLevel({
     int levelNumber = kStarPatternLevelId,
     int seed = 3,
-  }) async {
-    final cached = _starPreviewCache;
-    if (cached != null) return cached;
-    final inflight = _starPreviewInflight;
-    if (inflight != null) return inflight;
-
-    final future = () async {
-      await Future<void>.delayed(Duration.zero);
-      await Future<void>.delayed(const Duration(milliseconds: 32));
-      final LevelModel level;
-      if (kIsWeb) {
-        level = buildStarPatternPreviewLevel(
-          levelNumber: levelNumber,
-          seed: seed,
-        );
-      } else {
-        level = await compute(
-          _starPatternPreviewIsolateEntry,
-          (levelNumber, seed),
-        );
-      }
-      _starPreviewCache = level;
-      return level;
-    }();
-    _starPreviewInflight = future;
-    try {
-      return await future;
-    } finally {
-      _starPreviewInflight = null;
-    }
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 3,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _starPatternPreviewIsolateEntry,
+      builder: buildStarPatternPreviewLevel,
+    );
   }
-
-  static final Map<int, LevelModel> _galleryVisualCache = {};
-  static final Map<int, Future<LevelModel>> _galleryVisualInflight = {};
 
   static Future<LevelModel> _loadVisualGalleryPattern({
     required int galleryLevel,
@@ -3332,20 +3565,22 @@ class LevelRepository {
     required LevelModel Function({int levelNumber, int seed}) builder,
   }) async {
     final cached = _galleryVisualCache[galleryLevel];
-    if (cached != null) return cached;
+    if (cached != null && _galleryDenseCacheOk(cached)) return cached;
+    _galleryVisualCache.remove(galleryLevel);
     final inflight = _galleryVisualInflight[galleryLevel];
     if (inflight != null) return inflight;
 
     final future = () async {
       await Future<void>.delayed(Duration.zero);
       await Future<void>.delayed(const Duration(milliseconds: 32));
-      final LevelModel level;
-      if (kIsWeb) {
-        level = builder(levelNumber: levelNumber, seed: seed);
-      } else {
-        level = await compute(isolateEntry, (levelNumber, seed));
-      }
+      final LevelModel level = await _enqueuePatternCompute(() async {
+        if (kIsWeb) {
+          return builder(levelNumber: levelNumber, seed: seed);
+        }
+        return compute(isolateEntry, (levelNumber, seed));
+      });
       _galleryVisualCache[galleryLevel] = level;
+      galleryPreviewEpoch.value++;
       return level;
     }();
     _galleryVisualInflight[galleryLevel] = future;
@@ -4024,6 +4259,55 @@ class LevelRepository {
           StateError('No Patterns preview for gallery level $galleryLevel'),
         ),
     };
+  }
+
+  static LevelModel? peekGalleryPatternPreviewLevel(int galleryLevel) {
+    if (galleryLevel == 1) return _heartPreviewCache;
+    if (galleryLevel == 2) {
+      final car = _carPreviewCache;
+      if (car == null || !_galleryDenseCacheOk(car)) return null;
+      return car;
+    }
+    final cached = _galleryVisualCache[galleryLevel];
+    if (cached == null || !_galleryDenseCacheOk(cached)) return null;
+    return cached;
+  }
+
+  static void notifyGalleryViewportChanged() {
+    galleryPreviewEpoch.value++;
+  }
+
+  /// Queue one visible gallery maze at a time so opening Patterns does not
+  /// freeze the UI. Play-screen [loadGalleryPatternPreviewLevel] still jumps
+  /// the same inflight cache.
+  static void scheduleGalleryPreview(int galleryLevel) {
+    if (galleryLevel < 1 || galleryLevel > 50) return;
+    if (peekGalleryPatternPreviewLevel(galleryLevel) != null) return;
+    _scheduledGalleryPreviews.add(galleryLevel);
+    _pumpGalleryPreviews();
+  }
+
+  static void _pumpGalleryPreviews() {
+    if (_galleryPreviewPumping) return;
+    int? next;
+    final ordered = _scheduledGalleryPreviews.toList()..sort();
+    for (final id in ordered) {
+      if (peekGalleryPatternPreviewLevel(id) != null) {
+        _scheduledGalleryPreviews.remove(id);
+        continue;
+      }
+      next = id;
+      break;
+    }
+    if (next == null) return;
+    final id = next;
+    _galleryPreviewPumping = true;
+    loadGalleryPatternPreviewLevel(id).whenComplete(() {
+      _scheduledGalleryPreviews.remove(id);
+      _galleryPreviewPumping = false;
+      galleryPreviewEpoch.value++;
+      _pumpGalleryPreviews();
+    });
   }
 
   /// Daily puzzles are calendar-seeded (one unique board per day).

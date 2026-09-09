@@ -273,7 +273,7 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
       ),
       builder: (sheetContext) {
         return PauseSheet(
-          quitLabel: 'Quit to Patterns',
+          quitLabel: 'Quit to Custom',
           onResume: () => Navigator.of(sheetContext).pop(),
           onRestart: () {
             Navigator.of(sheetContext).pop();

@@ -100,7 +100,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                     onTap: () => navigationShell.goBranch(1),
                   ),
                   _ShellTab(
-                    label: 'Patterns',
+                    label: 'Custom',
                     icon: Icons.grid_view_rounded,
                     selected: navigationShell.currentIndex == 2,
                     onTap: () => navigationShell.goBranch(2),
