@@ -741,7 +741,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
                   ),
                 ),
                 if (!inTutorial) ...[
-                  const SizedBox(height: 8),
+                  SizedBox(height: widget.isDaily ? 4 : 8),
                   FadeTransition(
                     opacity: _chromeOpacity,
                     child: _LevelProgressBar(
@@ -751,7 +751,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
                               level.arrows.length,
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  SizedBox(height: widget.isDaily ? 6 : 10),
                   FadeTransition(
                     opacity: _chromeOpacity,
                     child: GameStatsRow(
@@ -761,7 +761,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
                       difficulty: level.difficulty,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: widget.isDaily ? 6 : 12),
                 ] else
                   const Spacer(flex: 2),
                 Expanded(
@@ -798,7 +798,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
                     onGridBooster: _onGridBooster,
                   ),
                 ],
-                const SizedBox(height: 12),
+                SizedBox(height: widget.isDaily ? 6 : 12),
               ],
             ),
           ),

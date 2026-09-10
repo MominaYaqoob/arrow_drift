@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -7,9 +8,17 @@ import 'package:arrow_drift/data/repositories/preferences_repository.dart';
 
 /// Persists campaign progress, tutorial flag, daily stars, and streak.
 class ProgressRepository {
-  ProgressRepository(this._prefs);
+  ProgressRepository(this._prefs) {
+    coinBalanceTick.value = getCoinBalance();
+  }
 
   final SharedPreferences _prefs;
+
+  /// Current coin balance; updated inside [addCoins] / [spendCoins].
+  static final ValueNotifier<int> coinBalanceTick = ValueNotifier<int>(0);
+
+  /// Bumped inside [unlockPatternLevel] so gallery lock badges refresh.
+  static final ValueNotifier<int> unlockedPatternTick = ValueNotifier<int>(0);
 
   /// Exact keys required by progression spec.
   static const String currentLevelKey = 'currentLevel';
@@ -20,6 +29,8 @@ class ProgressRepository {
   static const String _lastCompletedLevelKey = 'last_completed_level';
   static const String _dailyCompletedKey = 'daily_completed_dates';
   static const String _patternCompletedKey = 'pattern_completed_levels';
+  static const String _unlockedPatternLevelsKey = 'unlocked_pattern_levels';
+  static const String _coinBalanceKey = 'coin_balance';
   static const String _streakKey = 'current_streak';
   /// Last calendar day that counted toward the Snapchat-style streak (`yyyy-MM-dd`).
   static const String _streakLastDateKey = 'daily_streak_last_date';
@@ -74,6 +85,51 @@ class ProgressRepository {
     if (stored.contains(key)) return;
     stored.add(key);
     await _prefs.setStringList(_patternCompletedKey, stored);
+  }
+
+  int getCoinBalance() => _prefs.getInt(_coinBalanceKey) ?? 0;
+
+  Future<void> addCoins(int amount) async {
+    if (amount <= 0) return;
+    final next = getCoinBalance() + amount;
+    await _prefs.setInt(_coinBalanceKey, next);
+    coinBalanceTick.value = next;
+  }
+
+  Future<bool> spendCoins(int amount) async {
+    if (amount <= 0) return false;
+    final balance = getCoinBalance();
+    if (balance < amount) return false;
+    final next = balance - amount;
+    await _prefs.setInt(_coinBalanceKey, next);
+    coinBalanceTick.value = next;
+    return true;
+  }
+
+  List<int> getUnlockedPatternLevels() {
+    return (_prefs.getStringList(_unlockedPatternLevelsKey) ?? const [])
+        .map(int.tryParse)
+        .whereType<int>()
+        .toList();
+  }
+
+  bool isPatternLevelUnlocked(int level) {
+    if (level == 1) return true;
+    if (level < 2 || level > 50) return false;
+    return getUnlockedPatternLevels().contains(level);
+  }
+
+  Future<void> unlockPatternLevel(int level) async {
+    if (level < 1 || level > 50) return;
+    final stored = [
+      ...(_prefs.getStringList(_unlockedPatternLevelsKey) ?? const <String>[]),
+    ];
+    final key = '$level';
+    if (!stored.contains(key)) {
+      stored.add(key);
+      await _prefs.setStringList(_unlockedPatternLevelsKey, stored);
+    }
+    unlockedPatternTick.value++;
   }
 
   /// Marks [completedLevel] done and sets [currentLevel] to the next number.
@@ -311,6 +367,18 @@ final campaignProgressTickProvider = StateProvider<int>((ref) => 0);
 
 /// Bumped after a Patterns puzzle is cleared (separate from campaign).
 final patternProgressTickProvider = StateProvider<int>((ref) => 0);
+
+/// Bumped after coins are earned or spent (see [ProgressRepository.coinBalanceTick]).
+final coinBalanceTickProvider = StateProvider<int>((ref) => 0);
+
+final coinBalanceProvider = FutureProvider<int>((ref) async {
+  ref.watch(coinBalanceTickProvider);
+  final repo = await ref.watch(progressRepositoryProvider.future);
+  return repo.getCoinBalance();
+});
+
+/// Bumped after a Custom level is coin-unlocked.
+final unlockedPatternTickProvider = StateProvider<int>((ref) => 0);
 
 final completedPatternLevelsProvider = FutureProvider<List<int>>((ref) async {
   ref.watch(patternProgressTickProvider);

@@ -35,6 +35,9 @@ abstract class AdsService {
   /// Rewarded ad space for +1 life (~15–20s).
   Future<bool> showRewardedForLives(BuildContext context);
 
+  /// Rewarded ad space for Custom-level coins.
+  Future<bool> showRewardedForCoins(BuildContext context);
+
   /// After campaign clear — interstitial every 5 clears.
   Future<void> onLevelCleared(BuildContext context);
 

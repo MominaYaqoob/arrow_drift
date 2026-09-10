@@ -18,12 +18,10 @@ void main() {
     expect(level.shapeMask, isNotNull);
     expect(level.arrows.every((a) => a.path.length >= 2), isTrue);
 
-    // Small / medium / tall mix (short shafts also fill daily white gaps).
-    final small = level.arrows.where((a) => a.path.length <= 3).length;
+    // Nested mid/long pack — leftover crumbs may still be short.
     final medium =
         level.arrows.where((a) => a.path.length >= 4 && a.path.length <= 8).length;
     final tall = level.arrows.where((a) => a.path.length >= 6).length;
-    expect(small, greaterThanOrEqualTo(8));
     expect(medium, greaterThanOrEqualTo(8));
     expect(tall + medium, greaterThanOrEqualTo(20));
 
@@ -99,4 +97,35 @@ void main() {
       isNot(equals('${b.gridRows}x${b.gridCols}:${b.arrows.first.id}')),
     );
   }, timeout: const Timeout(Duration(minutes: 4)));
+
+  test('daily shapeIndex 0, 3, 7, 11 still generate within budget', () {
+    int shapeIndexFor(DateTime day) {
+      final dayOfYear = day.difference(DateTime(day.year)).inDays;
+      return (dayOfYear + day.year * 5 + day.month * 3) % 12;
+    }
+
+    DateTime dateForShape(int want) {
+      var day = DateTime(2026, 1, 1);
+      while (shapeIndexFor(day) != want) {
+        day = day.add(const Duration(days: 1));
+      }
+      return day;
+    }
+
+    final repo = LevelRepository();
+    for (final index in [0, 3, 7, 11]) {
+      final day = dateForShape(index);
+      expect(shapeIndexFor(day), index);
+      final level = repo.getDailyLevel(day);
+      expect(level.arrows.length, greaterThanOrEqualTo(100));
+      expect(level.arrows.length, lessThanOrEqualTo(150));
+      final maxLen =
+          level.arrows.map((a) => a.path.length).reduce((a, b) => a > b ? a : b);
+      // ignore: avoid_print
+      print(
+        'shapeIndex=$index date=$day arrows=${level.arrows.length} '
+        'grid=${level.gridRows}x${level.gridCols} maxPath=$maxLen',
+      );
+    }
+  }, timeout: const Timeout(Duration(minutes: 8)));
 }

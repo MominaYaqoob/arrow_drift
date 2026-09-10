@@ -794,6 +794,7 @@ LevelModel _buildDenseNestedPatternLevel({
         maxFreeAtStart: null,
         turnBias: bias,
         fillLeftoverGaps: fillLeftoverGaps,
+        fillGapsWithLongPaths: true,
       ).level;
       if (requireFreeArrow &&
           findFirstFreeArrow(
@@ -2019,6 +2020,9 @@ SolvableLevelResult generateNestedSolvableLevel(
   /// After nested long paths, pack leftover mask cells with short shafts
   /// so arrow count can still hit [minArrows]. Default false (campaign/Daily).
   bool fillLeftoverGaps = false,
+  /// Daily-only: snake leftover empty mask cells with long nested paths
+  /// first, then allow short crumbs. Campaign never sets this.
+  bool fillGapsWithLongPaths = false,
 }) {
   final random = Random(
     seed ?? levelNumber * 9973 + rows * 131 + cols * 17,
@@ -3033,6 +3037,30 @@ SolvableLevelResult generateNestedSolvableLevel(
     }
   }
 
+  // Daily / Custom: eat leftover corridors with long nested snakes first.
+  if (fillGapsWithLongPaths && maxPathLen >= 8) {
+    for (var pass = 0; pass < 4 && underArrowCap(); pass++) {
+      var placed = false;
+      final target = max(4, maxPathLen - pass);
+      for (var r = 0; r < rows && underArrowCap(); r++) {
+        for (var c = 0; c < cols && underArrowCap(); c++) {
+          if (!isEmpty(r, c)) continue;
+          if (tryPlaceAt(
+            tipR: r,
+            tipC: c,
+            targetLen: target,
+            minLen: 4,
+            preferInward: true,
+            allowFacingTips: pass >= 2,
+          )) {
+            placed = true;
+          }
+        }
+      }
+      if (!placed) break;
+    }
+  }
+
   // Phase 5: pack leftover gaps with short shafts (esp. daily size-mix packs).
   // Disabled for strict hard nests — short stubs are the broken-arrow look
   // unless [fillLeftoverGaps] is set (Patterns count floor).
@@ -3060,6 +3088,59 @@ SolvableLevelResult generateNestedSolvableLevel(
   }
 
   } // end non-exactOne reverse pack
+
+  // Daily / Custom: leftover mask dots are absorbed into a neighbor shaft
+  // so arrows get longer instead of leaving empty holes.
+  // Campaign never sets [fillGapsWithLongPaths]. Keep this O(arrows), not
+  // O(grid × arrows × thousands) — that hung the gallery isolates.
+  if (fillGapsWithLongPaths) {
+    bool absorbOnce() {
+      var grew = false;
+      for (var i = 0; i < arrows.length; i++) {
+        final arrow = arrows[i];
+        if (arrow.path.length >= maxPathLen) continue;
+        final (dr, dc) = _dirDelta(arrow.direction);
+        final nr = arrow.row + dr;
+        final nc = arrow.col + dc;
+        if (!isEmpty(nr, nc)) continue;
+        occupied.add(cellKey(nr, nc));
+        arrows[i] = ArrowModel(
+          id: arrow.id,
+          row: nr,
+          col: nc,
+          direction: arrow.direction,
+          path: [...arrow.path, GridCell(nr, nc)],
+        );
+        grew = true;
+      }
+      const neigh = [(0, 1), (0, -1), (1, 0), (-1, 0)];
+      for (var i = 0; i < arrows.length; i++) {
+        final arrow = arrows[i];
+        if (arrow.path.length >= maxPathLen) continue;
+        final tail = arrow.path.first;
+        for (final (dr, dc) in neigh) {
+          final nr = tail.row + dr;
+          final nc = tail.col + dc;
+          if (!isEmpty(nr, nc)) continue;
+          final grown = [GridCell(nr, nc), ...arrow.path];
+          if (!hardNest && _polylineSelfHugs(grown)) continue;
+          occupied.add(cellKey(nr, nc));
+          arrows[i] = ArrowModel(
+            id: arrow.id,
+            row: arrow.row,
+            col: arrow.col,
+            direction: arrow.direction,
+            path: grown,
+          );
+          grew = true;
+          break;
+        }
+      }
+      return grew;
+    }
+
+    for (var pass = 0; pass < 24 && absorbOnce(); pass++) {}
+  }
 
   if (arrows.length < minArrows) {
     throw StateError(
@@ -4449,6 +4530,7 @@ class LevelRepository {
           hardNest: nest,
           mixPathSizes: true,
           maxFreeAtStart: null,
+          fillGapsWithLongPaths: true,
         ).level;
       } on StateError catch (e) {
         lastError = e;
@@ -4466,7 +4548,7 @@ class LevelRepository {
         seed: levelNumber + attempt * 211 + shapeIndex * 47,
         fill: 0.995,
         arrows: target,
-        maxPath: attempt < 12 ? 9 : 7,
+        maxPath: attempt < 12 ? 13 : 10,
         nest: true,
       );
       if (level != null) return level;
@@ -4480,7 +4562,7 @@ class LevelRepository {
         seed: levelNumber + 9000 + attempt * 131,
         fill: 0.99,
         arrows: (130 - attempt).clamp(minArrows, maxArrows),
-        maxPath: 7,
+        maxPath: 10,
         nest: true,
       );
       if (level != null) return level;
@@ -4495,7 +4577,7 @@ class LevelRepository {
         seed: levelNumber + 17000 + attempt * 97,
         fill: 0.995,
         arrows: (120 - (attempt ~/ 3) * 2).clamp(minArrows, maxArrows),
-        maxPath: 6,
+        maxPath: 8,
         nest: false,
       );
       if (level != null) return level;

@@ -404,23 +404,33 @@ class _DailyChallengeCard extends ConsumerWidget {
                                   color: Colors.white.withValues(alpha: 0.95),
                                 ),
                               ),
-                              if (streak > 0 && todayCleared) ...[
-                                Text(
-                                  ' · ',
-                                  style: AppTextStyles.label(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white.withValues(alpha: 0.95),
-                                  ),
-                                ),
+                            ],
+                          ),
+                        ),
+                        if (streak > 0 && todayCleared)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.2),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
                                 const Icon(
                                   Icons.check_circle_rounded,
                                   size: 12,
                                   color: Color(0xFF7CFFB2),
                                 ),
-                                const SizedBox(width: 3),
+                                const SizedBox(width: 4),
                                 Text(
-                                  'Done',
+                                  'Today done',
                                   style: AppTextStyles.label(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w700,
@@ -428,9 +438,8 @@ class _DailyChallengeCard extends ConsumerWidget {
                                   ),
                                 ),
                               ],
-                            ],
+                            ),
                           ),
-                        ),
                         if (timerLabel != null)
                           Container(
                             padding: const EdgeInsets.symmetric(

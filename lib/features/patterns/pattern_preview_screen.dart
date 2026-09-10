@@ -367,9 +367,7 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
                       onArrowTap: (_) {},
                       boardZoomed: _boardZoomed,
                       hideDots: true,
-                      boardBackgroundOverride: isDark
-                          ? const Color(0xFF16262B)
-                          : const Color(0xFF1C2C32),
+                      boardBackgroundOverride: colors.background,
                       arrowColorResolver: (_, index) {
                         final palette = [
                           colors.accentTeal,
@@ -471,9 +469,7 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
                         wrongBumpCells:
                             Map<String, double>.from(_wrongBumpCells),
                         hideDots: true,
-                        boardBackgroundOverride: isDark
-                            ? const Color(0xFF16262B)
-                            : const Color(0xFF1C2C32),
+                        boardBackgroundOverride: colors.background,
                         arrowColorResolver: (_, index) {
                           final palette = [
                             colors.accentTeal,

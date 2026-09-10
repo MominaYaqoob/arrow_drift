@@ -1,23 +1,61 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:arrow_drift/core/theme/app_theme.dart';
 import 'package:arrow_drift/data/models/arrow_model.dart';
 import 'package:arrow_drift/data/models/level_model.dart';
 import 'package:arrow_drift/data/repositories/level_repository.dart';
+import 'package:arrow_drift/data/repositories/progress_repository.dart';
 import 'package:arrow_drift/features/gameplay/widgets/arrow_tile.dart';
 import 'package:arrow_drift/features/patterns/pattern_preview_screen.dart';
+import 'package:arrow_drift/features/patterns/unlock_level_sheet.dart';
 
-/// Dummy pattern gallery — static UI only, no unlock / data logic.
-class PatternsScreen extends StatelessWidget {
+/// Custom level gallery — pages of 6, thumbnails load as cards appear.
+class PatternsScreen extends ConsumerStatefulWidget {
   const PatternsScreen({super.key});
 
   static const String routePath = '/patterns';
 
-  static const int _totalLevels = 200;
   static const int _unlockedThrough = 50;
+  static const int _pageSize = 6;
+
+  @override
+  ConsumerState<PatternsScreen> createState() => _PatternsScreenState();
+}
+
+class _PatternsScreenState extends ConsumerState<PatternsScreen> {
+  int _visibleCount = PatternsScreen._pageSize;
+  bool _loadingMore = false;
+
+  bool get _hasMoreCustomLevels =>
+      _visibleCount < PatternsScreen._unlockedThrough;
+
+  Future<void> _showNextPage() async {
+    if (!_hasMoreCustomLevels || _loadingMore) return;
+    final from = _visibleCount + 1;
+    final to = (_visibleCount + PatternsScreen._pageSize)
+        .clamp(0, PatternsScreen._unlockedThrough);
+    setState(() => _loadingMore = true);
+    try {
+      for (var level = from; level <= to; level++) {
+        if (!mounted) return;
+        try {
+          await LevelRepository.loadGalleryPatternPreviewLevel(level);
+        } catch (_) {
+          // Reveal the page anyway; the card can keep its own spinner.
+        }
+      }
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _visibleCount = to;
+        _loadingMore = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -59,14 +97,21 @@ class PatternsScreen extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'Custom Levels',
-                              style: AppTextStyles.heading(
-                                fontSize: 28,
-                                fontWeight: FontWeight.w700,
-                                color: colors.primaryText,
-                                letterSpacing: -0.4,
-                              ),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Custom Levels',
+                                    style: AppTextStyles.heading(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.w700,
+                                      color: colors.primaryText,
+                                      letterSpacing: -0.4,
+                                    ),
+                                  ),
+                                ),
+                                const _CoinBalancePill(),
+                              ],
                             ),
                             const SizedBox(height: 8),
                             Text(
@@ -97,10 +142,10 @@ class PatternsScreen extends StatelessWidget {
                             final level = index + 1;
                             return _PatternCard(
                               level: level,
-                              locked: level > _unlockedThrough,
+                              locked: level > PatternsScreen._unlockedThrough,
                             );
                           },
-                          childCount: _totalLevels,
+                          childCount: _visibleCount,
                           addAutomaticKeepAlives: false,
                         ),
                       ),
@@ -109,9 +154,13 @@ class PatternsScreen extends StatelessWidget {
                 ),
                 ),
               ),
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: _UnlockPromoBanner(),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: _UnlockPromoBanner(
+                  showMore: _hasMoreCustomLevels,
+                  loading: _loadingMore,
+                  onViewMore: _showNextPage,
+                ),
               ),
             ],
           ),
@@ -121,37 +170,93 @@ class PatternsScreen extends StatelessWidget {
   }
 }
 
-class _PatternCard extends StatelessWidget {
+class _CoinBalancePill extends ConsumerWidget {
+  const _CoinBalancePill();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(progressRepositoryProvider);
+    final colors = context.appColors;
+    return ValueListenableBuilder<int>(
+      valueListenable: ProgressRepository.coinBalanceTick,
+      builder: (context, balance, _) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: colors.surface,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: colors.border, width: 0.8),
+          ),
+          child: Text(
+            '🪙 $balance',
+            style: AppTextStyles.label(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: colors.gold,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _PatternCard extends ConsumerWidget {
   const _PatternCard({required this.level, required this.locked});
 
   final int level;
   final bool locked;
 
+  void _onTap(BuildContext context, WidgetRef ref) {
+    if (locked) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Coming soon'),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      return;
+    }
+    final repo = ref.read(progressRepositoryProvider).valueOrNull;
+    final unlocked = repo?.isPatternLevelUnlocked(level) ?? level == 1;
+    if (unlocked) {
+      context.push(PatternPreviewScreen.routePath, extra: level);
+      return;
+    }
+    showUnlockLevelSheet(context, level: level);
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.appColors;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    ref.watch(unlockedPatternTickProvider);
+    ref.watch(progressRepositoryProvider);
+    return ValueListenableBuilder<int>(
+      valueListenable: ProgressRepository.unlockedPatternTick,
+      builder: (context, _, _) {
+        return _buildCard(context, ref, colors, isDark);
+      },
+    );
+  }
+
+  Widget _buildCard(
+    BuildContext context,
+    WidgetRef ref,
+    AppColorScheme colors,
+    bool isDark,
+  ) {
+    final repo = ref.read(progressRepositoryProvider).valueOrNull;
+    final coinUnlocked = repo?.isPatternLevelUnlocked(level) ?? level == 1;
     final borderColor = locked ? colors.border : colors.accentTealDeep;
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: locked
-            ? () {
-                ScaffoldMessenger.of(context)
-                  ..hideCurrentSnackBar()
-                  ..showSnackBar(
-                    const SnackBar(
-                      content: Text('Coming soon'),
-                      behavior: SnackBarBehavior.floating,
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-              }
-            : () => context.push(
-                  PatternPreviewScreen.routePath,
-                  extra: level,
-                ),
+        onTap: () => _onTap(context, ref),
         borderRadius: BorderRadius.circular(16),
         child: Ink(
           decoration: BoxDecoration(
@@ -252,7 +357,7 @@ class _PatternCard extends StatelessWidget {
                         ),
                       ),
                     )
-                  else
+                  else if (!coinUnlocked)
                     Positioned(
                       right: 6,
                       bottom: 6,
@@ -302,7 +407,12 @@ class _PlayBoardCardPreviewState extends State<_PlayBoardCardPreview> {
     _level =
         LevelRepository.peekGalleryPatternPreviewLevel(widget.galleryLevel);
     LevelRepository.galleryPreviewEpoch.addListener(_onGalleryEpoch);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _syncPreview());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncPreview();
+      Future<void>.delayed(const Duration(milliseconds: 120), () {
+        if (mounted) _syncPreview();
+      });
+    });
   }
 
   @override
@@ -315,12 +425,19 @@ class _PlayBoardCardPreviewState extends State<_PlayBoardCardPreview> {
 
   bool _isOnScreen() {
     final box = context.findRenderObject();
-    if (box is! RenderBox || !box.hasSize) return false;
+    if (box is! RenderBox || !box.hasSize) return true;
     final origin = box.localToGlobal(Offset.zero);
     final rect = origin & box.size;
     final view = View.of(context);
-    final screen = Offset.zero &
-        (view.physicalSize / view.devicePixelRatio);
+    final logical = view.physicalSize / view.devicePixelRatio;
+    if (logical.isEmpty) return true;
+    // Keep a margin so the first 2 rows still queue if the banner clips them.
+    final screen = Rect.fromLTWH(
+      -48,
+      -48,
+      logical.width + 96,
+      logical.height + 96,
+    );
     return rect.overlaps(screen);
   }
 
@@ -342,7 +459,6 @@ class _PlayBoardCardPreviewState extends State<_PlayBoardCardPreview> {
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     const paletteBlue = Color(0xFF4C7EF3);
     final palette = [
       colors.accentTeal,
@@ -351,8 +467,7 @@ class _PlayBoardCardPreviewState extends State<_PlayBoardCardPreview> {
       paletteBlue,
     ];
     final level = _level;
-    final boardColor =
-        isDark ? const Color(0xFF16262B) : const Color(0xFF1C2C32);
+    final boardColor = colors.background;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
@@ -636,7 +751,15 @@ class _DummyMazePainter extends CustomPainter {
 
 /// Same treatment as Daily's Play Today — no coins, pinned CTA.
 class _UnlockPromoBanner extends StatelessWidget {
-  const _UnlockPromoBanner();
+  const _UnlockPromoBanner({
+    required this.showMore,
+    required this.onViewMore,
+    this.loading = false,
+  });
+
+  final bool showMore;
+  final bool loading;
+  final VoidCallback onViewMore;
 
   @override
   Widget build(BuildContext context) {
@@ -646,17 +769,21 @@ class _UnlockPromoBanner extends StatelessWidget {
       child: Material(
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
-          onTap: () {
-            ScaffoldMessenger.of(context)
-              ..hideCurrentSnackBar()
-              ..showSnackBar(
-                const SnackBar(
-                  content: Text('Coming soon'),
-                  behavior: SnackBarBehavior.floating,
-                  duration: Duration(seconds: 2),
-                ),
-              );
-          },
+          onTap: loading
+              ? null
+              : showMore
+                  ? onViewMore
+                  : () {
+                      ScaffoldMessenger.of(context)
+                        ..hideCurrentSnackBar()
+                        ..showSnackBar(
+                          const SnackBar(
+                            content: Text('Coming soon'),
+                            behavior: SnackBarBehavior.floating,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                    },
           borderRadius: BorderRadius.circular(16),
           child: Ink(
             decoration: BoxDecoration(
@@ -675,14 +802,25 @@ class _UnlockPromoBanner extends StatelessWidget {
               ],
             ),
             child: Center(
-              child: Text(
-                'Unlock More Custom Levels',
-                style: AppTextStyles.button(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                ),
-              ),
+              child: loading
+                  ? const SizedBox(
+                      width: 26,
+                      height: 26,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.6,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Text(
+                      showMore
+                          ? 'View more custom levels'
+                          : 'Unlock More Custom Levels',
+                      style: AppTextStyles.button(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
             ),
           ),
         ),

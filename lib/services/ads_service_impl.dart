@@ -497,6 +497,10 @@ class AdsServiceImpl with WidgetsBindingObserver implements AdsService {
   Future<bool> showRewardedForLives(BuildContext context) =>
       _showRewarded(context);
 
+  @override
+  Future<bool> showRewardedForCoins(BuildContext context) =>
+      _showRewarded(context);
+
   // --- Level-clear hooks -------------------------------------------------
 
   @override
