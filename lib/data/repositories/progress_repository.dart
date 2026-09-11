@@ -115,12 +115,12 @@ class ProgressRepository {
 
   bool isPatternLevelUnlocked(int level) {
     if (level == 1) return true;
-    if (level < 2 || level > 50) return false;
+    if (level < 2 || level > 100) return false;
     return getUnlockedPatternLevels().contains(level);
   }
 
   Future<void> unlockPatternLevel(int level) async {
-    if (level < 1 || level > 50) return;
+    if (level < 1 || level > 100) return;
     final stored = [
       ...(_prefs.getStringList(_unlockedPatternLevelsKey) ?? const <String>[]),
     ];

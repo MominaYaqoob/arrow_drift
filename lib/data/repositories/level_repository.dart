@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart'
     show compute, debugPrint, kIsWeb, ValueNotifier;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:arrow_drift/data/models/arrow_model.dart';
 import 'package:arrow_drift/data/models/level_model.dart';
@@ -230,7 +232,222 @@ LevelModel _foxPatternPreviewIsolateEntry((int, int) args) {
   return buildFoxPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
 }
 
-/// Patterns gallery 1–50 → existing isolate-backed nested maze loaders.
+LevelModel _octagonPatternPreviewIsolateEntry((int, int) args) {
+  return buildOctagonPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _stadiumPatternPreviewIsolateEntry((int, int) args) {
+  return buildStadiumPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _flowerPatternPreviewIsolateEntry((int, int) args) {
+  return buildFlowerPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _infinityPatternPreviewIsolateEntry((int, int) args) {
+  return buildInfinityPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _ovalPatternPreviewIsolateEntry((int, int) args) {
+  return buildOvalPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _fishPatternPreviewIsolateEntry((int, int) args) {
+  return buildFishPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _butterflyPatternPreviewIsolateEntry((int, int) args) {
+  return buildButterflyPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _sparrowPatternPreviewIsolateEntry((int, int) args) {
+  return buildSparrowPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _kittenPatternPreviewIsolateEntry((int, int) args) {
+  return buildKittenPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _deerPatternPreviewIsolateEntry((int, int) args) {
+  return buildDeerPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _pandaPatternPreviewIsolateEntry((int, int) args) {
+  return buildPandaPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _koalaPatternPreviewIsolateEntry((int, int) args) {
+  return buildKoalaPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _horsePatternPreviewIsolateEntry((int, int) args) {
+  return buildHorsePatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _giraffePatternPreviewIsolateEntry((int, int) args) {
+  return buildGiraffePatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _monkeyPatternPreviewIsolateEntry((int, int) args) {
+  return buildMonkeyPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _squirrelPatternPreviewIsolateEntry((int, int) args) {
+  return buildSquirrelPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _turtlePatternPreviewIsolateEntry((int, int) args) {
+  return buildTurtlePatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _wolfPatternPreviewIsolateEntry((int, int) args) {
+  return buildWolfPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _tigerPatternPreviewIsolateEntry((int, int) args) {
+  return buildTigerPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _zebraPatternPreviewIsolateEntry((int, int) args) {
+  return buildZebraPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _kangarooPatternPreviewIsolateEntry((int, int) args) {
+  return buildKangarooPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _hedgehogPatternPreviewIsolateEntry((int, int) args) {
+  return buildHedgehogPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _eaglePatternPreviewIsolateEntry((int, int) args) {
+  return buildEaglePatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _flamingoPatternPreviewIsolateEntry((int, int) args) {
+  return buildFlamingoPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _penguinPatternPreviewIsolateEntry((int, int) args) {
+  return buildPenguinPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _swanPatternPreviewIsolateEntry((int, int) args) {
+  return buildSwanPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _roosterPatternPreviewIsolateEntry((int, int) args) {
+  return buildRoosterPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _hummingbirdPatternPreviewIsolateEntry((int, int) args) {
+  return buildHummingbirdPatternPreviewLevel(
+    levelNumber: args.$1,
+    seed: args.$2,
+  );
+}
+
+LevelModel _ostrichPatternPreviewIsolateEntry((int, int) args) {
+  return buildOstrichPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _convertiblePatternPreviewIsolateEntry((int, int) args) {
+  return buildConvertiblePatternPreviewLevel(
+    levelNumber: args.$1,
+    seed: args.$2,
+  );
+}
+
+LevelModel _raceCarPatternPreviewIsolateEntry((int, int) args) {
+  return buildRaceCarPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _pickupTruckPatternPreviewIsolateEntry((int, int) args) {
+  return buildPickupTruckPatternPreviewLevel(
+    levelNumber: args.$1,
+    seed: args.$2,
+  );
+}
+
+LevelModel _taxiPatternPreviewIsolateEntry((int, int) args) {
+  return buildTaxiPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _busPatternPreviewIsolateEntry((int, int) args) {
+  return buildBusPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _bmxPatternPreviewIsolateEntry((int, int) args) {
+  return buildBmxPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _mountainBikePatternPreviewIsolateEntry((int, int) args) {
+  return buildMountainBikePatternPreviewLevel(
+    levelNumber: args.$1,
+    seed: args.$2,
+  );
+}
+
+LevelModel _vespaPatternPreviewIsolateEntry((int, int) args) {
+  return buildVespaPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _tricyclePatternPreviewIsolateEntry((int, int) args) {
+  return buildTricyclePatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _diamondPatternPreviewIsolateEntry((int, int) args) {
+  return buildDiamondPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _hexagonPatternPreviewIsolateEntry((int, int) args) {
+  return buildHexagonPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _trianglePatternPreviewIsolateEntry((int, int) args) {
+  return buildTrianglePatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _pentagonPatternPreviewIsolateEntry((int, int) args) {
+  return buildPentagonPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _pineapplePatternPreviewIsolateEntry((int, int) args) {
+  return buildPineapplePatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _orangePatternPreviewIsolateEntry((int, int) args) {
+  return buildOrangePatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _cherryPatternPreviewIsolateEntry((int, int) args) {
+  return buildCherryPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _pearPatternPreviewIsolateEntry((int, int) args) {
+  return buildPearPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _mangoPatternPreviewIsolateEntry((int, int) args) {
+  return buildMangoPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _halfMoonPatternPreviewIsolateEntry((int, int) args) {
+  return buildHalfMoonPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+LevelModel _hotAirBalloonPatternPreviewIsolateEntry((int, int) args) {
+  return buildHotAirBalloonPatternPreviewLevel(
+    levelNumber: args.$1,
+    seed: args.$2,
+  );
+}
+
+LevelModel _rocketPatternPreviewIsolateEntry((int, int) args) {
+  return buildRocketPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+}
+
+/// Patterns gallery 1–100 → existing isolate-backed nested maze loaders.
 final Map<int, Future<LevelModel> Function()> patternLevelLoaders = {
   1: () => LevelRepository.loadHeartPatternPreviewLevel(),
   2: () => LevelRepository.loadCarPatternPreviewLevel(),
@@ -282,6 +499,56 @@ final Map<int, Future<LevelModel> Function()> patternLevelLoaders = {
   48: () => LevelRepository.loadFullMoonPatternPreviewLevel(),
   49: () => LevelRepository.loadGliderPatternPreviewLevel(),
   50: () => LevelRepository.loadFoxPatternPreviewLevel(),
+  51: () => LevelRepository.loadOctagonPatternPreviewLevel(),
+  52: () => LevelRepository.loadStadiumPatternPreviewLevel(),
+  53: () => LevelRepository.loadFlowerPatternPreviewLevel(),
+  54: () => LevelRepository.loadInfinityPatternPreviewLevel(),
+  55: () => LevelRepository.loadOvalPatternPreviewLevel(),
+  56: () => LevelRepository.loadFishPatternPreviewLevel(),
+  57: () => LevelRepository.loadButterflyPatternPreviewLevel(),
+  58: () => LevelRepository.loadSparrowPatternPreviewLevel(),
+  59: () => LevelRepository.loadKittenPatternPreviewLevel(),
+  60: () => LevelRepository.loadDeerPatternPreviewLevel(),
+  61: () => LevelRepository.loadPandaPatternPreviewLevel(),
+  62: () => LevelRepository.loadKoalaPatternPreviewLevel(),
+  63: () => LevelRepository.loadHorsePatternPreviewLevel(),
+  64: () => LevelRepository.loadGiraffePatternPreviewLevel(),
+  65: () => LevelRepository.loadMonkeyPatternPreviewLevel(),
+  66: () => LevelRepository.loadSquirrelPatternPreviewLevel(),
+  67: () => LevelRepository.loadTurtlePatternPreviewLevel(),
+  68: () => LevelRepository.loadWolfPatternPreviewLevel(),
+  69: () => LevelRepository.loadTigerPatternPreviewLevel(),
+  70: () => LevelRepository.loadZebraPatternPreviewLevel(),
+  71: () => LevelRepository.loadKangarooPatternPreviewLevel(),
+  72: () => LevelRepository.loadHedgehogPatternPreviewLevel(),
+  73: () => LevelRepository.loadEaglePatternPreviewLevel(),
+  74: () => LevelRepository.loadFlamingoPatternPreviewLevel(),
+  75: () => LevelRepository.loadPenguinPatternPreviewLevel(),
+  76: () => LevelRepository.loadSwanPatternPreviewLevel(),
+  77: () => LevelRepository.loadRoosterPatternPreviewLevel(),
+  78: () => LevelRepository.loadHummingbirdPatternPreviewLevel(),
+  79: () => LevelRepository.loadOstrichPatternPreviewLevel(),
+  80: () => LevelRepository.loadConvertiblePatternPreviewLevel(),
+  81: () => LevelRepository.loadRaceCarPatternPreviewLevel(),
+  82: () => LevelRepository.loadPickupTruckPatternPreviewLevel(),
+  83: () => LevelRepository.loadTaxiPatternPreviewLevel(),
+  84: () => LevelRepository.loadBusPatternPreviewLevel(),
+  85: () => LevelRepository.loadBmxPatternPreviewLevel(),
+  86: () => LevelRepository.loadMountainBikePatternPreviewLevel(),
+  87: () => LevelRepository.loadVespaPatternPreviewLevel(),
+  88: () => LevelRepository.loadTricyclePatternPreviewLevel(),
+  89: () => LevelRepository.loadDiamondPatternPreviewLevel(),
+  90: () => LevelRepository.loadHexagonPatternPreviewLevel(),
+  91: () => LevelRepository.loadTrianglePatternPreviewLevel(),
+  92: () => LevelRepository.loadPentagonPatternPreviewLevel(),
+  93: () => LevelRepository.loadPineapplePatternPreviewLevel(),
+  94: () => LevelRepository.loadOrangePatternPreviewLevel(),
+  95: () => LevelRepository.loadCherryPatternPreviewLevel(),
+  96: () => LevelRepository.loadPearPatternPreviewLevel(),
+  97: () => LevelRepository.loadMangoPatternPreviewLevel(),
+  98: () => LevelRepository.loadHalfMoonPatternPreviewLevel(),
+  99: () => LevelRepository.loadHotAirBalloonPatternPreviewLevel(),
+  100: () => LevelRepository.loadRocketPatternPreviewLevel(),
 };
 
 /// Preview-only heart: same silhouette as Daily, but small interior holes and
@@ -560,6 +827,56 @@ const int kWatermelonPatternLevelId = 900047;
 const int kFullMoonPatternLevelId = 900048;
 const int kGliderPatternLevelId = 900049;
 const int kFoxPatternLevelId = 900050;
+const int kOctagonPatternLevelId = 900051;
+const int kStadiumPatternLevelId = 900052;
+const int kFlowerPatternLevelId = 900053;
+const int kInfinityPatternLevelId = 900054;
+const int kOvalPatternLevelId = 900055;
+const int kFishPatternLevelId = 900056;
+const int kButterflyPatternLevelId = 900057;
+const int kSparrowPatternLevelId = 900058;
+const int kKittenPatternLevelId = 900059;
+const int kDeerPatternLevelId = 900060;
+const int kPandaPatternLevelId = 900061;
+const int kKoalaPatternLevelId = 900062;
+const int kHorsePatternLevelId = 900063;
+const int kGiraffePatternLevelId = 900064;
+const int kMonkeyPatternLevelId = 900065;
+const int kSquirrelPatternLevelId = 900066;
+const int kTurtlePatternLevelId = 900067;
+const int kWolfPatternLevelId = 900068;
+const int kTigerPatternLevelId = 900069;
+const int kZebraPatternLevelId = 900070;
+const int kKangarooPatternLevelId = 900071;
+const int kHedgehogPatternLevelId = 900072;
+const int kEaglePatternLevelId = 900073;
+const int kFlamingoPatternLevelId = 900074;
+const int kPenguinPatternLevelId = 900075;
+const int kSwanPatternLevelId = 900076;
+const int kRoosterPatternLevelId = 900077;
+const int kHummingbirdPatternLevelId = 900078;
+const int kOstrichPatternLevelId = 900079;
+const int kConvertiblePatternLevelId = 900080;
+const int kRaceCarPatternLevelId = 900081;
+const int kPickupTruckPatternLevelId = 900082;
+const int kTaxiPatternLevelId = 900083;
+const int kBusPatternLevelId = 900084;
+const int kBmxPatternLevelId = 900085;
+const int kMountainBikePatternLevelId = 900086;
+const int kVespaPatternLevelId = 900087;
+const int kTricyclePatternLevelId = 900088;
+const int kDiamondPatternLevelId = 900089;
+const int kHexagonPatternLevelId = 900090;
+const int kTrianglePatternLevelId = 900091;
+const int kPentagonPatternLevelId = 900092;
+const int kPineapplePatternLevelId = 900093;
+const int kOrangePatternLevelId = 900094;
+const int kCherryPatternLevelId = 900095;
+const int kPearPatternLevelId = 900096;
+const int kMangoPatternLevelId = 900097;
+const int kHalfMoonPatternLevelId = 900098;
+const int kHotAirBalloonPatternLevelId = 900099;
+const int kRocketPatternLevelId = 900100;
 
 /// Patterns Level-1 heart maze. Nested hard-pack (90–150 winding arrows).
 /// Daily / campaign generation is unchanged.
@@ -717,7 +1034,7 @@ List<List<bool>> _closePatternMaskNeighbors(
 }
 
 /// Dense nested Patterns maze: 90–200 arrows, mixed long nested paths.
-/// Future gallery builders (levels 51–200) should use this helper.
+/// Future gallery builders (levels 101–200) should use this helper.
 LevelModel _buildDenseNestedPatternLevel({
   required int levelNumber,
   required int seed,
@@ -735,87 +1052,10 @@ LevelModel _buildDenseNestedPatternLevel({
   bool allowDownsize = false,
   bool fillLeftoverGaps = true,
 }) {
-  StateError? lastError;
-  LevelModel? best;
-
   List<List<bool>> maskAt(int size) {
     final mask = maskForSize(size);
     if (!closeNeighbors) return mask;
     return _closePatternMaskNeighbors(mask, minNeighbors: closeMinNeighbors);
-  }
-
-  void consider(LevelModel? packed) {
-    if (packed == null) return;
-    if (minFillRatio > 0) {
-      if (best == null) {
-        best = packed;
-        return;
-      }
-      final nextFill = _patternMaskFillRatio(packed);
-      final bestFill = _patternMaskFillRatio(best!);
-      if (nextFill > bestFill + 0.015 ||
-          ((nextFill - bestFill).abs() <= 0.015 &&
-              packed.arrows.length > best!.arrows.length)) {
-        best = packed;
-      }
-      return;
-    }
-    final n = packed.arrows.length;
-    if (best == null || n > best!.arrows.length) best = packed;
-  }
-
-  LevelModel? tryBuild({
-    required int size,
-    required int buildSeed,
-    required double fill,
-    required int floor,
-    required int cap,
-    int minPath = 2,
-    int maxPath = 14,
-    double bias = 1.55,
-  }) {
-    try {
-      final packed = generateNestedSolvableLevel(
-        levelNumber,
-        size,
-        size,
-        3,
-        2,
-        difficulty: LevelDifficulty.expert,
-        seed: buildSeed,
-        shapeMask: maskAt(size),
-        fillTarget: fill,
-        minPathLen: minPath,
-        maxPathLen: maxPath,
-        minArrows: floor,
-        maxArrows: cap,
-        hardNest: true,
-        mixPathSizes: true,
-        maxFreeAtStart: null,
-        turnBias: bias,
-        fillLeftoverGaps: fillLeftoverGaps,
-        fillGapsWithLongPaths: true,
-      ).level;
-      if (requireFreeArrow &&
-          findFirstFreeArrow(
-                arrows: packed.arrows,
-                gridRows: packed.gridRows,
-                gridCols: packed.gridCols,
-                shapeMask: packed.shapeMask,
-              ) ==
-              null) {
-        return null;
-      }
-      consider(packed);
-      if (minFillRatio > 0 &&
-          _patternMaskFillRatio(packed) < minFillRatio) {
-        return null;
-      }
-      return packed;
-    } on StateError catch (e) {
-      lastError = e;
-      return null;
-    }
   }
 
   LevelModel finish(LevelModel level) {
@@ -828,152 +1068,278 @@ LevelModel _buildDenseNestedPatternLevel({
     return level;
   }
 
-  final sizeHi = (primarySize + 2).clamp(34, 44);
-  final sizeLo = (primarySize - 2).clamp(32, 42);
   int capFor(int waveCap) => allowDownsize ? waveCap : targetMax;
   int floorFor(int waveFloor) =>
       waveFloor < lastResortMin ? lastResortMin : waveFloor;
 
-  for (var attempt = 0; attempt < 8; attempt++) {
-    final level = tryBuild(
-      size: primarySize,
-      buildSeed: seed + attempt * 211,
-      fill: 0.99,
-      floor: floorFor(initialFloor),
-      cap: capFor(targetMax),
-      minPath: minPathLen,
-      maxPath: 14,
-      bias: 1.6,
-    );
-    if (level != null) return finish(level);
-  }
+  LevelModel packAt(int size) {
+    StateError? lastError;
+    LevelModel? best;
 
-  for (var attempt = 0; attempt < 6; attempt++) {
-    final level = tryBuild(
-      size: sizeHi,
-      buildSeed: seed + 9000 + attempt * 131,
-      fill: 0.98,
-      floor: floorFor(110),
-      cap: capFor(targetMax),
-      minPath: minPathLen,
-      maxPath: 13,
-      bias: 1.55,
-    );
-    if (level != null) return finish(level);
-  }
+    void consider(LevelModel? packed) {
+      if (packed == null) return;
+      if (minFillRatio > 0) {
+        if (best == null) {
+          best = packed;
+          return;
+        }
+        final nextFill = _patternMaskFillRatio(packed);
+        final bestFill = _patternMaskFillRatio(best!);
+        if (nextFill > bestFill + 0.015 ||
+            ((nextFill - bestFill).abs() <= 0.015 &&
+                packed.arrows.length > best!.arrows.length)) {
+          best = packed;
+        }
+        return;
+      }
+      final n = packed.arrows.length;
+      if (best == null || n > best!.arrows.length) best = packed;
+    }
 
-  for (var attempt = 0; attempt < 8; attempt++) {
-    final level = tryBuild(
-      size: primarySize,
-      buildSeed: seed + 17000 + attempt * 97,
-      fill: 0.97,
-      floor: floorFor(100),
-      cap: capFor(140),
-      minPath: minPathLen > 2 ? (minPathLen - 1).clamp(2, 14) : 2,
-      maxPath: 12,
-      bias: 1.5,
-    );
-    if (level != null) return finish(level);
-  }
+    LevelModel? tryBuild({
+      required int boardSize,
+      required int buildSeed,
+      required double fill,
+      required int floor,
+      required int cap,
+      int minPath = 2,
+      int maxPath = 14,
+      double bias = 1.55,
+    }) {
+      try {
+        final packed = generateNestedSolvableLevel(
+          levelNumber,
+          boardSize,
+          boardSize,
+          3,
+          2,
+          difficulty: LevelDifficulty.expert,
+          seed: buildSeed,
+          shapeMask: maskAt(boardSize),
+          fillTarget: fill,
+          minPathLen: minPath,
+          maxPathLen: maxPath,
+          minArrows: floor,
+          maxArrows: cap,
+          hardNest: true,
+          mixPathSizes: true,
+          maxFreeAtStart: null,
+          turnBias: bias,
+          fillLeftoverGaps: fillLeftoverGaps,
+          fillGapsWithLongPaths: true,
+        ).level;
+        if (requireFreeArrow &&
+            findFirstFreeArrow(
+                  arrows: packed.arrows,
+                  gridRows: packed.gridRows,
+                  gridCols: packed.gridCols,
+                  shapeMask: packed.shapeMask,
+                ) ==
+                null) {
+          return null;
+        }
+        consider(packed);
+        if (minFillRatio > 0 &&
+            _patternMaskFillRatio(packed) < minFillRatio) {
+          return null;
+        }
+        return packed;
+      } on StateError catch (e) {
+        lastError = e;
+        return null;
+      }
+    }
 
-  for (var attempt = 0; attempt < 8; attempt++) {
-    final level = tryBuild(
-      size: allowDownsize ? sizeLo : primarySize,
-      buildSeed: seed + 29000 + attempt * 37,
-      fill: 0.96,
-      floor: floorFor(targetMin),
-      cap: capFor(130),
-      minPath: minPathLen > 2 ? (minPathLen - 1).clamp(2, 14) : 2,
-      maxPath: 11,
-      bias: 1.45,
-    );
-    if (level != null) return finish(level);
-  }
+    final sizeHi = (size + 2).clamp(34, 44);
+    final sizeLo = (size - 2).clamp(32, 42);
 
-  if (allowDownsize) {
-    for (var attempt = 0; attempt < 10; attempt++) {
+    for (var attempt = 0; attempt < 8; attempt++) {
       final level = tryBuild(
-        size: 34,
-        buildSeed: seed + 41000 + attempt * 41,
-        fill: 0.95,
-        floor: floorFor(targetMin),
-        cap: capFor(120),
-        minPath: minPathLen > 2 ? 3 : 2,
-        maxPath: 10,
-        bias: 1.4,
+        boardSize: size,
+        buildSeed: seed + attempt * 211,
+        fill: 0.99,
+        floor: floorFor(initialFloor),
+        cap: capFor(targetMax),
+        minPath: minPathLen,
+        maxPath: 14,
+        bias: 1.6,
       );
-      if (level != null) return finish(level);
+      if (level != null) return level;
+    }
+
+    for (var attempt = 0; attempt < 6; attempt++) {
+      final level = tryBuild(
+        boardSize: sizeHi,
+        buildSeed: seed + 9000 + attempt * 131,
+        fill: 0.98,
+        floor: floorFor(110),
+        cap: capFor(targetMax),
+        minPath: minPathLen,
+        maxPath: 13,
+        bias: 1.55,
+      );
+      if (level != null) return level;
     }
 
     for (var attempt = 0; attempt < 8; attempt++) {
       final level = tryBuild(
-        size: 34,
-        buildSeed: seed + 52000 + attempt * 53,
-        fill: 0.94,
-        floor: lastResortMin,
-        cap: capFor(110),
-        minPath: 2,
-        maxPath: 10,
-        bias: 1.35,
-      );
-      if (level != null) return finish(level);
-    }
-  } else {
-    for (var attempt = 0; attempt < 12; attempt++) {
-      final level = tryBuild(
-        size: primarySize,
-        buildSeed: seed + 41000 + attempt * 41,
-        fill: 0.95,
-        floor: targetMin,
-        cap: targetMax,
-        minPath: 3,
+        boardSize: size,
+        buildSeed: seed + 17000 + attempt * 97,
+        fill: 0.97,
+        floor: floorFor(100),
+        cap: capFor(140),
+        minPath: minPathLen > 2 ? (minPathLen - 1).clamp(2, 14) : 2,
         maxPath: 12,
-        bias: 1.4,
+        bias: 1.5,
       );
-      if (level != null) return finish(level);
+      if (level != null) return level;
     }
 
-    for (var attempt = 0; attempt < 10; attempt++) {
+    for (var attempt = 0; attempt < 8; attempt++) {
       final level = tryBuild(
-        size: primarySize,
-        buildSeed: seed + 52000 + attempt * 53,
-        fill: 0.94,
-        floor: lastResortMin,
-        cap: targetMax,
-        minPath: 2,
-        maxPath: 10,
-        bias: 1.35,
+        boardSize: allowDownsize ? sizeLo : size,
+        buildSeed: seed + 29000 + attempt * 37,
+        fill: 0.96,
+        floor: floorFor(targetMin),
+        cap: capFor(130),
+        minPath: minPathLen > 2 ? (minPathLen - 1).clamp(2, 14) : 2,
+        maxPath: 11,
+        bias: 1.45,
       );
-      if (level != null) return finish(level);
+      if (level != null) return level;
+    }
+
+    if (allowDownsize) {
+      for (var attempt = 0; attempt < 10; attempt++) {
+        final level = tryBuild(
+          boardSize: 34,
+          buildSeed: seed + 41000 + attempt * 41,
+          fill: 0.95,
+          floor: floorFor(targetMin),
+          cap: capFor(120),
+          minPath: minPathLen > 2 ? 3 : 2,
+          maxPath: 10,
+          bias: 1.4,
+        );
+        if (level != null) return level;
+      }
+
+      for (var attempt = 0; attempt < 8; attempt++) {
+        final level = tryBuild(
+          boardSize: 34,
+          buildSeed: seed + 52000 + attempt * 53,
+          fill: 0.94,
+          floor: lastResortMin,
+          cap: capFor(110),
+          minPath: 2,
+          maxPath: 10,
+          bias: 1.35,
+        );
+        if (level != null) return level;
+      }
+    } else {
+      for (var attempt = 0; attempt < 12; attempt++) {
+        final level = tryBuild(
+          boardSize: size,
+          buildSeed: seed + 41000 + attempt * 41,
+          fill: 0.95,
+          floor: targetMin,
+          cap: targetMax,
+          minPath: 3,
+          maxPath: 12,
+          bias: 1.4,
+        );
+        if (level != null) return level;
+      }
+
+      for (var attempt = 0; attempt < 10; attempt++) {
+        final level = tryBuild(
+          boardSize: size,
+          buildSeed: seed + 52000 + attempt * 53,
+          fill: 0.94,
+          floor: lastResortMin,
+          cap: targetMax,
+          minPath: 2,
+          maxPath: 10,
+          bias: 1.35,
+        );
+        if (level != null) return level;
+      }
+    }
+
+    if (!requireFreeArrow) {
+      final filled = _visualFillPatternMask(
+        levelNumber: levelNumber,
+        size: size,
+        mask: maskAt(size),
+        preferTurns: true,
+        maxGrowLen: 8,
+        turnEvery: 2,
+        minGrowLen: 2,
+        minArrows: targetMin,
+        maxArrows: targetMax,
+      );
+      consider(filled);
+      return filled;
+    }
+
+    final fallback = best;
+    if (fallback != null && fallback.arrows.length >= lastResortMin) {
+      return fallback;
+    }
+
+    throw lastError ??
+        StateError(
+          'Failed to build nested pattern preview for $levelNumber',
+        );
+  }
+
+  LevelModel denser(LevelModel a, LevelModel b) {
+    if (b.arrows.length != a.arrows.length) {
+      return b.arrows.length > a.arrows.length ? b : a;
+    }
+    return _patternMaskFillRatio(b) >= _patternMaskFillRatio(a) ? b : a;
+  }
+
+  LevelModel? attemptAt(int size) {
+    try {
+      return packAt(size);
+    } on StateError {
+      return null;
     }
   }
 
-  if (!requireFreeArrow) {
-    final size = primarySize;
-    final filled = _visualFillPatternMask(
-      levelNumber: levelNumber,
-      size: size,
-      mask: maskAt(size),
-      preferTurns: true,
-      maxGrowLen: 8,
-      turnEvery: 2,
-      minGrowLen: 2,
-      minArrows: targetMin,
-      maxArrows: targetMax,
-    );
-    consider(filled);
-    return finish(filled);
+  // Normal size first — no extra work when the shape already hits targetMin.
+  var result = attemptAt(primarySize);
+  if (result != null && result.arrows.length >= targetMin) {
+    return result;
   }
 
-  final fallback = best;
-  if (fallback != null && fallback.arrows.length >= lastResortMin) {
-    return finish(fallback);
+  final usedSize = result?.gridRows ?? primarySize;
+  final grown = attemptAt(usedSize + 6);
+  if (grown != null && grown.arrows.length >= targetMin) {
+    return grown;
+  }
+  if (result != null && grown != null) {
+    result = denser(result, grown);
+  } else {
+    result = grown ?? result;
   }
 
-  throw lastError ??
-      StateError(
-        'Failed to build nested pattern preview for $levelNumber',
-      );
+  final grownMore = attemptAt(primarySize + 12);
+  if (grownMore != null && grownMore.arrows.length >= targetMin) {
+    return grownMore;
+  }
+  if (result != null && grownMore != null) {
+    result = denser(result, grownMore);
+  } else {
+    result = grownMore ?? result;
+  }
+
+  if (result != null) return finish(result);
+  throw StateError(
+    'Failed to build nested pattern preview for $levelNumber',
+  );
 }
 
 double _patternMaskFillRatio(LevelModel level) {
@@ -1050,6 +1416,56 @@ String _patternShapeLabel(int levelNumber) {
     kFullMoonPatternLevelId => 'fullMoon',
     kGliderPatternLevelId => 'glider',
     kFoxPatternLevelId => 'fox',
+    kOctagonPatternLevelId => 'octagon',
+    kStadiumPatternLevelId => 'stadium',
+    kFlowerPatternLevelId => 'flower',
+    kInfinityPatternLevelId => 'infinity',
+    kOvalPatternLevelId => 'oval',
+    kFishPatternLevelId => 'fish',
+    kButterflyPatternLevelId => 'butterfly',
+    kSparrowPatternLevelId => 'sparrow',
+    kKittenPatternLevelId => 'kitten',
+    kDeerPatternLevelId => 'deer',
+    kPandaPatternLevelId => 'panda',
+    kKoalaPatternLevelId => 'koala',
+    kHorsePatternLevelId => 'horse',
+    kGiraffePatternLevelId => 'giraffe',
+    kMonkeyPatternLevelId => 'monkey',
+    kSquirrelPatternLevelId => 'squirrel',
+    kTurtlePatternLevelId => 'turtle',
+    kWolfPatternLevelId => 'wolf',
+    kTigerPatternLevelId => 'tiger',
+    kZebraPatternLevelId => 'zebra',
+    kKangarooPatternLevelId => 'kangaroo',
+    kHedgehogPatternLevelId => 'hedgehog',
+    kEaglePatternLevelId => 'eagle',
+    kFlamingoPatternLevelId => 'flamingo',
+    kPenguinPatternLevelId => 'penguin',
+    kSwanPatternLevelId => 'swan',
+    kRoosterPatternLevelId => 'rooster',
+    kHummingbirdPatternLevelId => 'hummingbird',
+    kOstrichPatternLevelId => 'ostrich',
+    kConvertiblePatternLevelId => 'convertible',
+    kRaceCarPatternLevelId => 'raceCar',
+    kPickupTruckPatternLevelId => 'pickupTruck',
+    kTaxiPatternLevelId => 'taxi',
+    kBusPatternLevelId => 'bus',
+    kBmxPatternLevelId => 'bmx',
+    kMountainBikePatternLevelId => 'mountainBike',
+    kVespaPatternLevelId => 'vespa',
+    kTricyclePatternLevelId => 'tricycle',
+    kDiamondPatternLevelId => 'diamond',
+    kHexagonPatternLevelId => 'hexagon',
+    kTrianglePatternLevelId => 'triangle',
+    kPentagonPatternLevelId => 'pentagon',
+    kPineapplePatternLevelId => 'pineapple',
+    kOrangePatternLevelId => 'orange',
+    kCherryPatternLevelId => 'cherry',
+    kPearPatternLevelId => 'pear',
+    kMangoPatternLevelId => 'mango',
+    kHalfMoonPatternLevelId => 'halfMoon',
+    kHotAirBalloonPatternLevelId => 'hotAirBalloon',
+    kRocketPatternLevelId => 'rocket',
     _ => 'pattern-$levelNumber',
   };
 }
@@ -1584,6 +2000,569 @@ LevelModel buildFoxPatternPreviewLevel({
     levelNumber: levelNumber,
     seed: seed,
     maskForSize: generateFoxShapeMask,
+  );
+}
+
+LevelModel buildOctagonPatternPreviewLevel({
+  int levelNumber = kOctagonPatternLevelId,
+  int seed = 51,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: (size) => octagonMask(size, size),
+    closeNeighbors: false,
+  );
+}
+
+LevelModel buildStadiumPatternPreviewLevel({
+  int levelNumber = kStadiumPatternLevelId,
+  int seed = 52,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: (size) => stadiumMask(size, size),
+    closeNeighbors: false,
+  );
+}
+
+LevelModel buildFlowerPatternPreviewLevel({
+  int levelNumber = kFlowerPatternLevelId,
+  int seed = 53,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: (size) => flowerMask(size, size),
+    closeNeighbors: false,
+  );
+}
+
+LevelModel buildInfinityPatternPreviewLevel({
+  int levelNumber = kInfinityPatternLevelId,
+  int seed = 54,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: (size) => infinityMask(size, size),
+    closeNeighbors: false,
+  );
+}
+
+LevelModel buildOvalPatternPreviewLevel({
+  int levelNumber = kOvalPatternLevelId,
+  int seed = 55,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: (size) => ovalMask(size, size),
+    closeNeighbors: false,
+  );
+}
+
+LevelModel buildFishPatternPreviewLevel({
+  int levelNumber = kFishPatternLevelId,
+  int seed = 56,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: (size) => fishMask(size, size),
+    closeNeighbors: false,
+  );
+}
+
+LevelModel buildButterflyPatternPreviewLevel({
+  int levelNumber = kButterflyPatternLevelId,
+  int seed = 57,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: (size) => butterflyMask(size, size),
+    closeNeighbors: false,
+  );
+}
+
+LevelModel buildSparrowPatternPreviewLevel({
+  int levelNumber = kSparrowPatternLevelId,
+  int seed = 58,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: (size) => birdOutlineMask(size, size),
+    closeNeighbors: false,
+  );
+}
+
+LevelModel buildKittenPatternPreviewLevel({
+  int levelNumber = kKittenPatternLevelId,
+  int seed = 59,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: (size) => catFaceMask(size, size),
+    closeNeighbors: false,
+  );
+}
+
+LevelModel buildDeerPatternPreviewLevel({
+  int levelNumber = kDeerPatternLevelId,
+  int seed = 60,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateDeerShapeMask,
+  );
+}
+
+LevelModel buildPandaPatternPreviewLevel({
+  int levelNumber = kPandaPatternLevelId,
+  int seed = 61,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generatePandaShapeMask,
+  );
+}
+
+LevelModel buildKoalaPatternPreviewLevel({
+  int levelNumber = kKoalaPatternLevelId,
+  int seed = 62,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateKoalaShapeMask,
+  );
+}
+
+LevelModel buildHorsePatternPreviewLevel({
+  int levelNumber = kHorsePatternLevelId,
+  int seed = 63,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateHorseShapeMask,
+  );
+}
+
+LevelModel buildGiraffePatternPreviewLevel({
+  int levelNumber = kGiraffePatternLevelId,
+  int seed = 64,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateGiraffeShapeMask,
+  );
+}
+
+LevelModel buildMonkeyPatternPreviewLevel({
+  int levelNumber = kMonkeyPatternLevelId,
+  int seed = 65,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateMonkeyShapeMask,
+  );
+}
+
+LevelModel buildSquirrelPatternPreviewLevel({
+  int levelNumber = kSquirrelPatternLevelId,
+  int seed = 66,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateSquirrelShapeMask,
+  );
+}
+
+LevelModel buildTurtlePatternPreviewLevel({
+  int levelNumber = kTurtlePatternLevelId,
+  int seed = 67,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateTurtleShapeMask,
+  );
+}
+
+LevelModel buildWolfPatternPreviewLevel({
+  int levelNumber = kWolfPatternLevelId,
+  int seed = 68,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateWolfShapeMask,
+  );
+}
+
+LevelModel buildTigerPatternPreviewLevel({
+  int levelNumber = kTigerPatternLevelId,
+  int seed = 69,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateTigerShapeMask,
+  );
+}
+
+LevelModel buildZebraPatternPreviewLevel({
+  int levelNumber = kZebraPatternLevelId,
+  int seed = 70,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateZebraShapeMask,
+  );
+}
+
+LevelModel buildKangarooPatternPreviewLevel({
+  int levelNumber = kKangarooPatternLevelId,
+  int seed = 71,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateKangarooShapeMask,
+  );
+}
+
+LevelModel buildHedgehogPatternPreviewLevel({
+  int levelNumber = kHedgehogPatternLevelId,
+  int seed = 72,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateHedgehogShapeMask,
+  );
+}
+
+LevelModel buildEaglePatternPreviewLevel({
+  int levelNumber = kEaglePatternLevelId,
+  int seed = 73,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateEagleShapeMask,
+  );
+}
+
+LevelModel buildFlamingoPatternPreviewLevel({
+  int levelNumber = kFlamingoPatternLevelId,
+  int seed = 74,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateFlamingoShapeMask,
+  );
+}
+
+LevelModel buildPenguinPatternPreviewLevel({
+  int levelNumber = kPenguinPatternLevelId,
+  int seed = 75,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generatePenguinShapeMask,
+  );
+}
+
+LevelModel buildSwanPatternPreviewLevel({
+  int levelNumber = kSwanPatternLevelId,
+  int seed = 76,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateSwanShapeMask,
+  );
+}
+
+LevelModel buildRoosterPatternPreviewLevel({
+  int levelNumber = kRoosterPatternLevelId,
+  int seed = 77,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateRoosterShapeMask,
+  );
+}
+
+LevelModel buildHummingbirdPatternPreviewLevel({
+  int levelNumber = kHummingbirdPatternLevelId,
+  int seed = 78,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateHummingbirdShapeMask,
+  );
+}
+
+LevelModel buildOstrichPatternPreviewLevel({
+  int levelNumber = kOstrichPatternLevelId,
+  int seed = 79,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateOstrichShapeMask,
+  );
+}
+
+LevelModel buildConvertiblePatternPreviewLevel({
+  int levelNumber = kConvertiblePatternLevelId,
+  int seed = 80,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateConvertibleShapeMask,
+  );
+}
+
+LevelModel buildRaceCarPatternPreviewLevel({
+  int levelNumber = kRaceCarPatternLevelId,
+  int seed = 81,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateRaceCarShapeMask,
+  );
+}
+
+LevelModel buildPickupTruckPatternPreviewLevel({
+  int levelNumber = kPickupTruckPatternLevelId,
+  int seed = 82,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generatePickupTruckShapeMask,
+  );
+}
+
+LevelModel buildTaxiPatternPreviewLevel({
+  int levelNumber = kTaxiPatternLevelId,
+  int seed = 83,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateTaxiShapeMask,
+  );
+}
+
+LevelModel buildBusPatternPreviewLevel({
+  int levelNumber = kBusPatternLevelId,
+  int seed = 84,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateBusShapeMask,
+  );
+}
+
+LevelModel buildBmxPatternPreviewLevel({
+  int levelNumber = kBmxPatternLevelId,
+  int seed = 85,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateBmxShapeMask,
+    primarySize: 42,
+  );
+}
+
+LevelModel buildMountainBikePatternPreviewLevel({
+  int levelNumber = kMountainBikePatternLevelId,
+  int seed = 86,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateMountainBikeShapeMask,
+    primarySize: 42,
+  );
+}
+
+LevelModel buildVespaPatternPreviewLevel({
+  int levelNumber = kVespaPatternLevelId,
+  int seed = 87,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateVespaShapeMask,
+    primarySize: 42,
+  );
+}
+
+LevelModel buildTricyclePatternPreviewLevel({
+  int levelNumber = kTricyclePatternLevelId,
+  int seed = 88,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateTricycleShapeMask,
+    primarySize: 42,
+  );
+}
+
+LevelModel buildDiamondPatternPreviewLevel({
+  int levelNumber = kDiamondPatternLevelId,
+  int seed = 89,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateDiamondShapeMask,
+  );
+}
+
+LevelModel buildHexagonPatternPreviewLevel({
+  int levelNumber = kHexagonPatternLevelId,
+  int seed = 90,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateHexagonShapeMask,
+  );
+}
+
+LevelModel buildTrianglePatternPreviewLevel({
+  int levelNumber = kTrianglePatternLevelId,
+  int seed = 91,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateTriangleShapeMask,
+  );
+}
+
+LevelModel buildPentagonPatternPreviewLevel({
+  int levelNumber = kPentagonPatternLevelId,
+  int seed = 92,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generatePentagonShapeMask,
+  );
+}
+
+LevelModel buildPineapplePatternPreviewLevel({
+  int levelNumber = kPineapplePatternLevelId,
+  int seed = 93,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generatePineappleShapeMask,
+  );
+}
+
+LevelModel buildOrangePatternPreviewLevel({
+  int levelNumber = kOrangePatternLevelId,
+  int seed = 94,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateOrangeShapeMask,
+  );
+}
+
+LevelModel buildCherryPatternPreviewLevel({
+  int levelNumber = kCherryPatternLevelId,
+  int seed = 95,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateCherryShapeMask,
+  );
+}
+
+LevelModel buildPearPatternPreviewLevel({
+  int levelNumber = kPearPatternLevelId,
+  int seed = 96,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generatePearShapeMask,
+  );
+}
+
+LevelModel buildMangoPatternPreviewLevel({
+  int levelNumber = kMangoPatternLevelId,
+  int seed = 97,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateMangoShapeMask,
+  );
+}
+
+LevelModel buildHalfMoonPatternPreviewLevel({
+  int levelNumber = kHalfMoonPatternLevelId,
+  int seed = 98,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateHalfMoonShapeMask,
+  );
+}
+
+LevelModel buildHotAirBalloonPatternPreviewLevel({
+  int levelNumber = kHotAirBalloonPatternLevelId,
+  int seed = 99,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateHotAirBalloonShapeMask,
+  );
+}
+
+LevelModel buildRocketPatternPreviewLevel({
+  int levelNumber = kRocketPatternLevelId,
+  int seed = 100,
+}) {
+  return _buildDenseNestedPatternLevel(
+    levelNumber: levelNumber,
+    seed: seed,
+    maskForSize: generateRocketShapeMask,
   );
 }
 
@@ -3482,6 +4461,85 @@ class LevelRepository {
   static final ValueNotifier<int> galleryPreviewEpoch = ValueNotifier<int>(0);
   static final Set<int> _scheduledGalleryPreviews = <int>{};
   static bool _galleryPreviewPumping = false;
+  static SharedPreferences? _galleryPrefs;
+  static Future<SharedPreferences>? _galleryPrefsInit;
+
+  static String _galleryDiskKey(int galleryLevel) =>
+      'gallery_level_$galleryLevel';
+
+  static Future<SharedPreferences> _ensureGalleryPrefs() {
+    return _galleryPrefsInit ??= () async {
+      final prefs = await SharedPreferences.getInstance();
+      _galleryPrefs = prefs;
+      return prefs;
+    }();
+  }
+
+  static void _storeGalleryMemory(int galleryLevel, LevelModel level) {
+    _galleryVisualCache[galleryLevel] = level;
+    if (galleryLevel == 1) _heartPreviewCache = level;
+    if (galleryLevel == 2) _carPreviewCache = level;
+  }
+
+  static LevelModel? _peekGalleryMemory(int galleryLevel) {
+    if (galleryLevel == 1) {
+      return _heartPreviewCache ?? _galleryVisualCache[1];
+    }
+    if (galleryLevel == 2) {
+      final car = _carPreviewCache ?? _galleryVisualCache[2];
+      if (car == null || !_galleryDenseCacheOk(car)) return null;
+      return car;
+    }
+    final cached = _galleryVisualCache[galleryLevel];
+    if (cached == null || !_galleryDenseCacheOk(cached)) return null;
+    return cached;
+  }
+
+  static LevelModel? _takeGalleryFromDisk(int galleryLevel) {
+    final prefs = _galleryPrefs;
+    if (prefs == null) return null;
+    final raw = prefs.getString(_galleryDiskKey(galleryLevel));
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return null;
+      final level = LevelModel.fromJson(Map<String, dynamic>.from(decoded));
+      final ok = galleryLevel == 1
+          ? level.arrows.length >= 90 &&
+              level.gridRows >= 32 &&
+              level.gridRows <= 56
+          : _galleryDenseCacheOk(level);
+      if (!ok) {
+        unawaited(prefs.remove(_galleryDiskKey(galleryLevel)));
+        return null;
+      }
+      _storeGalleryMemory(galleryLevel, level);
+      return level;
+    } catch (_) {
+      unawaited(prefs.remove(_galleryDiskKey(galleryLevel)));
+      return null;
+    }
+  }
+
+  static Future<void> _writeGalleryToDisk(
+    int galleryLevel,
+    LevelModel level,
+  ) async {
+    try {
+      final prefs = await _ensureGalleryPrefs();
+      await prefs.setString(
+        _galleryDiskKey(galleryLevel),
+        jsonEncode(level.toJson()),
+      );
+    } catch (e) {
+      debugPrint('Gallery disk cache write failed for $galleryLevel: $e');
+    }
+  }
+
+  static LevelModel? _cachedGalleryBoard(int galleryLevel) {
+    return _peekGalleryMemory(galleryLevel) ??
+        _takeGalleryFromDisk(galleryLevel);
+  }
 
   static Future<T> _enqueuePatternCompute<T>(
     Future<T> Function() job,
@@ -3501,7 +4559,7 @@ class LevelRepository {
 
   static bool _galleryDenseCacheOk(LevelModel level) {
     return level.gridRows >= 40 &&
-        level.gridRows <= 44 &&
+        level.gridRows <= 56 &&
         level.arrows.length >= 90 &&
         level.arrows.length <= 200 &&
         _patternMaskFillRatio(level) >= 0.88;
@@ -3512,6 +4570,10 @@ class LevelRepository {
     int levelNumber = kHeartPatternLevelId,
     int seed = 1,
   }) async {
+    await _ensureGalleryPrefs();
+    final fromDisk = _cachedGalleryBoard(1);
+    if (fromDisk != null) return fromDisk;
+
     final cached = _heartPreviewCache;
     final cachedHasHint = cached != null &&
         findFirstFreeArrow(
@@ -3528,6 +4590,8 @@ class LevelRepository {
         cached.gridRows >= 32 &&
         cached.arrows.length >= 90 &&
         _patternMaskFillRatio(cached) >= 0.88) {
+      _storeGalleryMemory(1, cached);
+      unawaited(_writeGalleryToDisk(1, cached));
       return cached;
     }
     _heartPreviewCache = null;
@@ -3551,7 +4615,8 @@ class LevelRepository {
           ),
         );
       }
-      _heartPreviewCache = level;
+      _storeGalleryMemory(1, level);
+      unawaited(_writeGalleryToDisk(1, level));
       galleryPreviewEpoch.value++;
       return level;
     }();
@@ -3570,6 +4635,10 @@ class LevelRepository {
     int levelNumber = kCarPatternLevelId,
     int seed = 2,
   }) async {
+    await _ensureGalleryPrefs();
+    final fromDisk = _cachedGalleryBoard(2);
+    if (fromDisk != null) return fromDisk;
+
     final cached = _carPreviewCache;
     final cachedHasHint = cached != null &&
         findFirstFreeArrow(
@@ -3587,6 +4656,8 @@ class LevelRepository {
         cached.arrows.length >= 90 &&
         cached.arrows.length <= 200 &&
         _patternMaskFillRatio(cached) >= 0.88) {
+      _storeGalleryMemory(2, cached);
+      unawaited(_writeGalleryToDisk(2, cached));
       return cached;
     }
     _carPreviewCache = null;
@@ -3610,7 +4681,8 @@ class LevelRepository {
           ),
         );
       }
-      _carPreviewCache = level;
+      _storeGalleryMemory(2, level);
+      unawaited(_writeGalleryToDisk(2, level));
       galleryPreviewEpoch.value++;
       return level;
     }();
@@ -3645,6 +4717,10 @@ class LevelRepository {
     required LevelModel Function((int, int)) isolateEntry,
     required LevelModel Function({int levelNumber, int seed}) builder,
   }) async {
+    await _ensureGalleryPrefs();
+    final fromDisk = _cachedGalleryBoard(galleryLevel);
+    if (fromDisk != null) return fromDisk;
+
     final cached = _galleryVisualCache[galleryLevel];
     if (cached != null && _galleryDenseCacheOk(cached)) return cached;
     _galleryVisualCache.remove(galleryLevel);
@@ -3660,7 +4736,8 @@ class LevelRepository {
         }
         return compute(isolateEntry, (levelNumber, seed));
       });
-      _galleryVisualCache[galleryLevel] = level;
+      _storeGalleryMemory(galleryLevel, level);
+      unawaited(_writeGalleryToDisk(galleryLevel, level));
       galleryPreviewEpoch.value++;
       return level;
     }();
@@ -4283,7 +5360,657 @@ class LevelRepository {
     );
   }
 
-  /// Gallery Levels 1–50 share this switch; 1 stays the nested heart loader.
+  static Future<LevelModel> loadOctagonPatternPreviewLevel({
+    int levelNumber = kOctagonPatternLevelId,
+    int seed = 51,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 51,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _octagonPatternPreviewIsolateEntry,
+      builder: buildOctagonPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadStadiumPatternPreviewLevel({
+    int levelNumber = kStadiumPatternLevelId,
+    int seed = 52,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 52,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _stadiumPatternPreviewIsolateEntry,
+      builder: buildStadiumPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadFlowerPatternPreviewLevel({
+    int levelNumber = kFlowerPatternLevelId,
+    int seed = 53,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 53,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _flowerPatternPreviewIsolateEntry,
+      builder: buildFlowerPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadInfinityPatternPreviewLevel({
+    int levelNumber = kInfinityPatternLevelId,
+    int seed = 54,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 54,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _infinityPatternPreviewIsolateEntry,
+      builder: buildInfinityPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadOvalPatternPreviewLevel({
+    int levelNumber = kOvalPatternLevelId,
+    int seed = 55,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 55,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _ovalPatternPreviewIsolateEntry,
+      builder: buildOvalPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadFishPatternPreviewLevel({
+    int levelNumber = kFishPatternLevelId,
+    int seed = 56,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 56,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _fishPatternPreviewIsolateEntry,
+      builder: buildFishPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadButterflyPatternPreviewLevel({
+    int levelNumber = kButterflyPatternLevelId,
+    int seed = 57,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 57,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _butterflyPatternPreviewIsolateEntry,
+      builder: buildButterflyPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadSparrowPatternPreviewLevel({
+    int levelNumber = kSparrowPatternLevelId,
+    int seed = 58,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 58,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _sparrowPatternPreviewIsolateEntry,
+      builder: buildSparrowPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadKittenPatternPreviewLevel({
+    int levelNumber = kKittenPatternLevelId,
+    int seed = 59,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 59,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _kittenPatternPreviewIsolateEntry,
+      builder: buildKittenPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadDeerPatternPreviewLevel({
+    int levelNumber = kDeerPatternLevelId,
+    int seed = 60,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 60,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _deerPatternPreviewIsolateEntry,
+      builder: buildDeerPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadPandaPatternPreviewLevel({
+    int levelNumber = kPandaPatternLevelId,
+    int seed = 61,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 61,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _pandaPatternPreviewIsolateEntry,
+      builder: buildPandaPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadKoalaPatternPreviewLevel({
+    int levelNumber = kKoalaPatternLevelId,
+    int seed = 62,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 62,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _koalaPatternPreviewIsolateEntry,
+      builder: buildKoalaPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadHorsePatternPreviewLevel({
+    int levelNumber = kHorsePatternLevelId,
+    int seed = 63,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 63,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _horsePatternPreviewIsolateEntry,
+      builder: buildHorsePatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadGiraffePatternPreviewLevel({
+    int levelNumber = kGiraffePatternLevelId,
+    int seed = 64,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 64,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _giraffePatternPreviewIsolateEntry,
+      builder: buildGiraffePatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadMonkeyPatternPreviewLevel({
+    int levelNumber = kMonkeyPatternLevelId,
+    int seed = 65,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 65,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _monkeyPatternPreviewIsolateEntry,
+      builder: buildMonkeyPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadSquirrelPatternPreviewLevel({
+    int levelNumber = kSquirrelPatternLevelId,
+    int seed = 66,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 66,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _squirrelPatternPreviewIsolateEntry,
+      builder: buildSquirrelPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadTurtlePatternPreviewLevel({
+    int levelNumber = kTurtlePatternLevelId,
+    int seed = 67,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 67,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _turtlePatternPreviewIsolateEntry,
+      builder: buildTurtlePatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadWolfPatternPreviewLevel({
+    int levelNumber = kWolfPatternLevelId,
+    int seed = 68,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 68,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _wolfPatternPreviewIsolateEntry,
+      builder: buildWolfPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadTigerPatternPreviewLevel({
+    int levelNumber = kTigerPatternLevelId,
+    int seed = 69,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 69,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _tigerPatternPreviewIsolateEntry,
+      builder: buildTigerPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadZebraPatternPreviewLevel({
+    int levelNumber = kZebraPatternLevelId,
+    int seed = 70,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 70,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _zebraPatternPreviewIsolateEntry,
+      builder: buildZebraPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadKangarooPatternPreviewLevel({
+    int levelNumber = kKangarooPatternLevelId,
+    int seed = 71,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 71,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _kangarooPatternPreviewIsolateEntry,
+      builder: buildKangarooPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadHedgehogPatternPreviewLevel({
+    int levelNumber = kHedgehogPatternLevelId,
+    int seed = 72,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 72,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _hedgehogPatternPreviewIsolateEntry,
+      builder: buildHedgehogPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadEaglePatternPreviewLevel({
+    int levelNumber = kEaglePatternLevelId,
+    int seed = 73,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 73,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _eaglePatternPreviewIsolateEntry,
+      builder: buildEaglePatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadFlamingoPatternPreviewLevel({
+    int levelNumber = kFlamingoPatternLevelId,
+    int seed = 74,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 74,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _flamingoPatternPreviewIsolateEntry,
+      builder: buildFlamingoPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadPenguinPatternPreviewLevel({
+    int levelNumber = kPenguinPatternLevelId,
+    int seed = 75,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 75,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _penguinPatternPreviewIsolateEntry,
+      builder: buildPenguinPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadSwanPatternPreviewLevel({
+    int levelNumber = kSwanPatternLevelId,
+    int seed = 76,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 76,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _swanPatternPreviewIsolateEntry,
+      builder: buildSwanPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadRoosterPatternPreviewLevel({
+    int levelNumber = kRoosterPatternLevelId,
+    int seed = 77,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 77,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _roosterPatternPreviewIsolateEntry,
+      builder: buildRoosterPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadHummingbirdPatternPreviewLevel({
+    int levelNumber = kHummingbirdPatternLevelId,
+    int seed = 78,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 78,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _hummingbirdPatternPreviewIsolateEntry,
+      builder: buildHummingbirdPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadOstrichPatternPreviewLevel({
+    int levelNumber = kOstrichPatternLevelId,
+    int seed = 79,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 79,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _ostrichPatternPreviewIsolateEntry,
+      builder: buildOstrichPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadConvertiblePatternPreviewLevel({
+    int levelNumber = kConvertiblePatternLevelId,
+    int seed = 80,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 80,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _convertiblePatternPreviewIsolateEntry,
+      builder: buildConvertiblePatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadRaceCarPatternPreviewLevel({
+    int levelNumber = kRaceCarPatternLevelId,
+    int seed = 81,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 81,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _raceCarPatternPreviewIsolateEntry,
+      builder: buildRaceCarPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadPickupTruckPatternPreviewLevel({
+    int levelNumber = kPickupTruckPatternLevelId,
+    int seed = 82,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 82,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _pickupTruckPatternPreviewIsolateEntry,
+      builder: buildPickupTruckPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadTaxiPatternPreviewLevel({
+    int levelNumber = kTaxiPatternLevelId,
+    int seed = 83,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 83,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _taxiPatternPreviewIsolateEntry,
+      builder: buildTaxiPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadBusPatternPreviewLevel({
+    int levelNumber = kBusPatternLevelId,
+    int seed = 84,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 84,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _busPatternPreviewIsolateEntry,
+      builder: buildBusPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadBmxPatternPreviewLevel({
+    int levelNumber = kBmxPatternLevelId,
+    int seed = 85,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 85,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _bmxPatternPreviewIsolateEntry,
+      builder: buildBmxPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadMountainBikePatternPreviewLevel({
+    int levelNumber = kMountainBikePatternLevelId,
+    int seed = 86,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 86,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _mountainBikePatternPreviewIsolateEntry,
+      builder: buildMountainBikePatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadVespaPatternPreviewLevel({
+    int levelNumber = kVespaPatternLevelId,
+    int seed = 87,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 87,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _vespaPatternPreviewIsolateEntry,
+      builder: buildVespaPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadTricyclePatternPreviewLevel({
+    int levelNumber = kTricyclePatternLevelId,
+    int seed = 88,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 88,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _tricyclePatternPreviewIsolateEntry,
+      builder: buildTricyclePatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadDiamondPatternPreviewLevel({
+    int levelNumber = kDiamondPatternLevelId,
+    int seed = 89,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 89,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _diamondPatternPreviewIsolateEntry,
+      builder: buildDiamondPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadHexagonPatternPreviewLevel({
+    int levelNumber = kHexagonPatternLevelId,
+    int seed = 90,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 90,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _hexagonPatternPreviewIsolateEntry,
+      builder: buildHexagonPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadTrianglePatternPreviewLevel({
+    int levelNumber = kTrianglePatternLevelId,
+    int seed = 91,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 91,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _trianglePatternPreviewIsolateEntry,
+      builder: buildTrianglePatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadPentagonPatternPreviewLevel({
+    int levelNumber = kPentagonPatternLevelId,
+    int seed = 92,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 92,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _pentagonPatternPreviewIsolateEntry,
+      builder: buildPentagonPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadPineapplePatternPreviewLevel({
+    int levelNumber = kPineapplePatternLevelId,
+    int seed = 93,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 93,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _pineapplePatternPreviewIsolateEntry,
+      builder: buildPineapplePatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadOrangePatternPreviewLevel({
+    int levelNumber = kOrangePatternLevelId,
+    int seed = 94,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 94,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _orangePatternPreviewIsolateEntry,
+      builder: buildOrangePatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadCherryPatternPreviewLevel({
+    int levelNumber = kCherryPatternLevelId,
+    int seed = 95,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 95,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _cherryPatternPreviewIsolateEntry,
+      builder: buildCherryPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadPearPatternPreviewLevel({
+    int levelNumber = kPearPatternLevelId,
+    int seed = 96,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 96,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _pearPatternPreviewIsolateEntry,
+      builder: buildPearPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadMangoPatternPreviewLevel({
+    int levelNumber = kMangoPatternLevelId,
+    int seed = 97,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 97,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _mangoPatternPreviewIsolateEntry,
+      builder: buildMangoPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadHalfMoonPatternPreviewLevel({
+    int levelNumber = kHalfMoonPatternLevelId,
+    int seed = 98,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 98,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _halfMoonPatternPreviewIsolateEntry,
+      builder: buildHalfMoonPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadHotAirBalloonPatternPreviewLevel({
+    int levelNumber = kHotAirBalloonPatternLevelId,
+    int seed = 99,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 99,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _hotAirBalloonPatternPreviewIsolateEntry,
+      builder: buildHotAirBalloonPatternPreviewLevel,
+    );
+  }
+
+  static Future<LevelModel> loadRocketPatternPreviewLevel({
+    int levelNumber = kRocketPatternLevelId,
+    int seed = 100,
+  }) {
+    return _loadVisualGalleryPattern(
+      galleryLevel: 100,
+      levelNumber: levelNumber,
+      seed: seed,
+      isolateEntry: _rocketPatternPreviewIsolateEntry,
+      builder: buildRocketPatternPreviewLevel,
+    );
+  }
+
+  /// Gallery Levels 1–100 share this switch; 1 stays the nested heart loader.
   static Future<LevelModel> loadGalleryPatternPreviewLevel(int galleryLevel) {
     return switch (galleryLevel) {
       1 => loadHeartPatternPreviewLevel(),
@@ -4336,6 +6063,56 @@ class LevelRepository {
       48 => loadFullMoonPatternPreviewLevel(),
       49 => loadGliderPatternPreviewLevel(),
       50 => loadFoxPatternPreviewLevel(),
+      51 => loadOctagonPatternPreviewLevel(),
+      52 => loadStadiumPatternPreviewLevel(),
+      53 => loadFlowerPatternPreviewLevel(),
+      54 => loadInfinityPatternPreviewLevel(),
+      55 => loadOvalPatternPreviewLevel(),
+      56 => loadFishPatternPreviewLevel(),
+      57 => loadButterflyPatternPreviewLevel(),
+      58 => loadSparrowPatternPreviewLevel(),
+      59 => loadKittenPatternPreviewLevel(),
+      60 => loadDeerPatternPreviewLevel(),
+      61 => loadPandaPatternPreviewLevel(),
+      62 => loadKoalaPatternPreviewLevel(),
+      63 => loadHorsePatternPreviewLevel(),
+      64 => loadGiraffePatternPreviewLevel(),
+      65 => loadMonkeyPatternPreviewLevel(),
+      66 => loadSquirrelPatternPreviewLevel(),
+      67 => loadTurtlePatternPreviewLevel(),
+      68 => loadWolfPatternPreviewLevel(),
+      69 => loadTigerPatternPreviewLevel(),
+      70 => loadZebraPatternPreviewLevel(),
+      71 => loadKangarooPatternPreviewLevel(),
+      72 => loadHedgehogPatternPreviewLevel(),
+      73 => loadEaglePatternPreviewLevel(),
+      74 => loadFlamingoPatternPreviewLevel(),
+      75 => loadPenguinPatternPreviewLevel(),
+      76 => loadSwanPatternPreviewLevel(),
+      77 => loadRoosterPatternPreviewLevel(),
+      78 => loadHummingbirdPatternPreviewLevel(),
+      79 => loadOstrichPatternPreviewLevel(),
+      80 => loadConvertiblePatternPreviewLevel(),
+      81 => loadRaceCarPatternPreviewLevel(),
+      82 => loadPickupTruckPatternPreviewLevel(),
+      83 => loadTaxiPatternPreviewLevel(),
+      84 => loadBusPatternPreviewLevel(),
+      85 => loadBmxPatternPreviewLevel(),
+      86 => loadMountainBikePatternPreviewLevel(),
+      87 => loadVespaPatternPreviewLevel(),
+      88 => loadTricyclePatternPreviewLevel(),
+      89 => loadDiamondPatternPreviewLevel(),
+      90 => loadHexagonPatternPreviewLevel(),
+      91 => loadTrianglePatternPreviewLevel(),
+      92 => loadPentagonPatternPreviewLevel(),
+      93 => loadPineapplePatternPreviewLevel(),
+      94 => loadOrangePatternPreviewLevel(),
+      95 => loadCherryPatternPreviewLevel(),
+      96 => loadPearPatternPreviewLevel(),
+      97 => loadMangoPatternPreviewLevel(),
+      98 => loadHalfMoonPatternPreviewLevel(),
+      99 => loadHotAirBalloonPatternPreviewLevel(),
+      100 => loadRocketPatternPreviewLevel(),
       _ => Future.error(
           StateError('No Patterns preview for gallery level $galleryLevel'),
         ),
@@ -4343,15 +6120,16 @@ class LevelRepository {
   }
 
   static LevelModel? peekGalleryPatternPreviewLevel(int galleryLevel) {
-    if (galleryLevel == 1) return _heartPreviewCache;
-    if (galleryLevel == 2) {
-      final car = _carPreviewCache;
-      if (car == null || !_galleryDenseCacheOk(car)) return null;
-      return car;
-    }
-    final cached = _galleryVisualCache[galleryLevel];
-    if (cached == null || !_galleryDenseCacheOk(cached)) return null;
-    return cached;
+    final memory = _peekGalleryMemory(galleryLevel);
+    if (memory != null) return memory;
+    final fromDisk = _takeGalleryFromDisk(galleryLevel);
+    if (fromDisk != null) return fromDisk;
+    unawaited(_ensureGalleryPrefs().then((_) {
+      if (_takeGalleryFromDisk(galleryLevel) != null) {
+        galleryPreviewEpoch.value++;
+      }
+    }));
+    return null;
   }
 
   static void notifyGalleryViewportChanged() {
@@ -4360,9 +6138,10 @@ class LevelRepository {
 
   /// Queue one visible gallery maze at a time so opening Patterns does not
   /// freeze the UI. Play-screen [loadGalleryPatternPreviewLevel] still jumps
-  /// the same inflight cache.
+  /// the same inflight cache. Disk hits skip generation entirely.
   static void scheduleGalleryPreview(int galleryLevel) {
-    if (galleryLevel < 1 || galleryLevel > 50) return;
+    if (galleryLevel < 1 || galleryLevel > 100) return;
+    unawaited(_ensureGalleryPrefs());
     if (peekGalleryPatternPreviewLevel(galleryLevel) != null) return;
     _scheduledGalleryPreviews.add(galleryLevel);
     _pumpGalleryPreviews();
@@ -4370,25 +6149,39 @@ class LevelRepository {
 
   static void _pumpGalleryPreviews() {
     if (_galleryPreviewPumping) return;
-    int? next;
-    final ordered = _scheduledGalleryPreviews.toList()..sort();
-    for (final id in ordered) {
-      if (peekGalleryPatternPreviewLevel(id) != null) {
-        _scheduledGalleryPreviews.remove(id);
-        continue;
-      }
-      next = id;
-      break;
-    }
-    if (next == null) return;
-    final id = next;
     _galleryPreviewPumping = true;
-    loadGalleryPatternPreviewLevel(id).whenComplete(() {
-      _scheduledGalleryPreviews.remove(id);
-      _galleryPreviewPumping = false;
-      galleryPreviewEpoch.value++;
-      _pumpGalleryPreviews();
-    });
+    () async {
+      await _ensureGalleryPrefs();
+      int? next;
+      final ordered = _scheduledGalleryPreviews.toList()..sort();
+      for (final id in ordered) {
+        if (peekGalleryPatternPreviewLevel(id) != null) {
+          _scheduledGalleryPreviews.remove(id);
+          continue;
+        }
+        next = id;
+        break;
+      }
+      if (next == null) {
+        _galleryPreviewPumping = false;
+        return;
+      }
+      final id = next;
+      final fromDisk = _takeGalleryFromDisk(id);
+      if (fromDisk != null) {
+        _scheduledGalleryPreviews.remove(id);
+        _galleryPreviewPumping = false;
+        galleryPreviewEpoch.value++;
+        _pumpGalleryPreviews();
+        return;
+      }
+      loadGalleryPatternPreviewLevel(id).whenComplete(() {
+        _scheduledGalleryPreviews.remove(id);
+        _galleryPreviewPumping = false;
+        galleryPreviewEpoch.value++;
+        _pumpGalleryPreviews();
+      });
+    }();
   }
 
   /// Daily puzzles are calendar-seeded (one unique board per day).

@@ -26,6 +26,7 @@ class ArrowTile extends StatefulWidget {
     this.entranceIndex = 0,
     this.playEntrance = false,
     this.colorOverride,
+    this.boldFactor = 1.0,
   });
 
   final ArrowModel arrow;
@@ -51,6 +52,9 @@ class ArrowTile extends StatefulWidget {
 
   /// When set, used instead of the theme default stroke color.
   final Color? colorOverride;
+
+  /// Stroke/head scale. `1.0` is campaign/Daily. Custom boards pass `> 1`.
+  final double boldFactor;
 
   /// Default arrow stroke in light theme (#0E1726).
   static const Color referenceArrowColor = Color(0xFF0E1726);
@@ -525,7 +529,8 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
     // this used before — thinned toward that reference while keeping a
     // slightly higher floor/ceiling for touch-target legibility on mobile.
     // Dense / large grids (daily ~100 arrows): thinner stroke so board stays readable.
-    final strokeWidth = (cell * 0.15).clamp(1.6, 4.0);
+    final strokeWidth = (cell * 0.15 * widget.boldFactor)
+        .clamp(1.6, 4.0 * widget.boldFactor);
     final multi = widget.arrow.isMultiCell;
 
     return AnimatedBuilder(
@@ -596,6 +601,7 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
                 color: paintColor,
                 strokeWidth: strokeWidth,
                 direction: widget.arrow.direction,
+                boldFactor: widget.boldFactor,
               ),
             ),
           );
@@ -629,6 +635,7 @@ class _ArrowTileState extends State<ArrowTile> with TickerProviderStateMixin {
                       color: paintColor,
                       strokeWidth: strokeWidth,
                       direction: widget.arrow.direction,
+                      boldFactor: widget.boldFactor,
                     ),
                   ),
                 ),
@@ -714,12 +721,14 @@ class ArrowPolylinePainter extends CustomPainter {
     required this.color,
     required this.direction,
     this.strokeWidth = 5,
+    this.boldFactor = 1.0,
   });
 
   final List<Offset> points;
   final Color color;
   final ArrowDirection direction;
   final double strokeWidth;
+  final double boldFactor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -737,7 +746,7 @@ class ArrowPolylinePainter extends CustomPainter {
       ..isAntiAlias = true;
 
     final tip = points.last;
-    final headLen = (strokeWidth * 2.6).clamp(7.0, 13.0);
+    final headLen = (strokeWidth * 2.6).clamp(7.0, 13.0 * boldFactor);
     final unit = tip - points[points.length - 2];
     final len = unit.distance;
     final dir = len == 0 ? Offset.zero : unit / len;
@@ -793,6 +802,7 @@ class ArrowPolylinePainter extends CustomPainter {
     if (oldDelegate.color != color ||
         oldDelegate.direction != direction ||
         oldDelegate.strokeWidth != strokeWidth ||
+        oldDelegate.boldFactor != boldFactor ||
         oldDelegate.points.length != points.length) {
       return true;
     }
@@ -811,6 +821,7 @@ class ArrowPathPainter extends CustomPainter {
     required this.color,
     required this.direction,
     this.strokeWidth = 5,
+    this.boldFactor = 1.0,
   });
 
   final Offset tip;
@@ -818,6 +829,7 @@ class ArrowPathPainter extends CustomPainter {
   final Color color;
   final ArrowDirection direction;
   final double strokeWidth;
+  final double boldFactor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -829,7 +841,7 @@ class ArrowPathPainter extends CustomPainter {
       ..strokeCap = StrokeCap.butt
       ..isAntiAlias = true;
 
-    final headLen = (strokeWidth * 2.6).clamp(7.0, 13.0);
+    final headLen = (strokeWidth * 2.6).clamp(7.0, 13.0 * boldFactor);
     final unit = tip - tail;
     final len = unit.distance;
     final dir = len == 0 ? Offset.zero : unit / len;
@@ -874,6 +886,7 @@ class ArrowPathPainter extends CustomPainter {
     return oldDelegate.color != color ||
         oldDelegate.direction != direction ||
         oldDelegate.strokeWidth != strokeWidth ||
+        oldDelegate.boldFactor != boldFactor ||
         oldDelegate.tip != tip ||
         oldDelegate.tail != tail;
   }

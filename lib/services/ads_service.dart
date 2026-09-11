@@ -41,6 +41,9 @@ abstract class AdsService {
   /// After campaign clear — interstitial every 5 clears.
   Future<void> onLevelCleared(BuildContext context);
 
+  /// After Custom level clear — same interstitial cadence as campaign.
+  Future<void> onCustomLevelCleared(BuildContext context);
+
   /// After daily challenge clear — no ads on Daily.
   Future<void> onDailyChallengeCleared(BuildContext context);
 

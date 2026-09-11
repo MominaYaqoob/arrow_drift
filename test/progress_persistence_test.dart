@@ -169,7 +169,7 @@ void main() {
     expect(ProgressRepository.coinBalanceTick.value, 0);
   });
 
-  test('custom levels: 1 always unlocked; 2–50 persist; 51+ never', () async {
+  test('custom levels: 1 always unlocked; 2–100 persist; 101+ never', () async {
     final prefs = await SharedPreferences.getInstance();
     final repo = ProgressRepository(prefs);
 
@@ -177,6 +177,10 @@ void main() {
     expect(repo.isPatternLevelUnlocked(2), isFalse);
     expect(repo.isPatternLevelUnlocked(50), isFalse);
     expect(repo.isPatternLevelUnlocked(51), isFalse);
+    expect(repo.isPatternLevelUnlocked(83), isFalse);
+    expect(repo.isPatternLevelUnlocked(84), isFalse);
+    expect(repo.isPatternLevelUnlocked(100), isFalse);
+    expect(repo.isPatternLevelUnlocked(101), isFalse);
 
     await repo.unlockPatternLevel(2);
     expect(repo.isPatternLevelUnlocked(1), isTrue);
@@ -184,7 +188,16 @@ void main() {
     expect(repo.isPatternCompleted(2), isFalse);
 
     await repo.unlockPatternLevel(51);
-    expect(repo.isPatternLevelUnlocked(51), isFalse);
+    expect(repo.isPatternLevelUnlocked(51), isTrue);
+
+    await repo.unlockPatternLevel(84);
+    expect(repo.isPatternLevelUnlocked(84), isTrue);
+
+    await repo.unlockPatternLevel(100);
+    expect(repo.isPatternLevelUnlocked(100), isTrue);
+
+    await repo.unlockPatternLevel(101);
+    expect(repo.isPatternLevelUnlocked(101), isFalse);
   });
 
   test('Snapchat streak: last 4h of pending day is urgent', () async {

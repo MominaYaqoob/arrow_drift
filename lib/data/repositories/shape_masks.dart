@@ -1140,6 +1140,584 @@ List<List<bool>> generateFoxShapeMask(int gridSize) {
   });
 }
 
+/// Deer side-profile — body, neck, head, and thick antlers (no 1-cell tines).
+List<List<bool>> generateDeerShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final body = _inEllipse(nx, ny, -0.12, 0.28, 0.52, 0.32);
+    final rump = _inEllipse(nx, ny, -0.42, 0.18, 0.28, 0.26);
+    final neck = _inCapsule(nx, ny, 0.18, 0.08, 0.38, -0.28, 0.16);
+    final head = _inEllipse(nx, ny, 0.50, -0.32, 0.28, 0.20);
+    final snout = _inEllipse(nx, ny, 0.76, -0.26, 0.20, 0.13);
+    final ear = _inEllipse(nx, ny, 0.34, -0.52, 0.14, 0.16);
+    final antL = _inCapsule(nx, ny, 0.38, -0.46, 0.16, -0.88, 0.14);
+    final antR = _inCapsule(nx, ny, 0.56, -0.46, 0.74, -0.88, 0.14);
+    final tineL = _inCapsule(nx, ny, 0.24, -0.66, 0.04, -0.78, 0.13);
+    final tineR = _inCapsule(nx, ny, 0.66, -0.66, 0.88, -0.78, 0.13);
+    final legF = _inCapsule(nx, ny, 0.16, 0.48, 0.16, 0.88, 0.14);
+    final legB = _inCapsule(nx, ny, -0.38, 0.48, -0.42, 0.88, 0.14);
+    return body ||
+        rump ||
+        neck ||
+        head ||
+        snout ||
+        ear ||
+        antL ||
+        antR ||
+        tineL ||
+        tineR ||
+        legF ||
+        legB;
+  });
+}
+
+/// Panda face — round head with round ears on top (solid, no eye holes).
+List<List<bool>> generatePandaShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final face = _inEllipse(nx, ny, 0, 0.14, 0.58, 0.54);
+    final earL = _inEllipse(nx, ny, -0.46, -0.50, 0.28, 0.28);
+    final earR = _inEllipse(nx, ny, 0.46, -0.50, 0.28, 0.28);
+    final snout = _inEllipse(nx, ny, 0, 0.36, 0.32, 0.24);
+    return face || earL || earR || snout;
+  });
+}
+
+/// Koala face — oversized round ears on the sides of a round head.
+List<List<bool>> generateKoalaShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final face = _inEllipse(nx, ny, 0, 0.16, 0.50, 0.50);
+    final earL = _inEllipse(nx, ny, -0.58, -0.18, 0.38, 0.38);
+    final earR = _inEllipse(nx, ny, 0.58, -0.18, 0.38, 0.38);
+    final nose = _inEllipse(nx, ny, 0, 0.30, 0.24, 0.20);
+    return face || earL || earR || nose;
+  });
+}
+
+/// Horse head and mane — long muzzle, ear, thick mane down the neck.
+List<List<bool>> generateHorseShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final neck = _inEllipse(nx, ny, -0.28, 0.38, 0.30, 0.48);
+    final head = _inEllipse(nx, ny, 0.08, 0.02, 0.40, 0.30);
+    final muzzle = _inEllipse(nx, ny, 0.58, 0.16, 0.36, 0.20);
+    final jaw = _inEllipse(nx, ny, 0.42, 0.28, 0.28, 0.16);
+    final ear = _inCapsule(nx, ny, -0.06, -0.18, -0.16, -0.72, 0.14);
+    final mane = _inCapsule(nx, ny, -0.28, -0.12, -0.62, 0.72, 0.20);
+    return neck || head || muzzle || jaw || ear || mane;
+  });
+}
+
+/// Giraffe head and long neck — ossicones kept thick (not 1-cell nubs).
+List<List<bool>> generateGiraffeShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final neck = _inCapsule(nx, ny, -0.10, 0.78, 0.16, -0.12, 0.22);
+    final head = _inEllipse(nx, ny, 0.32, -0.28, 0.36, 0.22);
+    final muzzle = _inEllipse(nx, ny, 0.68, -0.18, 0.24, 0.14);
+    final ossL = _inCapsule(nx, ny, 0.16, -0.40, 0.10, -0.72, 0.14);
+    final ossR = _inCapsule(nx, ny, 0.38, -0.40, 0.44, -0.72, 0.14);
+    final ear = _inEllipse(nx, ny, 0.04, -0.46, 0.16, 0.14);
+    return neck || head || muzzle || ossL || ossR || ear;
+  });
+}
+
+/// Monkey face — round head, side ears, and a wide muzzle.
+List<List<bool>> generateMonkeyShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final face = _inEllipse(nx, ny, 0, 0.08, 0.52, 0.50);
+    final earL = _inEllipse(nx, ny, -0.62, 0.00, 0.26, 0.30);
+    final earR = _inEllipse(nx, ny, 0.62, 0.00, 0.26, 0.30);
+    final muzzle = _inEllipse(nx, ny, 0, 0.32, 0.38, 0.28);
+    return face || earL || earR || muzzle;
+  });
+}
+
+/// Squirrel — round body, small head, and a thick curling tail.
+List<List<bool>> generateSquirrelShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final body = _inEllipse(nx, ny, 0.08, 0.22, 0.38, 0.36);
+    final head = _inEllipse(nx, ny, 0.38, -0.18, 0.26, 0.24);
+    final ear = _inEllipse(nx, ny, 0.28, -0.42, 0.12, 0.16);
+    final t1 = _inCapsule(nx, ny, -0.18, 0.18, -0.62, -0.18, 0.18);
+    final t2 = _inCapsule(nx, ny, -0.62, -0.18, -0.38, -0.72, 0.18);
+    final t3 = _inCapsule(nx, ny, -0.38, -0.72, 0.08, -0.52, 0.16);
+    return body || head || ear || t1 || t2 || t3;
+  });
+}
+
+/// Turtle — dome shell, thick legs, and a short neck/head.
+List<List<bool>> generateTurtleShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final shell = _inEllipse(nx, ny, -0.04, 0.02, 0.62, 0.42);
+    final head = _inEllipse(nx, ny, 0.62, -0.08, 0.22, 0.18);
+    final neck = _inCapsule(nx, ny, 0.38, 0.02, 0.58, -0.04, 0.14);
+    final legFL = _inEllipse(nx, ny, 0.32, 0.42, 0.16, 0.16);
+    final legFR = _inEllipse(nx, ny, 0.52, 0.38, 0.14, 0.16);
+    final legBL = _inEllipse(nx, ny, -0.38, 0.42, 0.16, 0.16);
+    final legBR = _inEllipse(nx, ny, -0.58, 0.36, 0.14, 0.16);
+    return shell || head || neck || legFL || legFR || legBL || legBR;
+  });
+}
+
+/// Wolf head — pointed ears, ruff, and a longer snout than the fox.
+List<List<bool>> generateWolfShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final ruff = _inEllipse(nx, ny, 0, 0.18, 0.58, 0.50);
+    final face = _inEllipse(nx, ny, 0.08, 0.06, 0.42, 0.38);
+    final earL = _inCapsule(nx, ny, -0.22, -0.18, -0.32, -0.82, 0.14);
+    final earR = _inCapsule(nx, ny, 0.32, -0.18, 0.42, -0.82, 0.14);
+    final snout = _inTriangle(nx, ny, -0.12, 0.18, 0.42, 0.18, 0.28, 0.88);
+    return ruff || face || earL || earR || snout;
+  });
+}
+
+/// Tiger head — round face; stripe hints are edge bites only (no interior holes).
+List<List<bool>> generateTigerShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final face = _inEllipse(nx, ny, 0, 0.10, 0.58, 0.52);
+    final earL = _inEllipse(nx, ny, -0.42, -0.48, 0.22, 0.20);
+    final earR = _inEllipse(nx, ny, 0.42, -0.48, 0.22, 0.20);
+    final jowlL = _inEllipse(nx, ny, -0.42, 0.32, 0.22, 0.22);
+    final jowlR = _inEllipse(nx, ny, 0.42, 0.32, 0.22, 0.22);
+    final snout = _inEllipse(nx, ny, 0, 0.38, 0.28, 0.20);
+    final stripeA = _inEllipse(nx, ny, -0.78, -0.08, 0.16, 0.12);
+    final stripeB = _inEllipse(nx, ny, 0.78, -0.08, 0.16, 0.12);
+    final stripeC = _inEllipse(nx, ny, -0.62, 0.58, 0.16, 0.12);
+    final stripeD = _inEllipse(nx, ny, 0.62, 0.58, 0.16, 0.12);
+    final solid =
+        face || earL || earR || jowlL || jowlR || snout;
+    return solid && !stripeA && !stripeB && !stripeC && !stripeD;
+  });
+}
+
+/// Zebra side-profile — horse-like body with a thick upright mane (no stripe holes).
+List<List<bool>> generateZebraShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final body = _inEllipse(nx, ny, -0.08, 0.18, 0.52, 0.30);
+    final neck = _inCapsule(nx, ny, 0.22, 0.02, 0.42, -0.32, 0.16);
+    final head = _inEllipse(nx, ny, 0.58, -0.28, 0.28, 0.18);
+    final muzzle = _inEllipse(nx, ny, 0.82, -0.20, 0.18, 0.12);
+    final mane = _inCapsule(nx, ny, 0.18, -0.08, 0.32, -0.62, 0.16);
+    final maneTip = _inEllipse(nx, ny, 0.28, -0.68, 0.16, 0.14);
+    final ear = _inEllipse(nx, ny, 0.42, -0.52, 0.12, 0.14);
+    final legF = _inCapsule(nx, ny, 0.18, 0.40, 0.18, 0.88, 0.14);
+    final legB = _inCapsule(nx, ny, -0.38, 0.40, -0.42, 0.88, 0.14);
+    return body ||
+        neck ||
+        head ||
+        muzzle ||
+        mane ||
+        maneTip ||
+        ear ||
+        legF ||
+        legB;
+  });
+}
+
+/// Kangaroo — upright body, thick tail, and long hind feet.
+List<List<bool>> generateKangarooShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final body = _inEllipse(nx, ny, -0.02, 0.08, 0.32, 0.42);
+    final head = _inEllipse(nx, ny, 0.22, -0.42, 0.22, 0.20);
+    final ear = _inCapsule(nx, ny, 0.18, -0.52, 0.22, -0.82, 0.12);
+    final snout = _inEllipse(nx, ny, 0.42, -0.36, 0.16, 0.12);
+    final tail = _inCapsule(nx, ny, -0.22, 0.28, -0.78, 0.72, 0.16);
+    final foot = _inEllipse(nx, ny, 0.18, 0.72, 0.36, 0.16);
+    final arm = _inCapsule(nx, ny, 0.12, 0.02, 0.42, 0.18, 0.12);
+    return body || head || ear || snout || tail || foot || arm;
+  });
+}
+
+/// Hedgehog — oval body, snout, and outer spine bumps (no interior holes).
+List<List<bool>> generateHedgehogShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final body = _inEllipse(nx, ny, -0.08, 0.12, 0.58, 0.42);
+    final snout = _inEllipse(nx, ny, 0.58, 0.18, 0.28, 0.18);
+    final ear = _inEllipse(nx, ny, 0.28, -0.18, 0.12, 0.14);
+    final s1 = _inEllipse(nx, ny, -0.42, -0.38, 0.18, 0.18);
+    final s2 = _inEllipse(nx, ny, -0.08, -0.48, 0.18, 0.18);
+    final s3 = _inEllipse(nx, ny, 0.22, -0.38, 0.16, 0.16);
+    final s4 = _inEllipse(nx, ny, -0.68, -0.08, 0.16, 0.16);
+    return body || snout || ear || s1 || s2 || s3 || s4;
+  });
+}
+
+/// Eagle in flight — spread wings, body, and a hooked beak.
+List<List<bool>> generateEagleShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final body = _inEllipse(nx, ny, 0.04, 0.06, 0.28, 0.22);
+    final wingL = _inEllipse(nx, ny, -0.08, -0.08, 0.32, 0.78);
+    final wingR = _inEllipse(nx, ny, 0.12, 0.18, 0.28, 0.72);
+    final head = _inEllipse(nx, ny, 0.38, -0.12, 0.18, 0.16);
+    final beak = _inEllipse(nx, ny, 0.58, -0.06, 0.18, 0.10);
+    final tail = _inEllipse(nx, ny, -0.28, 0.18, 0.22, 0.16);
+    return body || wingL || wingR || head || beak || tail;
+  });
+}
+
+/// Flamingo standing — small body, S-curve neck, one thick leg.
+List<List<bool>> generateFlamingoShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final body = _inEllipse(nx, ny, -0.08, 0.08, 0.32, 0.22);
+    final n1 = _inCapsule(nx, ny, 0.12, -0.02, 0.28, -0.42, 0.13);
+    final n2 = _inCapsule(nx, ny, 0.28, -0.42, 0.08, -0.62, 0.13);
+    final head = _inEllipse(nx, ny, -0.02, -0.62, 0.16, 0.14);
+    final beak = _inEllipse(nx, ny, -0.22, -0.58, 0.16, 0.10);
+    final leg = _inCapsule(nx, ny, -0.02, 0.28, 0.02, 0.92, 0.13);
+    final foot = _inEllipse(nx, ny, 0.12, 0.90, 0.16, 0.10);
+    return body || n1 || n2 || head || beak || leg || foot;
+  });
+}
+
+/// Penguin — upright oval, flippers, and a small beak.
+List<List<bool>> generatePenguinShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final body = _inEllipse(nx, ny, 0, 0.16, 0.42, 0.58);
+    final head = _inEllipse(nx, ny, 0, -0.48, 0.28, 0.26);
+    final beak = _inEllipse(nx, ny, 0.32, -0.46, 0.16, 0.10);
+    final flipL = _inEllipse(nx, ny, -0.42, 0.12, 0.16, 0.32);
+    final flipR = _inEllipse(nx, ny, 0.42, 0.12, 0.16, 0.32);
+    final footL = _inEllipse(nx, ny, -0.18, 0.78, 0.16, 0.12);
+    final footR = _inEllipse(nx, ny, 0.18, 0.78, 0.16, 0.12);
+    return body || head || beak || flipL || flipR || footL || footR;
+  });
+}
+
+/// Swan — large body and a curved S-neck.
+List<List<bool>> generateSwanShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final body = _inEllipse(nx, ny, -0.12, 0.22, 0.58, 0.36);
+    final n1 = _inCapsule(nx, ny, 0.28, 0.02, 0.48, -0.32, 0.14);
+    final n2 = _inCapsule(nx, ny, 0.48, -0.32, 0.22, -0.58, 0.14);
+    final head = _inEllipse(nx, ny, 0.12, -0.58, 0.18, 0.16);
+    final beak = _inEllipse(nx, ny, -0.08, -0.54, 0.16, 0.10);
+    final tail = _inEllipse(nx, ny, -0.62, 0.08, 0.22, 0.18);
+    return body || n1 || n2 || head || beak || tail;
+  });
+}
+
+/// Rooster — comb, wattles, and a fanned tail.
+List<List<bool>> generateRoosterShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final body = _inEllipse(nx, ny, -0.02, 0.18, 0.42, 0.32);
+    final head = _inEllipse(nx, ny, 0.32, -0.22, 0.22, 0.22);
+    final comb = _inEllipse(nx, ny, 0.32, -0.48, 0.18, 0.16);
+    final comb2 = _inEllipse(nx, ny, 0.48, -0.38, 0.14, 0.14);
+    final wattle = _inEllipse(nx, ny, 0.42, -0.08, 0.14, 0.14);
+    final beak = _inEllipse(nx, ny, 0.58, -0.18, 0.16, 0.10);
+    final t1 = _inEllipse(nx, ny, -0.48, -0.08, 0.28, 0.22);
+    final t2 = _inEllipse(nx, ny, -0.62, 0.18, 0.28, 0.22);
+    final t3 = _inEllipse(nx, ny, -0.48, 0.42, 0.26, 0.20);
+    return body ||
+        head ||
+        comb ||
+        comb2 ||
+        wattle ||
+        beak ||
+        t1 ||
+        t2 ||
+        t3;
+  });
+}
+
+/// Hummingbird — compact body, long beak, and thick blurred wings.
+List<List<bool>> generateHummingbirdShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final body = _inEllipse(nx, ny, -0.08, 0.08, 0.32, 0.22);
+    final head = _inEllipse(nx, ny, 0.28, -0.08, 0.18, 0.16);
+    final beak = _inCapsule(nx, ny, 0.42, -0.08, 0.92, -0.02, 0.12);
+    final wingU = _inEllipse(nx, ny, -0.12, -0.28, 0.28, 0.32);
+    final wingD = _inEllipse(nx, ny, -0.08, 0.32, 0.24, 0.28);
+    final tail = _inEllipse(nx, ny, -0.48, 0.18, 0.22, 0.16);
+    return body || head || beak || wingU || wingD || tail;
+  });
+}
+
+/// Ostrich — round body, long neck, small head, thick legs.
+List<List<bool>> generateOstrichShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final body = _inEllipse(nx, ny, -0.08, 0.28, 0.42, 0.32);
+    final neck = _inCapsule(nx, ny, 0.12, 0.02, 0.22, -0.52, 0.14);
+    final head = _inEllipse(nx, ny, 0.32, -0.62, 0.18, 0.16);
+    final beak = _inEllipse(nx, ny, 0.52, -0.58, 0.16, 0.10);
+    final legL = _inCapsule(nx, ny, -0.12, 0.52, -0.08, 0.92, 0.13);
+    final legR = _inCapsule(nx, ny, 0.12, 0.52, 0.16, 0.92, 0.13);
+    return body || neck || head || beak || legL || legR;
+  });
+}
+
+/// Convertible — low open-top body, short windshield, no tall cabin.
+List<List<bool>> generateConvertibleShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final body = nx >= -0.96 && nx <= 0.96 && ny >= 0.08 && ny <= 0.42;
+    final screen = nx >= -0.08 && nx <= 0.22 && ny >= -0.18 && ny <= 0.12;
+    final nose = nx >= 0.58 &&
+        nx <= 1.02 &&
+        ny >= 0.12 &&
+        ny <= 0.40 &&
+        (ny - 0.26).abs() <= 0.16;
+    final rear = nx <= -0.72 && nx >= -1.04 && ny >= 0.08 && ny <= 0.36;
+    final rearWheel =
+        (nx + 0.52) * (nx + 0.52) + (ny - 0.50) * (ny - 0.50) <= 0.20 * 0.20;
+    final frontWheel =
+        (nx - 0.50) * (nx - 0.50) + (ny - 0.50) * (ny - 0.50) <= 0.20 * 0.20;
+    return body || screen || nose || rear || rearWheel || frontWheel;
+  }, span: 2.05);
+}
+
+/// Race car — very low body with a rear spoiler.
+List<List<bool>> generateRaceCarShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final body = nx >= -0.98 && nx <= 0.98 && ny >= 0.12 && ny <= 0.36;
+    final canopy = nx >= -0.18 && nx <= 0.28 && ny >= -0.02 && ny <= 0.16;
+    final spoiler = _inCapsule(nx, ny, -0.92, -0.08, -0.62, -0.08, 0.12);
+    final strut = _inCapsule(nx, ny, -0.78, -0.02, -0.78, 0.16, 0.10);
+    final nose = nx >= 0.72 && nx <= 1.04 && ny >= 0.16 && ny <= 0.34;
+    final rearWheel =
+        (nx + 0.48) * (nx + 0.48) + (ny - 0.46) * (ny - 0.46) <= 0.18 * 0.18;
+    final frontWheel =
+        (nx - 0.52) * (nx - 0.52) + (ny - 0.46) * (ny - 0.46) <= 0.18 * 0.18;
+    return body || canopy || spoiler || strut || nose || rearWheel || frontWheel;
+  }, span: 2.05);
+}
+
+/// Pickup truck — tall cab and a lower open bed (solid silhouette, no hole).
+List<List<bool>> generatePickupTruckShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final cab = nx >= -0.92 && nx <= -0.12 && ny >= -0.42 && ny <= 0.42;
+    final bed = nx >= -0.18 && nx <= 0.92 && ny >= 0.08 && ny <= 0.42;
+    final gate = nx >= 0.78 && nx <= 0.96 && ny >= -0.08 && ny <= 0.42;
+    final rearWheel =
+        (nx + 0.52) * (nx + 0.52) + (ny - 0.52) * (ny - 0.52) <= 0.20 * 0.20;
+    final frontWheel =
+        (nx - 0.48) * (nx - 0.48) + (ny - 0.52) * (ny - 0.52) <= 0.20 * 0.20;
+    return cab || bed || gate || rearWheel || frontWheel;
+  }, span: 2.05);
+}
+
+/// Taxi — boxy sedan with a roof-sign bump.
+List<List<bool>> generateTaxiShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final cabin = nx >= -0.52 && nx <= 0.42 && ny >= -0.38 && ny <= 0.18;
+    final body = nx >= -0.92 && nx <= 0.92 && ny >= 0.02 && ny <= 0.42;
+    final sign = _inEllipse(nx, ny, -0.08, -0.48, 0.22, 0.14);
+    final rearWheel =
+        (nx + 0.50) * (nx + 0.50) + (ny - 0.52) * (ny - 0.52) <= 0.20 * 0.20;
+    final frontWheel =
+        (nx - 0.46) * (nx - 0.46) + (ny - 0.52) * (ny - 0.52) <= 0.20 * 0.20;
+    return cabin || body || sign || rearWheel || frontWheel;
+  }, span: 2.05);
+}
+
+bool _inRegularPolygon(
+  double nx,
+  double ny, {
+  required int sides,
+  double radius = 0.95,
+  double rotation = -pi / 2,
+}) {
+  if (sides < 3) return false;
+  final r = sqrt(nx * nx + ny * ny);
+  if (r < 1e-8) return true;
+  var ang = atan2(ny, nx) - rotation;
+  while (ang < 0) {
+    ang += 2 * pi;
+  }
+  final slice = 2 * pi / sides;
+  final a = (ang % slice) - slice / 2;
+  final denom = cos(a);
+  if (denom.abs() < 1e-6) return false;
+  final edgeR = radius * cos(pi / sides) / denom;
+  return r <= edgeR;
+}
+
+/// City bus — long boxy cabin, distinct from van/truck.
+List<List<bool>> generateBusShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final box = nx >= -0.96 && nx <= 0.96 && ny >= -0.42 && ny <= 0.38;
+    final skirt = nx >= -0.92 && nx <= 0.92 && ny >= 0.28 && ny <= 0.48;
+    final rearWheel =
+        (nx + 0.52) * (nx + 0.52) + (ny - 0.52) * (ny - 0.52) <= 0.18 * 0.18;
+    final midWheel =
+        (nx + 0.08) * (nx + 0.08) + (ny - 0.52) * (ny - 0.52) <= 0.18 * 0.18;
+    final frontWheel =
+        (nx - 0.58) * (nx - 0.58) + (ny - 0.52) * (ny - 0.52) <= 0.18 * 0.18;
+    return box || skirt || rearWheel || midWheel || frontWheel;
+  }, span: 2.05);
+}
+
+/// BMX — small wheels and a high straight frame.
+List<List<bool>> generateBmxShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final rear = _inEllipse(nx, ny, -0.42, 0.38, 0.22, 0.22);
+    final front = _inEllipse(nx, ny, 0.42, 0.38, 0.22, 0.22);
+    final top = _inCapsule(nx, ny, -0.28, -0.08, 0.28, -0.08, 0.12);
+    final down = _inCapsule(nx, ny, -0.22, 0.02, 0.32, 0.32, 0.12);
+    final seat = _inCapsule(nx, ny, -0.28, -0.08, -0.28, 0.32, 0.12);
+    final fork = _inCapsule(nx, ny, 0.28, -0.08, 0.42, 0.38, 0.12);
+    final bars = _inEllipse(nx, ny, 0.28, -0.22, 0.18, 0.10);
+    final pad = _inEllipse(nx, ny, -0.28, -0.18, 0.14, 0.10);
+    return rear || front || top || down || seat || fork || bars || pad;
+  });
+}
+
+/// Mountain bike — larger wheels and a sloping top tube.
+List<List<bool>> generateMountainBikeShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final rear = _inEllipse(nx, ny, -0.52, 0.32, 0.28, 0.28);
+    final front = _inEllipse(nx, ny, 0.52, 0.32, 0.28, 0.28);
+    final top = _inCapsule(nx, ny, -0.32, -0.12, 0.28, 0.02, 0.12);
+    final down = _inCapsule(nx, ny, -0.18, 0.08, 0.38, 0.28, 0.12);
+    final stay = _inCapsule(nx, ny, -0.32, -0.04, -0.48, 0.28, 0.12);
+    final fork = _inCapsule(nx, ny, 0.32, 0.00, 0.52, 0.32, 0.12);
+    final bars = _inEllipse(nx, ny, 0.28, -0.16, 0.18, 0.10);
+    final seat = _inEllipse(nx, ny, -0.32, -0.22, 0.14, 0.10);
+    return rear || front || top || down || stay || fork || bars || seat;
+  });
+}
+
+/// Vespa — rounded body panel, step-through, small wheels.
+List<List<bool>> generateVespaShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final rear = _inEllipse(nx, ny, -0.32, 0.32, 0.24, 0.24);
+    final front = _inEllipse(nx, ny, 0.48, 0.32, 0.22, 0.22);
+    final panel = _inEllipse(nx, ny, -0.18, 0.04, 0.38, 0.32);
+    final floor = _inCapsule(nx, ny, -0.12, 0.22, 0.28, 0.24, 0.14);
+    final stem = _inCapsule(nx, ny, 0.28, 0.18, 0.42, -0.22, 0.13);
+    final shield = _inEllipse(nx, ny, 0.32, -0.08, 0.18, 0.22);
+    final bars = _inEllipse(nx, ny, 0.42, -0.28, 0.18, 0.10);
+    return rear || front || panel || floor || stem || shield || bars;
+  });
+}
+
+/// Tricycle — two rear wheels and one front (side view with offset rear).
+List<List<bool>> generateTricycleShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final rearA = _inEllipse(nx, ny, -0.48, 0.38, 0.24, 0.24);
+    final rearB = _inEllipse(nx, ny, -0.28, 0.42, 0.20, 0.20);
+    final front = _inEllipse(nx, ny, 0.48, 0.34, 0.22, 0.22);
+    final deck = _inCapsule(nx, ny, -0.38, 0.12, 0.22, 0.16, 0.16);
+    final stem = _inCapsule(nx, ny, 0.22, 0.12, 0.38, -0.18, 0.13);
+    final bars = _inEllipse(nx, ny, 0.38, -0.24, 0.16, 0.10);
+    final seat = _inEllipse(nx, ny, -0.22, -0.08, 0.18, 0.12);
+    return rearA || rearB || front || deck || stem || bars || seat;
+  });
+}
+
+/// Filled diamond (rhombus), denser than a thin outline.
+List<List<bool>> generateDiamondShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    return nx.abs() + ny.abs() <= 0.98;
+  });
+}
+
+/// Regular hexagon, pointy-top.
+List<List<bool>> generateHexagonShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    return _inRegularPolygon(nx, ny, sides: 6, radius: 0.98, rotation: 0);
+  });
+}
+
+/// Thick filled triangle pointing up.
+List<List<bool>> generateTriangleShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    return _inTriangle(nx, ny, 0, -0.98, 1.02, 0.92, -1.02, 0.92);
+  });
+}
+
+/// Regular pentagon, point-up.
+List<List<bool>> generatePentagonShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    return _inRegularPolygon(nx, ny, sides: 5, radius: 0.98);
+  });
+}
+
+/// Pineapple — oval body plus a leafy crown (no interior holes).
+List<List<bool>> generatePineappleShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final body = _inEllipse(nx, ny, 0, 0.22, 0.48, 0.58);
+    final l1 = _inEllipse(nx, ny, 0, -0.52, 0.16, 0.28);
+    final l2 = _inEllipse(nx, ny, -0.22, -0.42, 0.16, 0.26);
+    final l3 = _inEllipse(nx, ny, 0.22, -0.42, 0.16, 0.26);
+    final l4 = _inEllipse(nx, ny, -0.10, -0.68, 0.12, 0.20);
+    final l5 = _inEllipse(nx, ny, 0.10, -0.68, 0.12, 0.20);
+    return body || l1 || l2 || l3 || l4 || l5;
+  });
+}
+
+/// Orange — round fruit with a short stem and leaf.
+List<List<bool>> generateOrangeShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final fruit = _inEllipse(nx, ny, 0, 0.10, 0.72, 0.70);
+    final stem = _inCapsule(nx, ny, 0.0, -0.58, 0.06, -0.82, 0.10);
+    final leaf = _inEllipse(nx, ny, 0.28, -0.68, 0.24, 0.12);
+    return fruit || stem || leaf;
+  });
+}
+
+/// Pair of cherries joined at the stem.
+List<List<bool>> generateCherryShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final left = _inEllipse(nx, ny, -0.32, 0.28, 0.38, 0.38);
+    final right = _inEllipse(nx, ny, 0.32, 0.38, 0.38, 0.38);
+    final stemL = _inCapsule(nx, ny, -0.22, -0.02, 0.04, -0.62, 0.12);
+    final stemR = _inCapsule(nx, ny, 0.22, 0.06, 0.04, -0.62, 0.12);
+    final knot = _inEllipse(nx, ny, 0.04, -0.68, 0.12, 0.12);
+    return left || right || stemL || stemR || knot;
+  });
+}
+
+/// Pear — smaller top bulb on a larger base.
+List<List<bool>> generatePearShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final base = _inEllipse(nx, ny, 0, 0.32, 0.52, 0.52);
+    final top = _inEllipse(nx, ny, 0, -0.22, 0.32, 0.38);
+    final stem = _inCapsule(nx, ny, 0.0, -0.52, 0.08, -0.82, 0.10);
+    final leaf = _inEllipse(nx, ny, 0.24, -0.68, 0.20, 0.10);
+    return base || top || stem || leaf;
+  });
+}
+
+/// Mango — offset kidney ellipse with a small stem.
+List<List<bool>> generateMangoShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final body = _inEllipse(nx, ny, -0.06, 0.12, 0.58, 0.70);
+    final belly = _inEllipse(nx, ny, 0.18, 0.28, 0.42, 0.48);
+    final stem = _inCapsule(nx, ny, -0.08, -0.58, -0.18, -0.82, 0.10);
+    final leaf = _inEllipse(nx, ny, 0.12, -0.72, 0.22, 0.10);
+    return body || belly || stem || leaf;
+  });
+}
+
+/// Half moon — filled semicircle, thicker than the crescent cutout.
+List<List<bool>> generateHalfMoonShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final disc = nx * nx + ny * ny <= 0.90 * 0.90;
+    return disc && nx >= -0.06;
+  });
+}
+
+/// Hot-air balloon — round envelope, thick tethers, and a basket.
+List<List<bool>> generateHotAirBalloonShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final balloon = _inEllipse(nx, ny, 0, -0.22, 0.58, 0.58);
+    final throat = _inEllipse(nx, ny, 0, 0.32, 0.22, 0.16);
+    final tetherL = _inCapsule(nx, ny, -0.18, 0.38, -0.16, 0.62, 0.12);
+    final tetherR = _inCapsule(nx, ny, 0.18, 0.38, 0.16, 0.62, 0.12);
+    final basket = nx.abs() <= 0.28 && ny >= 0.58 && ny <= 0.92;
+    return balloon || throat || tetherL || tetherR || basket;
+  });
+}
+
+/// Rocket — nose cone, body, and side fins.
+List<List<bool>> generateRocketShapeMask(int gridSize) {
+  return _maskFromPredicate(gridSize, (nx, ny) {
+    final body = _inEllipse(nx, ny, 0, 0.18, 0.28, 0.62);
+    final nose = _inTriangle(nx, ny, 0, -0.92, 0.28, -0.22, -0.28, -0.22);
+    final finL = _inTriangle(nx, ny, -0.18, 0.42, -0.62, 0.88, -0.18, 0.78);
+    final finR = _inTriangle(nx, ny, 0.18, 0.42, 0.62, 0.88, 0.18, 0.78);
+    final finC = _inTriangle(nx, ny, -0.16, 0.62, 0.16, 0.62, 0, 0.98);
+    return body || nose || finL || finR || finC;
+  });
+}
+
 void debugPrintHeartMask(int gridSize) {
   final mask = generateHeartShapeMask(gridSize);
   for (final row in mask) {

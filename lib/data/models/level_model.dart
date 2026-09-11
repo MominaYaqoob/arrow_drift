@@ -77,4 +77,46 @@ class LevelModel {
 
   @override
   int get hashCode => levelNumber.hashCode;
+
+  Map<String, dynamic> toJson() => {
+        'levelNumber': levelNumber,
+        'gridRows': gridRows,
+        'gridCols': gridCols,
+        'heartsAllowed': heartsAllowed,
+        'hintsAllowed': hintsAllowed,
+        'difficulty': difficulty.name,
+        'arrows': [for (final arrow in arrows) arrow.toJson()],
+        if (shapeMask != null)
+          'shapeMask': [
+            for (final row in shapeMask!) [for (final cell in row) cell],
+          ],
+      };
+
+  factory LevelModel.fromJson(Map<String, dynamic> json) {
+    final rawArrows = json['arrows'] as List? ?? const [];
+    final rawMask = json['shapeMask'];
+    List<List<bool>>? shapeMask;
+    if (rawMask is List) {
+      shapeMask = [
+        for (final row in rawMask)
+          if (row is List) [for (final cell in row) cell == true],
+      ];
+    }
+    final difficultyName = json['difficulty'] as String?;
+    return LevelModel(
+      levelNumber: (json['levelNumber'] as num).toInt(),
+      gridRows: (json['gridRows'] as num).toInt(),
+      gridCols: (json['gridCols'] as num).toInt(),
+      heartsAllowed: (json['heartsAllowed'] as num?)?.toInt() ?? 3,
+      hintsAllowed: (json['hintsAllowed'] as num?)?.toInt() ?? 2,
+      difficulty: difficultyName == null
+          ? LevelDifficulty.easy
+          : LevelDifficulty.values.byName(difficultyName),
+      arrows: [
+        for (final arrow in rawArrows)
+          ArrowModel.fromJson(Map<String, dynamic>.from(arrow as Map)),
+      ],
+      shapeMask: shapeMask,
+    );
+  }
 }

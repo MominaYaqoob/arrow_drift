@@ -74,7 +74,10 @@ class _MainShellState extends ConsumerState<MainShell> {
             decoration: BoxDecoration(
               color: isDark ? colors.surface : Colors.white,
               borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: colors.border, width: 1),
+              border: Border.all(
+                color: colors.accentTeal.withValues(alpha: isDark ? 0.38 : 0.32),
+                width: 1.2,
+              ),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.06),
@@ -84,7 +87,7 @@ class _MainShellState extends ConsumerState<MainShell> {
               ],
             ),
             child: SizedBox(
-              height: 64,
+              height: 68,
               child: Row(
                 children: [
                   _ShellTab(
@@ -138,24 +141,46 @@ class _ShellTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
-    final color = selected ? colors.accentTeal : colors.secondaryText;
+    final muted = colors.secondaryText;
 
     return Expanded(
       child: InkWell(
         onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 22, color: color),
-            const SizedBox(height: 4),
+            Container(
+              width: selected ? 40 : 28,
+              height: selected ? 40 : 28,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: selected ? colors.accentTeal : Colors.transparent,
+                boxShadow: selected
+                    ? [
+                        BoxShadow(
+                          color: colors.accentTeal.withValues(alpha: 0.4),
+                          blurRadius: 10,
+                          offset: const Offset(0, 2),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Icon(
+                icon,
+                size: selected ? 22 : 20,
+                color: selected ? Colors.white : muted,
+              ),
+            ),
+            const SizedBox(height: 2),
             Text(
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: AppTextStyles.label(
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                color: color,
+                color: selected ? colors.accentTeal : muted,
               ),
             ),
           ],

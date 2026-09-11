@@ -27,7 +27,7 @@ import 'package:arrow_drift/features/gameplay/widgets/out_of_lives_overlay.dart'
 import 'package:arrow_drift/features/gameplay/widgets/pause_sheet.dart';
 import 'package:arrow_drift/services/ads_service.dart';
 
-/// Pattern preview. Levels 1–50 are real nested puzzles via GameController.
+/// Pattern preview. Levels 1–100 are real nested puzzles via GameController.
 class PatternPreviewScreen extends ConsumerStatefulWidget {
   const PatternPreviewScreen({super.key, required this.levelNumber});
 
@@ -45,10 +45,10 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
   bool _loading = true;
   Object? _loadError;
 
-  /// Loaded nested LevelModel for playable levels 1–50.
+  /// Loaded nested LevelModel for playable levels 1–100.
   LevelModel? _playLevel;
 
-  /// Static board fallback when no loader exists (levels 51+).
+  /// Static board fallback when no loader exists (levels 101+).
   GameState? _previewState;
 
   String? _highlightedArrowId;
@@ -62,12 +62,12 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
   bool _didPersistWin = false;
 
   bool get _isPlayable =>
-      widget.levelNumber >= 1 && widget.levelNumber <= 50;
+      widget.levelNumber >= 1 && widget.levelNumber <= 100;
 
   @override
   void initState() {
     super.initState();
-    if (widget.levelNumber >= 1 && widget.levelNumber <= 50) {
+    if (widget.levelNumber >= 1 && widget.levelNumber <= 100) {
       _loadBoard();
     } else {
       _loading = false;
@@ -197,6 +197,8 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
     _didPersistWin = true;
     final repo = await ref.read(progressRepositoryProvider.future);
     await repo.markPatternCompleted(widget.levelNumber);
+    await repo.addCoins(30);
+    if (mounted) await AdsService.instance.onCustomLevelCleared(context);
     ref.read(patternProgressTickProvider.notifier).update((tick) => tick + 1);
   }
 
@@ -290,7 +292,7 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
   }
 
   void _onNextPattern() {
-    if (widget.levelNumber >= 50) {
+    if (widget.levelNumber >= 100) {
       _leaveToPatterns();
       return;
     }
@@ -349,7 +351,7 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
                   ),
                 )
               else ...[
-                const SizedBox(height: 10),
+                const SizedBox(height: 6),
                 GameStatsRow(
                   remainingArrows: preview.arrows
                       .where((a) => !a.isRemoved)
@@ -358,7 +360,7 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
                   heartsAllowed: 3,
                   difficulty: preview.level.difficulty,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 6),
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -367,6 +369,8 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
                       onArrowTap: (_) {},
                       boardZoomed: _boardZoomed,
                       hideDots: true,
+                      patternBoardChrome: true,
+                      boldFactor: 1.65,
                       boardBackgroundOverride: colors.background,
                       arrowColorResolver: (_, index) {
                         final palette = [
@@ -389,7 +393,7 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
                     setState(() => _boardZoomed = !_boardZoomed);
                   },
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 6),
               ],
             ],
           ),
@@ -448,14 +452,14 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
                     onBack: _leaveToPatterns,
                     onSettings: () => _openPauseSheet(level),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 6),
                   GameStatsRow(
                     remainingArrows: remainingArrows,
                     heartsLeft: gameState.heartsLeft,
                     heartsAllowed: level.heartsAllowed,
                     difficulty: level.difficulty,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 6),
                   Expanded(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -469,6 +473,8 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
                         wrongBumpCells:
                             Map<String, double>.from(_wrongBumpCells),
                         hideDots: true,
+                        patternBoardChrome: true,
+                        boldFactor: 1.65,
                         boardBackgroundOverride: colors.background,
                         arrowColorResolver: (_, index) {
                           final palette = [
@@ -490,7 +496,7 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
                     onWatchAdForHint: () => _onWatchAdForHint(level),
                     onGridBooster: _onGridBooster,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 6),
                 ],
               ),
             ),

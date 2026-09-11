@@ -6,6 +6,7 @@ import 'package:arrow_drift/core/theme/app_theme.dart';
 import 'package:arrow_drift/data/models/arrow_model.dart';
 import 'package:arrow_drift/data/models/game_state.dart';
 import 'package:arrow_drift/features/gameplay/widgets/arrow_tile.dart';
+import 'package:arrow_drift/features/gameplay/widgets/pattern_board_chrome.dart';
 
 /// Zoomable board (pinch 2-finger + Grid Booster) with cream/white card, dots, arrows.
 class GameBoard extends StatelessWidget {
@@ -26,6 +27,8 @@ class GameBoard extends StatelessWidget {
     this.boardBackgroundOverride,
     this.arrowColorResolver,
     this.hideDots = false,
+    this.patternBoardChrome = false,
+    this.boldFactor = 1.0,
   });
 
   final GameState gameState;
@@ -60,6 +63,12 @@ class GameBoard extends StatelessWidget {
 
   /// When true, skip the dotted grid behind arrows. Default false (campaign/Daily).
   final bool hideDots;
+
+  /// Custom-level only: teal rim, inner shadow, faint texture. Campaign/Daily off.
+  final bool patternBoardChrome;
+
+  /// Stroke/head scale. `1.0` is campaign/Daily. Custom boards pass `> 1`.
+  final double boldFactor;
 
   bool get _plain => plainTutorial || plainBoard;
 
@@ -150,6 +159,7 @@ class GameBoard extends StatelessWidget {
                       gameState.arrows[i],
                       i,
                     ),
+                    boldFactor: boldFactor,
                     onTap: () => onArrowTap(gameState.arrows[i].id),
                   ),
                 ),
@@ -254,6 +264,7 @@ class GameBoard extends StatelessWidget {
 
         // Card padding: 14 + ~8 = 22 so arrows aren't cramped at the edges.
         const cardPad = 22.0;
+        final tealRim = colors.accentTeal.withValues(alpha: isDark ? 0.3 : 0.35);
         final cardChild = AnimatedScale(
           scale: zoom,
           duration: const Duration(milliseconds: 300),
@@ -261,13 +272,14 @@ class GameBoard extends StatelessWidget {
           child: Container(
             width: boardWidth + cardPad * 2,
             height: boardHeight + cardPad * 2,
-            padding: const EdgeInsets.all(cardPad),
             decoration: BoxDecoration(
               color: boardBg,
               borderRadius: BorderRadius.circular(22),
-              border: isDark
-                  ? Border.all(color: colors.border.withValues(alpha: 0.6))
-                  : null,
+              border: patternBoardChrome
+                  ? Border.all(color: tealRim, width: 1.5)
+                  : isDark
+                      ? Border.all(color: colors.border.withValues(alpha: 0.6))
+                      : null,
               boxShadow: [
                 BoxShadow(
                   color: boardShadow,
@@ -277,7 +289,85 @@ class GameBoard extends StatelessWidget {
               ],
             ),
             clipBehavior: Clip.antiAlias,
-            child: boardStack,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (patternBoardChrome)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        painter: PatternBoardWashPainter.theme(
+                          isDark: isDark,
+                          accentTeal: colors.accentTeal,
+                          accentTealSoft: colors.accentTealSoft,
+                          gold: colors.gold,
+                          radius: 22,
+                        ),
+                      ),
+                    ),
+                  ),
+                if (patternBoardChrome)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: RepaintBoundary(
+                        child: CustomPaint(
+                          painter: PatternBoardTexturePainter(
+                            color: isDark
+                                ? colors.accentTeal.withValues(alpha: 0.04)
+                                : const Color(0xFF2A2A2A).withValues(alpha: 0.04),
+                            seed: gameState.level.levelNumber,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (patternBoardChrome)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        painter: PatternBoardVignettePainter(
+                          color: Colors.black.withValues(
+                            alpha: isDark ? 0.055 : 0.035,
+                          ),
+                          radius: 22,
+                        ),
+                      ),
+                    ),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.all(cardPad),
+                  child: boardStack,
+                ),
+                if (patternBoardChrome)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        painter: PatternBoardInnerShadowPainter(
+                          color: Colors.black.withValues(
+                            alpha: isDark ? 0.08 : 0.05,
+                          ),
+                          extent: 12,
+                          radius: 22,
+                        ),
+                      ),
+                    ),
+                  ),
+                if (patternBoardChrome)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        painter: PatternBoardHairlinePainter(
+                          color: isDark
+                              ? Colors.black.withValues(alpha: 0.08)
+                              : const Color(0xFF2A2A2A).withValues(alpha: 0.12),
+                          radius: 22,
+                          inset: 3.5,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         );
 

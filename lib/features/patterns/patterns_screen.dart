@@ -10,52 +10,63 @@ import 'package:arrow_drift/data/models/level_model.dart';
 import 'package:arrow_drift/data/repositories/level_repository.dart';
 import 'package:arrow_drift/data/repositories/progress_repository.dart';
 import 'package:arrow_drift/features/gameplay/widgets/arrow_tile.dart';
+import 'package:arrow_drift/features/gameplay/widgets/pattern_board_chrome.dart';
 import 'package:arrow_drift/features/patterns/pattern_preview_screen.dart';
 import 'package:arrow_drift/features/patterns/unlock_level_sheet.dart';
 
-/// Custom level gallery — 2×2 on first screen, then +2 rows via View more.
+/// Custom level gallery — 2×2 pages with Previous/Next.
 class PatternsScreen extends ConsumerStatefulWidget {
   const PatternsScreen({super.key});
 
   static const String routePath = '/patterns';
 
-  static const int _unlockedThrough = 50;
-  static const int _initialCount = 4;
-  static const int _morePageSize = 2;
+  static const int _unlockedThrough = 100;
+  static const int _pageSize = 4;
 
   @override
   ConsumerState<PatternsScreen> createState() => _PatternsScreenState();
 }
 
 class _PatternsScreenState extends ConsumerState<PatternsScreen> {
-  int _visibleCount = PatternsScreen._initialCount;
-  bool _loadingMore = false;
+  int _pageIndex = 0;
 
-  bool get _hasMoreCustomLevels =>
-      _visibleCount < PatternsScreen._unlockedThrough;
+  int get _startLevel => 1 + _pageIndex * PatternsScreen._pageSize;
 
-  Future<void> _showNextPage() async {
-    if (!_hasMoreCustomLevels || _loadingMore) return;
-    final from = _visibleCount + 1;
-    final to = (_visibleCount + PatternsScreen._morePageSize)
-        .clamp(0, PatternsScreen._unlockedThrough);
-    setState(() => _loadingMore = true);
-    try {
-      for (var level = from; level <= to; level++) {
-        if (!mounted) return;
-        try {
-          await LevelRepository.loadGalleryPatternPreviewLevel(level);
-        } catch (_) {
-          // Reveal the page anyway; the card can keep its own spinner.
-        }
-      }
-    } finally {
-      if (!mounted) return;
-      setState(() {
-        _visibleCount = to;
-        _loadingMore = false;
-      });
+  int get _endLevel => (_startLevel + PatternsScreen._pageSize - 1)
+      .clamp(1, PatternsScreen._unlockedThrough);
+
+  int get _itemCount => _endLevel - _startLevel + 1;
+
+  int get _pageCount =>
+      (PatternsScreen._unlockedThrough + PatternsScreen._pageSize - 1) ~/
+      PatternsScreen._pageSize;
+
+  bool get _canGoPrev => _pageIndex > 0;
+
+  bool get _canGoNext =>
+      _startLevel + PatternsScreen._pageSize <= PatternsScreen._unlockedThrough;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageIndex = 0;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _schedulePagePreviews();
+    });
+  }
+
+  void _schedulePagePreviews() {
+    for (var level = _startLevel; level <= _endLevel; level++) {
+      LevelRepository.scheduleGalleryPreview(level);
     }
+  }
+
+  void _goToPage(int index) {
+    if (index < 0) return;
+    final start = 1 + index * PatternsScreen._pageSize;
+    if (start > PatternsScreen._unlockedThrough) return;
+    setState(() => _pageIndex = index);
+    _schedulePagePreviews();
   }
 
   @override
@@ -63,115 +74,297 @@ class _PatternsScreenState extends ConsumerState<PatternsScreen> {
     final colors = context.appColors;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    final wellColor = Color.lerp(
+      colors.surface2,
+      colors.gold,
+      isDark ? 0.10 : 0.07,
+    )!;
+
     return Scaffold(
       body: DecoratedBox(
         decoration: BoxDecoration(
-          color: colors.background,
-          gradient: RadialGradient(
-            center: const Alignment(0.85, -0.85),
-            radius: 1.1,
-            colors: [
-              colors.accentTeal.withValues(alpha: isDark ? 0.14 : 0.14),
-              colors.background,
-            ],
-            stops: const [0.0, 0.45],
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: isDark
+                ? const [
+                    Color(0xFF0A3F38),
+                    Color(0xFF0A3F38),
+                    Color(0xFF121A26),
+                    Color(0xFF0A101A),
+                  ]
+                : const [
+                    Color(0xFF0B5E52),
+                    Color(0xFF0B5E52),
+                    Color(0xFFEAF6F2),
+                    Color(0xFFF6F3EC),
+                  ],
+            stops: const [0.0, 0.16, 0.16, 1.0],
           ),
         ),
         child: SafeArea(
           bottom: false,
           child: Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+              const _CustomHero(),
+              Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(6, 4, 6, 0),
+                    child: Stack(
                       children: [
-                        Expanded(
-                          child: Text(
-                            'Custom Levels',
-                            style: AppTextStyles.heading(
-                              fontSize: 28,
-                              fontWeight: FontWeight.w700,
-                              color: colors.primaryText,
-                              letterSpacing: -0.4,
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: CustomPaint(
+                              painter: _ParchmentOrnamentPainter(
+                                color: colors.gold.withValues(
+                                  alpha: isDark ? 0.12 : 0.20,
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                        const _CoinBalancePill(),
+                        Positioned.fill(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 22),
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: wellColor,
+                                borderRadius: BorderRadius.circular(24),
+                                border: Border.all(
+                                  color: colors.gold.withValues(
+                                    alpha: isDark ? 0.32 : 0.42,
+                                  ),
+                                  width: 1.3,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: colors.gold.withValues(
+                                      alpha: isDark ? 0.12 : 0.10,
+                                    ),
+                                    blurRadius: 16,
+                                    offset: const Offset(0, 6),
+                                  ),
+                                ],
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(22.5),
+                                child: Stack(
+                                  children: [
+                                    Positioned.fill(
+                                      child: IgnorePointer(
+                                        child: CustomPaint(
+                                          painter:
+                                              PatternBoardInnerShadowPainter(
+                                            color: Colors.black.withValues(
+                                              alpha: isDark ? 0.28 : 0.08,
+                                            ),
+                                            extent: 18,
+                                            radius: 22.5,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        12,
+                                        12,
+                                        12,
+                                        12,
+                                      ),
+                                      child: LayoutBuilder(
+                                        builder: (context, constraints) {
+                                          const cols = 2;
+                                          const spacing = 10.0;
+                                          const fitRows = 2;
+                                          final colW =
+                                              (constraints.maxWidth - spacing) /
+                                                  cols;
+                                          final rowH =
+                                              (constraints.maxHeight -
+                                                      spacing) /
+                                                  fitRows;
+                                          final aspect =
+                                              (colW / rowH).clamp(0.01, 10.0);
+                                          return NotificationListener<
+                                              ScrollNotification>(
+                                            onNotification: (notification) {
+                                              if (notification.depth == 0) {
+                                                LevelRepository
+                                                    .notifyGalleryViewportChanged();
+                                              }
+                                              return false;
+                                            },
+                                            child: GridView.builder(
+                                              physics:
+                                                  const NeverScrollableScrollPhysics(),
+                                              padding: EdgeInsets.zero,
+                                              gridDelegate:
+                                                  SliverGridDelegateWithFixedCrossAxisCount(
+                                                crossAxisCount: cols,
+                                                crossAxisSpacing: spacing,
+                                                mainAxisSpacing: spacing,
+                                                childAspectRatio: aspect,
+                                              ),
+                                              itemCount: _itemCount,
+                                              addAutomaticKeepAlives: false,
+                                              itemBuilder: (context, index) {
+                                                final level =
+                                                    _startLevel + index;
+                                                return _PatternCard(
+                                                  key: ValueKey(level),
+                                                  level: level,
+                                                  locked: level >
+                                                      PatternsScreen
+                                                          ._unlockedThrough,
+                                                );
+                                              },
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: _GalleryPageButton(
+                            icon: Icons.chevron_left_rounded,
+                            enabled: _canGoPrev,
+                            goldFace: true,
+                            onTap: () => _goToPage(_pageIndex - 1),
+                          ),
+                        ),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: _GalleryPageButton(
+                            icon: Icons.chevron_right_rounded,
+                            enabled: _canGoNext,
+                            goldFace: false,
+                            onTap: () => _goToPage(_pageIndex + 1),
+                          ),
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Collect shapes as you clear custom levels',
-                      style: AppTextStyles.body(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: colors.secondaryText,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+                  child: _GalleryPageIndicator(
+                    pageIndex: _pageIndex,
+                    pageCount: _pageCount,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+    );
+  }
+}
+
+class _CustomHero extends StatelessWidget {
+  const _CustomHero();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment(-0.4, -1),
+          end: Alignment(0.6, 1),
+          colors: [Color(0xFF14A089), Color(0xFF0B5E52), Color(0xFF08463D)],
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
               Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      const cols = 2;
-                      const spacing = 12.0;
-                      const fitRows = 2;
-                      final colW =
-                          (constraints.maxWidth - spacing) / cols;
-                      final rowH =
-                          (constraints.maxHeight - spacing) / fitRows;
-                      final aspect =
-                          (colW / rowH).clamp(0.01, 10.0);
-                      return NotificationListener<ScrollNotification>(
-                        onNotification: (notification) {
-                          if (notification.depth == 0) {
-                            LevelRepository.notifyGalleryViewportChanged();
-                          }
-                          return false;
-                        },
-                        child: GridView.builder(
-                          physics: _visibleCount <= PatternsScreen._initialCount
-                              ? const NeverScrollableScrollPhysics()
-                              : const BouncingScrollPhysics(),
-                          padding: EdgeInsets.zero,
-                          gridDelegate:
-                              SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: cols,
-                            crossAxisSpacing: spacing,
-                            mainAxisSpacing: spacing,
-                            childAspectRatio: aspect,
-                          ),
-                          itemCount: _visibleCount,
-                          addAutomaticKeepAlives: false,
-                          itemBuilder: (context, index) {
-                            final level = index + 1;
-                            return _PatternCard(
-                              level: level,
-                              locked:
-                                  level > PatternsScreen._unlockedThrough,
-                            );
-                          },
-                        ),
-                      );
-                    },
+                child: Text(
+                  'Custom Levels',
+                  style: AppTextStyles.heading(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    letterSpacing: -0.4,
                   ),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: _UnlockPromoBanner(
-                  showMore: _hasMoreCustomLevels,
-                  loading: _loadingMore,
-                  onViewMore: _showNextPage,
-                ),
-              ),
+              const _CoinBalancePill(),
             ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Collect shapes as you clear custom levels',
+            style: AppTextStyles.body(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: Colors.white.withValues(alpha: 0.82),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LevelCaptionChip extends StatelessWidget {
+  const _LevelCaptionChip({required this.level, required this.locked});
+
+  final int level;
+  final bool locked;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: locked ? colors.border : colors.accentTealDeep,
+            width: 1.5,
+          ),
+          gradient: locked
+              ? null
+              : LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color.lerp(colors.accentTeal, Colors.white, 0.28)!,
+                    colors.accentTeal,
+                    colors.accentTealDeep,
+                  ],
+                  stops: const [0.0, 0.48, 1.0],
+                ),
+          color: locked ? colors.surface2 : null,
+          boxShadow: locked
+              ? null
+              : [
+                  BoxShadow(
+                    color: colors.accentTeal.withValues(alpha: 0.28),
+                    blurRadius: 5,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+        ),
+        child: Text(
+          'Level $level',
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppTextStyles.label(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            color: locked ? colors.secondaryText : Colors.white,
           ),
         ),
       ),
@@ -186,22 +379,45 @@ class _CoinBalancePill extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(progressRepositoryProvider);
     final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return ValueListenableBuilder<int>(
       valueListenable: ProgressRepository.coinBalanceTick,
       builder: (context, balance, _) {
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(
-            color: colors.surface,
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: colors.border, width: 0.8),
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color.lerp(colors.gold, Colors.white, 0.38)!,
+                colors.gold,
+                Color.lerp(colors.gold, const Color(0xFF8A6A1E), 0.35)!,
+              ],
+            ),
+            border: Border.all(
+              color: Color.lerp(colors.gold, const Color(0xFF8A6A1E), 0.45)!,
+              width: 1.3,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: colors.gold.withValues(alpha: 0.35),
+                blurRadius: 8,
+              ),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.12),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Text(
             '🪙 $balance',
             style: AppTextStyles.label(
               fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: colors.gold,
+              fontWeight: FontWeight.w800,
+              color: const Color(0xFF3D2E12),
             ),
           ),
         );
@@ -211,7 +427,7 @@ class _CoinBalancePill extends ConsumerWidget {
 }
 
 class _PatternCard extends ConsumerWidget {
-  const _PatternCard({required this.level, required this.locked});
+  const _PatternCard({super.key, required this.level, required this.locked});
 
   final int level;
   final bool locked;
@@ -260,134 +476,127 @@ class _PatternCard extends ConsumerWidget {
   ) {
     final repo = ref.read(progressRepositoryProvider).valueOrNull;
     final coinUnlocked = repo?.isPatternLevelUnlocked(level) ?? level == 1;
-    final borderColor = locked ? colors.border : colors.accentTealDeep;
+    final playable = !locked && coinUnlocked;
+    final bronze = Color.lerp(colors.gold, const Color(0xFF8A6A1E), 0.45)!;
+    final rim = locked
+        ? colors.border
+        : (playable ? colors.gold : bronze);
+    final paper = isDark ? colors.surface2 : colors.background;
+    final goldHair = colors.gold.withValues(alpha: isDark ? 0.28 : 0.42);
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: () => _onTap(context, ref),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         child: Ink(
           decoration: BoxDecoration(
-            color: colors.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: borderColor,
-              width: 5,
-            ),
+            color: paper,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: rim, width: playable ? 1.7 : 1.4),
             boxShadow: [
-              BoxShadow(
-                color: (locked ? colors.border : colors.accentTealDeep)
-                    .withValues(alpha: isDark ? 0.28 : 0.18),
-                blurRadius: 12,
-                offset: const Offset(0, 6),
-              ),
+              if (playable) ...[
+                BoxShadow(
+                  color: colors.gold.withValues(alpha: isDark ? 0.42 : 0.48),
+                  blurRadius: 16,
+                  spreadRadius: 0.6,
+                ),
+                BoxShadow(
+                  color: colors.gold.withValues(alpha: isDark ? 0.22 : 0.28),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ] else
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.10),
+                  blurRadius: 10,
+                  offset: const Offset(0, 5),
+                ),
             ],
           ),
           child: Padding(
-            padding: const EdgeInsets.all(5),
+            padding: const EdgeInsets.all(2),
             child: DecoratedBox(
               decoration: BoxDecoration(
-                color: isDark ? colors.surface2 : colors.background,
-                borderRadius: BorderRadius.circular(11),
-                border: Border.all(
-                  color: locked
-                      ? colors.border
-                      : colors.accentTeal.withValues(alpha: 0.28),
-                  width: 1.2,
-                ),
+                color: paper,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: goldHair, width: 1),
               ),
-              child: Stack(
-                clipBehavior: Clip.antiAlias,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
-                    child: Column(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(15),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Column(
                       children: [
-                        Text(
-                          'Level $level',
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.label(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: locked
-                                ? colors.secondaryText
-                                : colors.primaryText,
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+                          child: _LevelCaptionChip(
+                            level: level,
+                            locked: locked,
                           ),
                         ),
-                        const SizedBox(height: 6),
                         Expanded(
-                          child: locked
-                              ? const SizedBox.expand()
-                              : level <= 50
-                                  ? _PlayBoardCardPreview(galleryLevel: level)
-                                  : _DummyMazePreview(
-                                      seed: level,
-                                      teal: colors.accentTeal,
-                                      tealDeep: colors.accentTealDeep,
-                                    ),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(5, 0, 5, 6),
+                            child: locked
+                                ? const SizedBox.expand()
+                                : level <= 100
+                                    ? _PlayBoardCardPreview(
+                                        galleryLevel: level,
+                                      )
+                                    : _DummyMazePreview(
+                                        seed: level,
+                                        teal: colors.accentTeal,
+                                        tealDeep: colors.accentTealDeep,
+                                      ),
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                  if (locked)
-                    Positioned.fill(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: colors.surface2.withValues(alpha: 0.9),
-                          borderRadius: BorderRadius.circular(11),
-                        ),
-                        child: Column(
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.only(top: 8),
-                              child: Text(
-                                'Level $level',
-                                textAlign: TextAlign.center,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: AppTextStyles.label(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  color: colors.secondaryText,
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: Icon(
-                                Icons.lock_rounded,
-                                size: 32,
-                                color: colors.secondaryText,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  else if (!coinUnlocked)
-                    Positioned(
-                      right: 6,
-                      bottom: 6,
-                      child: Container(
-                        width: 22,
-                        height: 22,
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? Colors.black.withValues(alpha: 0.4)
-                              : colors.surface2,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: colors.border, width: 0.6),
-                        ),
-                        child: Icon(
-                          Icons.lock_rounded,
-                          size: 12,
-                          color: colors.gold,
+                    IgnorePointer(
+                      child: CustomPaint(
+                        painter: PatternBoardInnerShadowPainter(
+                          color: Colors.black.withValues(
+                            alpha: isDark ? 0.16 : 0.05,
+                          ),
+                          extent: 8,
+                          radius: 15,
                         ),
                       ),
                     ),
-                ],
+                    if (locked)
+                      Positioned.fill(
+                        child: ColoredBox(
+                          color: colors.surface2.withValues(alpha: 0.92),
+                          child: Column(
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+                                child: _LevelCaptionChip(
+                                  level: level,
+                                  locked: true,
+                                ),
+                              ),
+                              Expanded(
+                                child: Icon(
+                                  Icons.lock_rounded,
+                                  size: 32,
+                                  color: colors.secondaryText,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else if (!coinUnlocked)
+                      const Positioned(
+                        right: 8,
+                        bottom: 8,
+                        child: _CornerLockBadge(),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -477,35 +686,111 @@ class _PlayBoardCardPreviewState extends State<_PlayBoardCardPreview> {
     ];
     final level = _level;
     final boardColor = colors.background;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final tealRim = colors.accentTeal.withValues(alpha: isDark ? 0.3 : 0.35);
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: ColoredBox(
+    return Container(
+      decoration: BoxDecoration(
         color: boardColor,
-        child: level == null
-            ? Center(
-                child: SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.2,
-                    color: colors.accentTeal,
-                  ),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: tealRim, width: 1),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: PatternBoardWashPainter.theme(
+                  isDark: isDark,
+                  accentTeal: colors.accentTeal,
+                  accentTealSoft: colors.accentTealSoft,
+                  gold: colors.gold,
+                  radius: 8,
                 ),
-              )
-            : Padding(
-                padding: const EdgeInsets.all(4),
-                child: RepaintBoundary(
-                  child: CustomPaint(
-                    painter: _PreviewArrowsPainter(
-                      level: level,
-                      palette: palette,
-                      playBoardStyle: true,
-                    ),
-                    child: const SizedBox.expand(),
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: IgnorePointer(
+              child: RepaintBoundary(
+                child: CustomPaint(
+                  painter: PatternBoardTexturePainter(
+                    color: isDark
+                        ? colors.accentTeal.withValues(alpha: 0.04)
+                        : const Color(0xFF2A2A2A).withValues(alpha: 0.04),
+                    seed: widget.galleryLevel,
+                    densityScale: 0.45,
+                    radiusScale: 0.55,
                   ),
                 ),
               ),
+            ),
+          ),
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: PatternBoardVignettePainter(
+                  color: Colors.black.withValues(
+                    alpha: isDark ? 0.055 : 0.035,
+                  ),
+                  radius: 8,
+                ),
+              ),
+            ),
+          ),
+          if (level == null)
+            Center(
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.2,
+                  color: colors.accentTeal,
+                ),
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.all(4),
+              child: RepaintBoundary(
+                child: CustomPaint(
+                  painter: _PreviewArrowsPainter(
+                    level: level,
+                    palette: palette,
+                    playBoardStyle: true,
+                    fitToShape: true,
+                  ),
+                  child: const SizedBox.expand(),
+                ),
+              ),
+            ),
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: PatternBoardInnerShadowPainter(
+                  color: Colors.black.withValues(alpha: isDark ? 0.08 : 0.05),
+                  extent: 7,
+                  radius: 8,
+                ),
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: PatternBoardHairlinePainter(
+                  color: isDark
+                      ? Colors.black.withValues(alpha: 0.08)
+                      : const Color(0xFF2A2A2A).withValues(alpha: 0.12),
+                  radius: 8,
+                  inset: 2.25,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -516,11 +801,13 @@ class _PreviewArrowsPainter extends CustomPainter {
     required this.level,
     required this.palette,
     this.playBoardStyle = false,
+    this.fitToShape = false,
   });
 
   final LevelModel level;
   final List<Color> palette;
   final bool playBoardStyle;
+  final bool fitToShape;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -530,7 +817,7 @@ class _PreviewArrowsPainter extends CustomPainter {
     var maxR = level.gridRows - 1;
     var minC = 0;
     var maxC = level.gridCols - 1;
-    if (!playBoardStyle) {
+    if (!playBoardStyle || fitToShape) {
       minR = level.gridRows;
       maxR = 0;
       minC = level.gridCols;
@@ -548,7 +835,7 @@ class _PreviewArrowsPainter extends CustomPainter {
 
     final cellsW = maxC - minC + 1;
     final cellsH = maxR - minR + 1;
-    final pad = playBoardStyle ? 1.0 : 3.0;
+    final pad = fitToShape ? 2.0 : (playBoardStyle ? 1.0 : 3.0);
     final cell = ((size.width - pad * 2) / cellsW)
         .clamp(0.0, (size.height - pad * 2) / cellsH);
     if (cell <= 0) return;
@@ -563,7 +850,7 @@ class _PreviewArrowsPainter extends CustomPainter {
     }
 
     final strokeWidth = playBoardStyle
-        ? (cell * 0.15).clamp(0.45, 1.5)
+        ? (cell * 0.15 * 2.2).clamp(0.7, 4.2)
         : (cell * 0.15).clamp(0.85, 1.8);
 
     for (var i = 0; i < level.arrows.length; i++) {
@@ -658,7 +945,8 @@ class _PreviewArrowsPainter extends CustomPainter {
   bool shouldRepaint(covariant _PreviewArrowsPainter oldDelegate) {
     return oldDelegate.level != level ||
         oldDelegate.palette != palette ||
-        oldDelegate.playBoardStyle != playBoardStyle;
+        oldDelegate.playBoardStyle != playBoardStyle ||
+        oldDelegate.fitToShape != fitToShape;
   }
 }
 
@@ -758,82 +1046,238 @@ class _DummyMazePainter extends CustomPainter {
   }
 }
 
-/// Same treatment as Daily's Play Today — no coins, pinned CTA.
-class _UnlockPromoBanner extends StatelessWidget {
-  const _UnlockPromoBanner({
-    required this.showMore,
-    required this.onViewMore,
-    this.loading = false,
+class _GalleryPageButton extends StatelessWidget {
+  const _GalleryPageButton({
+    required this.icon,
+    required this.enabled,
+    required this.goldFace,
+    required this.onTap,
   });
 
-  final bool showMore;
-  final bool loading;
-  final VoidCallback onViewMore;
+  final IconData icon;
+  final bool enabled;
+  final bool goldFace;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 56,
-      child: Material(
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          onTap: loading
-              ? null
-              : showMore
-                  ? onViewMore
-                  : () {
-                      ScaffoldMessenger.of(context)
-                        ..hideCurrentSnackBar()
-                        ..showSnackBar(
-                          const SnackBar(
-                            content: Text('Coming soon'),
-                            behavior: SnackBarBehavior.floating,
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
-                    },
-          borderRadius: BorderRadius.circular(16),
+    final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final light = goldFace
+        ? Color.lerp(colors.gold, Colors.white, 0.42)!
+        : const Color(0xFF5EE0C8);
+    final mid = goldFace ? colors.gold : colors.accentTeal;
+    final dark = goldFace
+        ? Color.lerp(colors.gold, const Color(0xFF8A6A1E), 0.4)!
+        : colors.accentTealDeep;
+    final iconColor = goldFace
+        ? const Color(0xFF3D2E12)
+        : Colors.white;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: enabled ? onTap : null,
+        child: Padding(
+          padding: const EdgeInsets.all(4),
           child: Ink(
+            width: 42,
+            height: 42,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              gradient: const LinearGradient(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [AppColors.accentTeal, AppColors.accentTealDeep],
+                colors: enabled
+                    ? [light, mid, dark]
+                    : [
+                        colors.surface.withValues(alpha: isDark ? 0.55 : 0.85),
+                        colors.surface2,
+                      ],
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.accentTealDeep.withValues(alpha: 0.28),
-                  blurRadius: 22,
-                  offset: const Offset(0, 12),
-                ),
-              ],
+              border: Border.all(
+                color: enabled
+                    ? Colors.white.withValues(alpha: goldFace ? 0.55 : 0.35)
+                    : colors.border,
+                width: 1.2,
+              ),
+              boxShadow: enabled
+                  ? [
+                      BoxShadow(
+                        color: (goldFace ? colors.gold : colors.accentTeal)
+                            .withValues(alpha: 0.38),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                      BoxShadow(
+                        color: Colors.black.withValues(
+                          alpha: isDark ? 0.35 : 0.14,
+                        ),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ]
+                  : null,
             ),
             child: Center(
-              child: loading
-                  ? const SizedBox(
-                      width: 26,
-                      height: 26,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.6,
-                        color: Colors.white,
-                      ),
-                    )
-                  : Text(
-                      showMore
-                          ? 'View more custom levels'
-                          : 'Unlock More Custom Levels',
-                      style: AppTextStyles.button(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                      ),
-                    ),
+              child: Icon(
+                icon,
+                size: 26,
+                color: enabled
+                    ? iconColor
+                    : colors.secondaryText.withValues(alpha: 0.38),
+              ),
             ),
           ),
         ),
       ),
     );
+  }
+}
+
+class _GalleryPageIndicator extends StatelessWidget {
+  const _GalleryPageIndicator({
+    required this.pageIndex,
+    required this.pageCount,
+  });
+
+  final int pageIndex;
+  final int pageCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final leftStart = (pageIndex - 3).clamp(0, pageIndex);
+    final rightEnd = (pageIndex + 4).clamp(pageIndex + 1, pageCount);
+
+    Widget dot(int i) {
+      final current = i == pageIndex;
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 3),
+        child: Container(
+          width: current ? 8 : 6,
+          height: current ? 8 : 6,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: current
+                ? colors.accentTeal
+                : colors.gold.withValues(alpha: isDark ? 0.55 : 0.7),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (var i = leftStart; i < pageIndex; i++) dot(i),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Text(
+            '${pageIndex + 1} / $pageCount',
+            style: AppTextStyles.label(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: isDark ? colors.accentTeal : colors.accentTealDeep,
+            ),
+          ),
+        ),
+        for (var i = pageIndex; i < rightEnd; i++) dot(i),
+      ],
+    );
+  }
+}
+
+class _CornerLockBadge extends StatelessWidget {
+  const _CornerLockBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    return Container(
+      width: 24,
+      height: 24,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: Color.lerp(colors.gold, const Color(0xFF8A6A1E), 0.4)!,
+          width: 1.3,
+        ),
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color.lerp(colors.gold, Colors.white, 0.35)!,
+            colors.gold,
+            Color.lerp(colors.gold, const Color(0xFF8A6A1E), 0.28)!,
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.28),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: const Icon(
+        Icons.lock_rounded,
+        size: 13,
+        color: Color(0xFF3D2E12),
+      ),
+    );
+  }
+}
+
+class _ParchmentOrnamentPainter extends CustomPainter {
+  _ParchmentOrnamentPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.1
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    const m = 16.0;
+    const len = 38.0;
+    const gap = 5.0;
+
+    void corner(Offset origin, bool flipX, bool flipY) {
+      final sx = flipX ? -1.0 : 1.0;
+      final sy = flipY ? -1.0 : 1.0;
+      Offset p(double x, double y) =>
+          Offset(origin.dx + x * sx, origin.dy + y * sy);
+      canvas.drawPath(
+        Path()
+          ..moveTo(p(0, len).dx, p(0, len).dy)
+          ..lineTo(p(0, 0).dx, p(0, 0).dy)
+          ..lineTo(p(len, 0).dx, p(len, 0).dy),
+        paint,
+      );
+      canvas.drawPath(
+        Path()
+          ..moveTo(p(gap, len - 4).dx, p(gap, len - 4).dy)
+          ..lineTo(p(gap, gap).dx, p(gap, gap).dy)
+          ..lineTo(p(len - 4, gap).dx, p(len - 4, gap).dy),
+        paint,
+      );
+      canvas.drawCircle(p(gap + 3, gap + 3), 1.4, Paint()..color = color);
+    }
+
+    corner(const Offset(m, m), false, false);
+    corner(Offset(size.width - m, m), true, false);
+    corner(Offset(m, size.height - m), false, true);
+    corner(Offset(size.width - m, size.height - m), true, true);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ParchmentOrnamentPainter oldDelegate) {
+    return oldDelegate.color != color;
   }
 }

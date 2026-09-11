@@ -17,6 +17,18 @@ class GridCell {
 
   @override
   String toString() => '($row,$col)';
+
+  Map<String, dynamic> toJson() => {
+        'row': row,
+        'col': col,
+      };
+
+  factory GridCell.fromJson(Map<String, dynamic> json) {
+    return GridCell(
+      (json['row'] as num).toInt(),
+      (json['col'] as num).toInt(),
+    );
+  }
 }
 
 class ArrowModel {
@@ -65,6 +77,31 @@ class ArrowModel {
       direction: direction ?? this.direction,
       path: nextPath,
       isRemoved: isRemoved ?? this.isRemoved,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'row': row,
+        'col': col,
+        'direction': direction.name,
+        'isRemoved': isRemoved,
+        'path': [for (final cell in path) cell.toJson()],
+      };
+
+  factory ArrowModel.fromJson(Map<String, dynamic> json) {
+    final rawPath = json['path'] as List? ?? const [];
+    final path = [
+      for (final cell in rawPath)
+        GridCell.fromJson(Map<String, dynamic>.from(cell as Map)),
+    ];
+    return ArrowModel(
+      id: json['id'] as String,
+      row: (json['row'] as num).toInt(),
+      col: (json['col'] as num).toInt(),
+      direction: ArrowDirection.values.byName(json['direction'] as String),
+      path: path,
+      isRemoved: json['isRemoved'] as bool? ?? false,
     );
   }
 }

@@ -517,6 +517,10 @@ class AdsServiceImpl with WidgetsBindingObserver implements AdsService {
   }
 
   @override
+  Future<void> onCustomLevelCleared(BuildContext context) =>
+      onLevelCleared(context);
+
+  @override
   Future<void> onDailyChallengeCleared(BuildContext context) async {
     if (!_canServeAds) return;
     if (!context.mounted) return;
