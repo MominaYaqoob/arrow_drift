@@ -13,21 +13,22 @@ import 'package:arrow_drift/features/gameplay/widgets/arrow_tile.dart';
 import 'package:arrow_drift/features/patterns/pattern_preview_screen.dart';
 import 'package:arrow_drift/features/patterns/unlock_level_sheet.dart';
 
-/// Custom level gallery — pages of 6, thumbnails load as cards appear.
+/// Custom level gallery — 2×2 on first screen, then +2 rows via View more.
 class PatternsScreen extends ConsumerStatefulWidget {
   const PatternsScreen({super.key});
 
   static const String routePath = '/patterns';
 
   static const int _unlockedThrough = 50;
-  static const int _pageSize = 6;
+  static const int _initialCount = 4;
+  static const int _morePageSize = 2;
 
   @override
   ConsumerState<PatternsScreen> createState() => _PatternsScreenState();
 }
 
 class _PatternsScreenState extends ConsumerState<PatternsScreen> {
-  int _visibleCount = PatternsScreen._pageSize;
+  int _visibleCount = PatternsScreen._initialCount;
   bool _loadingMore = false;
 
   bool get _hasMoreCustomLevels =>
@@ -36,7 +37,7 @@ class _PatternsScreenState extends ConsumerState<PatternsScreen> {
   Future<void> _showNextPage() async {
     if (!_hasMoreCustomLevels || _loadingMore) return;
     final from = _visibleCount + 1;
-    final to = (_visibleCount + PatternsScreen._pageSize)
+    final to = (_visibleCount + PatternsScreen._morePageSize)
         .clamp(0, PatternsScreen._unlockedThrough);
     setState(() => _loadingMore = true);
     try {
@@ -80,78 +81,86 @@ class _PatternsScreenState extends ConsumerState<PatternsScreen> {
           bottom: false,
           child: Column(
             children: [
-              Expanded(
-                child: NotificationListener<ScrollNotification>(
-                  onNotification: (notification) {
-                    if (notification.depth == 0) {
-                      LevelRepository.notifyGalleryViewportChanged();
-                    }
-                    return false;
-                  },
-                  child: CustomScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    slivers: [
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                      sliver: SliverToBoxAdapter(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    'Custom Levels',
-                                    style: AppTextStyles.heading(
-                                      fontSize: 28,
-                                      fontWeight: FontWeight.w700,
-                                      color: colors.primaryText,
-                                      letterSpacing: -0.4,
-                                    ),
-                                  ),
-                                ),
-                                const _CoinBalancePill(),
-                              ],
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Custom Levels',
+                            style: AppTextStyles.heading(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w700,
+                              color: colors.primaryText,
+                              letterSpacing: -0.4,
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Collect shapes as you clear custom levels',
-                              style: AppTextStyles.body(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: colors.secondaryText,
-                              ),
-                            ),
-                            const SizedBox(height: 18),
-                          ],
+                          ),
                         ),
-                      ),
+                        const _CoinBalancePill(),
+                      ],
                     ),
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                      sliver: SliverGrid(
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
-                          crossAxisSpacing: 10,
-                          mainAxisSpacing: 10,
-                          childAspectRatio: 0.72,
-                        ),
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            final level = index + 1;
-                            return _PatternCard(
-                              level: level,
-                              locked: level > PatternsScreen._unlockedThrough,
-                            );
-                          },
-                          childCount: _visibleCount,
-                          addAutomaticKeepAlives: false,
-                        ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Collect shapes as you clear custom levels',
+                      style: AppTextStyles.body(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: colors.secondaryText,
                       ),
                     ),
                   ],
                 ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      const cols = 2;
+                      const spacing = 12.0;
+                      const fitRows = 2;
+                      final colW =
+                          (constraints.maxWidth - spacing) / cols;
+                      final rowH =
+                          (constraints.maxHeight - spacing) / fitRows;
+                      final aspect =
+                          (colW / rowH).clamp(0.01, 10.0);
+                      return NotificationListener<ScrollNotification>(
+                        onNotification: (notification) {
+                          if (notification.depth == 0) {
+                            LevelRepository.notifyGalleryViewportChanged();
+                          }
+                          return false;
+                        },
+                        child: GridView.builder(
+                          physics: _visibleCount <= PatternsScreen._initialCount
+                              ? const NeverScrollableScrollPhysics()
+                              : const BouncingScrollPhysics(),
+                          padding: EdgeInsets.zero,
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: cols,
+                            crossAxisSpacing: spacing,
+                            mainAxisSpacing: spacing,
+                            childAspectRatio: aspect,
+                          ),
+                          itemCount: _visibleCount,
+                          addAutomaticKeepAlives: false,
+                          itemBuilder: (context, index) {
+                            final level = index + 1;
+                            return _PatternCard(
+                              level: level,
+                              locked:
+                                  level > PatternsScreen._unlockedThrough,
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ),
               Padding(
