@@ -53,6 +53,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/branding/app_icon.png
+    - assets/branding/welcome_gift.png
     - assets/sounds/level_win.wav
     - assets/sounds/ui_tap.wav
     - assets/sounds/arrow_escape.wav

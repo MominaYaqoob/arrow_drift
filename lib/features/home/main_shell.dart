@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:arrow_drift/core/theme/app_theme.dart';
 import 'package:arrow_drift/data/repositories/progress_repository.dart';
 import 'package:arrow_drift/features/profile/nickname_dialog.dart';
+import 'package:arrow_drift/features/profile/welcome_bonus_popup.dart';
 
 /// Shell that hosts Main / Daily / Patterns / Me tabs via [StatefulNavigationShell].
 /// Floating pill tab bar matches the HTML design board.
@@ -35,15 +36,21 @@ class _MainShellState extends ConsumerState<MainShell> {
 
     final repo = await ref.read(progressRepositoryProvider.future);
     if (!mounted) return;
-    if (repo.getNickname().isNotEmpty) return;
-
-    await NicknameDialog.show(
-      context,
-      onSaved: (nickname) async {
-        await repo.setNickname(nickname);
-        ref.invalidate(playerNicknameProvider);
-      },
-    );
+    if (repo.getNickname().isEmpty) {
+      await NicknameDialog.show(
+        context,
+        onSaved: (nickname) async {
+          await repo.setNickname(nickname);
+          ref.invalidate(playerNicknameProvider);
+        },
+      );
+      if (!mounted) return;
+      if (repo.getNickname().isEmpty || repo.hasClaimedWelcomeBonus()) return;
+      await WelcomeBonusPopup.show(
+        context,
+        onCollect: repo.claimWelcomeBonus,
+      );
+    }
   }
 
   @override

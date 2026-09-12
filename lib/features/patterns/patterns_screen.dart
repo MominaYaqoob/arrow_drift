@@ -451,29 +451,7 @@ class _PatternCard extends ConsumerWidget {
       context.push(PatternPreviewScreen.routePath, extra: level);
       return;
     }
-    final eligible = repo?.isPatternLevelEligibleToUnlock(level) ?? false;
-    if (!eligible) {
-      final colors = context.appColors;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            duration: const Duration(seconds: 2),
-            padding: EdgeInsets.zero,
-            content: Center(
-              child: _SequentialLockChip(
-                message: 'Complete Level ${level - 1} first',
-                colors: colors,
-              ),
-            ),
-          ),
-        );
-      return;
-    }
-    final result = await showUnlockLevelSheet(context, level: level);
+    await showUnlockLevelSheet(context, level: level);
   }
 
   @override

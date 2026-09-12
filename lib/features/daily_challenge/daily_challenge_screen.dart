@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -21,9 +23,9 @@ class DailyChallengeScreen extends ConsumerStatefulWidget {
 }
 
 class _DailyChallengeScreenState extends ConsumerState<DailyChallengeScreen> {
-  /// Past: only 1 month back. Future months stay swipeable.
+  /// Past: only 1 month back. Future months are not swipeable.
   static const int _monthsBack = 1;
-  static const int _monthsForward = 24;
+  static const int _monthsForward = 0;
   static const int _centerPage = _monthsBack; // current month index
 
   late final PageController _pageController;
@@ -64,10 +66,43 @@ class _DailyChallengeScreenState extends ConsumerState<DailyChallengeScreen> {
     // Future days stay faded; no bottom snackbar.
     if (day.isAfter(today)) return;
 
+    final key = dailyDateKey(day);
+    final repo = ref.read(progressRepositoryProvider).valueOrNull;
+    final completed = ref.read(completedDailyDatesProvider).valueOrNull ?? {};
+    if ((repo?.isDailyCompleted(day) ?? false) || completed.contains(key)) {
+      _showAlreadyDoneDialog(isToday: _sameDay(day, today));
+      return;
+    }
+
     // Instant navigation — all board wait happens on the Daily loader screen.
     ScaffoldMessenger.of(context).clearSnackBars();
-    final key = dailyDateKey(day);
     context.push('${GameplayScreen.routePath}?daily=1&date=$key');
+  }
+
+  bool _sameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  void _showAlreadyDoneDialog({required bool isToday}) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.55),
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 36),
+          child: _AlreadyDonePopup(
+            title: isToday
+                ? "Today's Challenge Already Done!"
+                : 'This Challenge Already Done!',
+            subtitle:
+                'If you want to play previous challenges, you can select and play any past remaining days.',
+            colors: dialogContext.appColors,
+            onClose: () => Navigator.of(dialogContext).pop(),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -421,7 +456,7 @@ class _CalendarCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Swipe months · past only 1 month · tap a day to play',
+              'Swipe back for last month · tap a day to play',
               style: AppTextStyles.label(
                 fontSize: 11,
                 color: colors.secondaryText,
@@ -675,5 +710,184 @@ class _PlayTodayButton extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _AlreadyDonePopup extends StatefulWidget {
+  const _AlreadyDonePopup({
+    required this.title,
+    required this.subtitle,
+    required this.colors,
+    required this.onClose,
+  });
+
+  final String title;
+  final String subtitle;
+  final AppColorScheme colors;
+  final VoidCallback onClose;
+
+  @override
+  State<_AlreadyDonePopup> createState() => _AlreadyDonePopupState();
+}
+
+class _AlreadyDonePopupState extends State<_AlreadyDonePopup>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _shine;
+
+  @override
+  void initState() {
+    super.initState();
+    _shine = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _shine.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = widget.colors;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: colors.gold.withValues(alpha: 0.32),
+            blurRadius: 18,
+          ),
+        ],
+      ),
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(22),
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color.lerp(colors.accentTeal, Colors.white, 0.16)!,
+              colors.accentTeal,
+              colors.accentTealDeep,
+            ],
+          ),
+          border: Border.all(color: colors.gold, width: 1.4),
+        ),
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 26, 22, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.check_circle_rounded,
+                    color: colors.gold,
+                    size: 36,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    widget.title,
+                    textAlign: TextAlign.center,
+                    style: AppTextStyles.body(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    widget.subtitle,
+                    textAlign: TextAlign.center,
+                    style: AppTextStyles.body(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white.withValues(alpha: 0.92),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  TextButton(
+                    onPressed: widget.onClose,
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 22,
+                        vertical: 8,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                        side: BorderSide(color: colors.gold, width: 1.2),
+                      ),
+                    ),
+                    child: Text(
+                      'OK',
+                      style: AppTextStyles.label(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Positioned.fill(
+              child: IgnorePointer(
+                child: AnimatedBuilder(
+                  animation: _shine,
+                  builder: (context, _) {
+                    return CustomPaint(
+                      painter: _PopupShimmerPainter(
+                        t: _shine.value,
+                        gold: colors.gold,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PopupShimmerPainter extends CustomPainter {
+  _PopupShimmerPainter({required this.t, required this.gold});
+
+  final double t;
+  final Color gold;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+
+    void spark(Offset c, double phase) {
+      final pulse = (math.sin((t + phase) * math.pi * 2) * 0.5 + 0.5);
+      if (pulse < 0.18) return;
+      final p = Paint()
+        ..color = Colors.white.withValues(alpha: 0.2 + pulse * 0.55)
+        ..strokeWidth = 1.15
+        ..strokeCap = StrokeCap.round;
+      const s = 3.1;
+      canvas.drawLine(Offset(c.dx - s, c.dy), Offset(c.dx + s, c.dy), p);
+      canvas.drawLine(Offset(c.dx, c.dy - s), Offset(c.dx, c.dy + s), p);
+    }
+
+    spark(Offset(size.width * 0.14, size.height * 0.18), 0.0);
+    spark(Offset(size.width * 0.86, size.height * 0.22), 0.22);
+    spark(Offset(size.width * 0.18, size.height * 0.72), 0.44);
+    spark(Offset(size.width * 0.82, size.height * 0.68), 0.66);
+    spark(Offset(size.width * 0.50, size.height * 0.12), 0.88);
+  }
+
+  @override
+  bool shouldRepaint(covariant _PopupShimmerPainter oldDelegate) {
+    return oldDelegate.t != t || oldDelegate.gold != gold;
   }
 }

@@ -31,6 +31,8 @@ class ProgressRepository {
   static const String _patternCompletedKey = 'pattern_completed_levels';
   static const String _unlockedPatternLevelsKey = 'unlocked_pattern_levels';
   static const String _coinBalanceKey = 'coin_balance';
+  static const String _welcomeBonusClaimedKey = 'welcome_bonus_claimed';
+  static const int welcomeBonusCoins = 100;
   static const String _streakKey = 'current_streak';
   /// Last calendar day that counted toward the Snapchat-style streak (`yyyy-MM-dd`).
   static const String _streakLastDateKey = 'daily_streak_last_date';
@@ -108,6 +110,17 @@ class ProgressRepository {
     return true;
   }
 
+  bool hasClaimedWelcomeBonus() =>
+      _prefs.getBool(_welcomeBonusClaimedKey) ?? false;
+
+  /// First-time welcome gift. No-op if already claimed.
+  Future<bool> claimWelcomeBonus() async {
+    if (hasClaimedWelcomeBonus()) return false;
+    await _prefs.setBool(_welcomeBonusClaimedKey, true);
+    await addCoins(welcomeBonusCoins);
+    return true;
+  }
+
   List<int> getUnlockedPatternLevels() {
     return (_prefs.getStringList(_unlockedPatternLevelsKey) ?? const [])
         .map(int.tryParse)
@@ -122,8 +135,7 @@ class ProgressRepository {
   }
 
   bool isPatternLevelEligibleToUnlock(int level) {
-    if (level <= 1) return true;
-    return isPatternCompleted(level - 1);
+    return level >= 1 && level <= 100;
   }
 
   Future<void> unlockPatternLevel(int level) async {
