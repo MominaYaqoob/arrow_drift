@@ -7,6 +7,7 @@ import 'package:arrow_drift/core/constants/app_constants.dart';
 import 'package:arrow_drift/core/theme/app_theme.dart';
 import 'package:arrow_drift/core/widgets/app_logo.dart';
 import 'package:arrow_drift/features/splash/splash_loading_screen.dart';
+import 'package:arrow_drift/services/play_in_app_update.dart';
 
 /// Splash 1 — dark striped logo screen with entrance animation.
 class SplashLogoScreen extends StatefulWidget {
@@ -35,6 +36,9 @@ class _SplashLogoScreenState extends State<SplashLogoScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(checkForUpdate());
+    });
 
     _logoController = AnimationController(
       vsync: this,

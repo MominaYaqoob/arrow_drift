@@ -292,7 +292,7 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
     );
   }
 
-  void _onNextPattern() {
+  Future<void> _onNextPattern() async {
     if (widget.levelNumber >= 100) {
       _leaveToPatterns();
       return;
@@ -304,9 +304,14 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
       context.pushReplacement(PatternPreviewScreen.routePath, extra: next);
       return;
     }
-    // Next level is locked — show the unlock sheet right here instead of
-    // silently sending the player back to the grid.
-    showUnlockLevelSheet(context, level: next);
+    final unlockedNow = await showUnlockLevelSheet(
+      context,
+      level: next,
+      replaceCurrent: true,
+    );
+    if (!unlockedNow && mounted) {
+      _leaveToPatterns();
+    }
   }
 
   @override

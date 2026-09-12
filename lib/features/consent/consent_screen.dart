@@ -57,33 +57,41 @@ class _ConsentScreenState extends ConsumerState<ConsentScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
             child: Column(
               children: [
-                const Spacer(flex: 2),
-                const AppLogoMark(size: 72),
-                const SizedBox(height: 18),
-                Text(
-                  'Welcome to ${AppConstants.appShortName}',
-                  textAlign: TextAlign.center,
-                  style: AppTextStyles.heading(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 24),
+                        const AppLogoMark(size: 72),
+                        const SizedBox(height: 18),
+                        Text(
+                          'Welcome to ${AppConstants.appShortName}',
+                          textAlign: TextAlign.center,
+                          style: AppTextStyles.heading(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          'Arrow Drift is free to play. Your levels and streak stay '
+                          'on this device only — we don’t ask for an account.\n\n'
+                          'To keep the game free, we show ads through Google AdMob. '
+                          'By tapping Agree, you accept our Terms of Service and '
+                          'Privacy Policy and can start playing right away.',
+                          textAlign: TextAlign.center,
+                          style: AppTextStyles.body(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: const Color(0xFF9DB0C4),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(height: 14),
-                Text(
-                  'Arrow Drift is free to play. Your levels and streak stay '
-                  'on this device only — we don’t ask for an account.\n\n'
-                  'To keep the game free, we show ads through Google AdMob. '
-                  'By tapping Agree, you accept our Terms of Service and '
-                  'Privacy Policy and can start playing right away.',
-                  textAlign: TextAlign.center,
-                  style: AppTextStyles.body(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: const Color(0xFF9DB0C4),
-                  ),
-                ),
-                const Spacer(flex: 3),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(

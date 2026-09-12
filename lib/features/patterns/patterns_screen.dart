@@ -432,7 +432,7 @@ class _PatternCard extends ConsumerWidget {
   final int level;
   final bool locked;
 
-  void _onTap(BuildContext context, WidgetRef ref) {
+  Future<void> _onTap(BuildContext context, WidgetRef ref) async {
     if (locked) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
@@ -453,18 +453,27 @@ class _PatternCard extends ConsumerWidget {
     }
     final eligible = repo?.isPatternLevelEligibleToUnlock(level) ?? false;
     if (!eligible) {
+      final colors = context.appColors;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
-            content: Text('Complete Level ${level - 1} first'),
             behavior: SnackBarBehavior.floating,
+            backgroundColor: Colors.transparent,
+            elevation: 0,
             duration: const Duration(seconds: 2),
+            padding: EdgeInsets.zero,
+            content: Center(
+              child: _SequentialLockChip(
+                message: 'Complete Level ${level - 1} first',
+                colors: colors,
+              ),
+            ),
           ),
         );
       return;
     }
-    showUnlockLevelSheet(context, level: level);
+    final result = await showUnlockLevelSheet(context, level: level);
   }
 
   @override
@@ -1240,6 +1249,164 @@ class _CornerLockBadge extends StatelessWidget {
         color: Color(0xFF3D2E12),
       ),
     );
+  }
+}
+
+class _SequentialLockChip extends StatefulWidget {
+  const _SequentialLockChip({
+    required this.message,
+    required this.colors,
+  });
+
+  final String message;
+  final AppColorScheme colors;
+
+  @override
+  State<_SequentialLockChip> createState() => _SequentialLockChipState();
+}
+
+class _SequentialLockChipState extends State<_SequentialLockChip>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _shine;
+
+  @override
+  void initState() {
+    super.initState();
+    _shine = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _shine.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = widget.colors;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        boxShadow: [
+          BoxShadow(
+            color: colors.gold.withValues(alpha: 0.28),
+            blurRadius: 10,
+          ),
+        ],
+      ),
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color.lerp(colors.accentTeal, Colors.white, 0.16)!,
+              colors.accentTeal,
+              colors.accentTealDeep,
+            ],
+          ),
+          border: Border.all(color: colors.gold, width: 1.4),
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.lock_rounded,
+                    size: 16,
+                    color: colors.gold,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    widget.message,
+                    style: AppTextStyles.label(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Positioned.fill(
+              child: IgnorePointer(
+                child: AnimatedBuilder(
+                  animation: _shine,
+                  builder: (context, _) {
+                    return CustomPaint(
+                      painter: _ChipShimmerPainter(
+                        t: _shine.value,
+                        gold: colors.gold,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ChipShimmerPainter extends CustomPainter {
+  _ChipShimmerPainter({required this.t, required this.gold});
+
+  final double t;
+  final Color gold;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+
+    final x = (t * 1.55 - 0.28) * size.width;
+    final band = Rect.fromLTWH(-18, -24, 36, size.height + 48);
+    final shine = Paint()
+      ..shader = LinearGradient(
+        colors: [
+          Colors.transparent,
+          gold.withValues(alpha: 0.18),
+          Colors.white.withValues(alpha: 0.42),
+          gold.withValues(alpha: 0.18),
+          Colors.transparent,
+        ],
+      ).createShader(band);
+    canvas.save();
+    canvas.translate(x, size.height * 0.5);
+    canvas.rotate(-0.38);
+    canvas.drawRect(band, shine);
+    canvas.restore();
+
+    void spark(Offset c, double phase) {
+      final pulse = (math.sin((t + phase) * math.pi * 2) * 0.5 + 0.5);
+      if (pulse < 0.18) return;
+      final p = Paint()
+        ..color = Colors.white.withValues(alpha: 0.2 + pulse * 0.55)
+        ..strokeWidth = 1.15
+        ..strokeCap = StrokeCap.round;
+      const s = 3.1;
+      canvas.drawLine(Offset(c.dx - s, c.dy), Offset(c.dx + s, c.dy), p);
+      canvas.drawLine(Offset(c.dx, c.dy - s), Offset(c.dx, c.dy + s), p);
+    }
+
+    spark(Offset(size.width * 0.14, size.height * 0.32), 0.0);
+    spark(Offset(size.width * 0.86, size.height * 0.38), 0.33);
+    spark(Offset(size.width * 0.62, size.height * 0.72), 0.66);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ChipShimmerPainter oldDelegate) {
+    return oldDelegate.t != t || oldDelegate.gold != gold;
   }
 }
 

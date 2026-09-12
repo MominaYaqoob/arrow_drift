@@ -12,9 +12,10 @@ import 'package:arrow_drift/services/ads_service.dart';
 const int kCustomUnlockCoinCost = 300;
 const int kCustomAdCoinReward = 100;
 
-Future<void> showUnlockLevelSheet(
+Future<bool> showUnlockLevelSheet(
   BuildContext context, {
   required int level,
+  bool replaceCurrent = false,
 }) async {
   final colors = context.appColors;
   final unlocked = await showModalBottomSheet<bool>(
@@ -28,8 +29,13 @@ Future<void> showUnlockLevelSheet(
     builder: (sheetContext) => UnlockLevelSheet(level: level),
   );
   if (unlocked == true && context.mounted) {
-    context.push(PatternPreviewScreen.routePath, extra: level);
+    if (replaceCurrent) {
+      context.pushReplacement(PatternPreviewScreen.routePath, extra: level);
+    } else {
+      context.push(PatternPreviewScreen.routePath, extra: level);
+    }
   }
+  return unlocked == true;
 }
 
 class UnlockLevelSheet extends ConsumerStatefulWidget {
