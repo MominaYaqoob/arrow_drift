@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:arrow_drift/core/theme/app_theme.dart';
 import 'package:arrow_drift/core/widgets/app_logo.dart';
+import 'package:arrow_drift/core/widgets/coin_balance_pill.dart';
 import 'package:arrow_drift/data/repositories/level_repository.dart';
 import 'package:arrow_drift/data/repositories/progress_repository.dart';
 import 'package:arrow_drift/data/repositories/settings_repository.dart';
@@ -198,6 +199,8 @@ class _TopBar extends StatelessWidget {
       children: [
         const AppLogoMark(size: 36),
         const Spacer(),
+        const CoinBalancePill(),
+        const SizedBox(width: 8),
         Material(
           color: Colors.transparent,
           child: InkWell(

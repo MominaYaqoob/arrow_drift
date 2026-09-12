@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:arrow_drift/core/theme/app_theme.dart';
+import 'package:arrow_drift/core/widgets/coin_balance_pill.dart';
 import 'package:arrow_drift/core/utils/external_links.dart';
 import 'package:arrow_drift/data/repositories/progress_repository.dart';
 import 'package:arrow_drift/features/about/about_screen.dart';
@@ -377,6 +378,11 @@ class _ProfileHeader extends StatelessWidget {
       ),
       child: Column(
         children: [
+          const Align(
+            alignment: Alignment.centerRight,
+            child: CoinBalancePill(),
+          ),
+          const SizedBox(height: 12),
           GestureDetector(
             onTap: onAvatarTap,
             child: Stack(

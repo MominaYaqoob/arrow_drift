@@ -480,6 +480,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     if (!widget.isDaily) return;
     final repo = await ref.read(progressRepositoryProvider.future);
     await repo.markDailyCompleted(_dailyPlayDate);
+    await repo.addCoins(50);
     ref.invalidate(monthlyDailyStarsProvider);
     ref.invalidate(completedDailyDatesProvider);
     ref.invalidate(currentStreakProvider);
@@ -503,6 +504,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     }
 
     await repo.saveProgress(widget.levelNumber);
+    await repo.addCoins(30);
     _notifyCampaignProgress();
     if (!mounted) return;
     await AdsService.instance.onLevelCleared(context);
@@ -531,6 +533,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
       return;
     }
     await repo.saveProgress(widget.levelNumber);
+    await repo.addCoins(30);
     _notifyCampaignProgress();
     if (!mounted) return;
     await AdsService.instance.onLevelCleared(context);
@@ -851,6 +854,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
               heartsAllowed: level.heartsAllowed,
               isCampaignComplete: isCampaignComplete,
               isDaily: widget.isDaily,
+              coinsEarned: widget.isDaily ? 50 : 30,
               onNextGame: _onNextGame,
               onMain: _onMainFromComplete,
             ),

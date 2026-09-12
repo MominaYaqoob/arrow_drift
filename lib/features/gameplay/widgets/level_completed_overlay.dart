@@ -22,6 +22,7 @@ class LevelCompletedOverlay extends StatefulWidget {
     this.heartsAllowed,
     this.isCampaignComplete = false,
     this.isDaily = false,
+    this.coinsEarned,
   });
 
   final int completedLevel;
@@ -35,6 +36,7 @@ class LevelCompletedOverlay extends StatefulWidget {
   final int? heartsAllowed;
   final bool isCampaignComplete;
   final bool isDaily;
+  final int? coinsEarned;
 
   @override
   State<LevelCompletedOverlay> createState() => _LevelCompletedOverlayState();
@@ -317,6 +319,7 @@ class _LevelCompletedOverlayState extends State<LevelCompletedOverlay>
   @override
   Widget build(BuildContext context) {
     _ensureLogoPulse();
+    final colors = context.appColors;
     final logoListenable = _logoPulseController;
 
     return Material(
@@ -498,6 +501,39 @@ class _LevelCompletedOverlayState extends State<LevelCompletedOverlay>
                         );
                       },
                     ),
+                    if (widget.coinsEarned != null) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: colors.gold.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: colors.gold, width: 1),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.monetization_on_rounded,
+                              size: 16,
+                              color: colors.gold,
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              '+${widget.coinsEarned} coins',
+                              style: AppTextStyles.label(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: colors.gold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 28),
                     AnimatedBuilder(
                       animation: Listenable.merge([

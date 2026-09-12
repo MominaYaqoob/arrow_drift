@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:arrow_drift/core/theme/app_theme.dart';
+import 'package:arrow_drift/core/widgets/coin_balance_pill.dart';
 import 'package:arrow_drift/data/repositories/level_repository.dart';
 import 'package:arrow_drift/data/repositories/progress_repository.dart';
 import 'package:arrow_drift/features/gameplay/gameplay_screen.dart';
@@ -220,6 +221,13 @@ class _DailyHero extends StatelessWidget {
                     fontSize: 17,
                     fontWeight: FontWeight.w700,
                     color: Colors.white,
+                  ),
+                ),
+                const Align(
+                  alignment: Alignment.centerRight,
+                  child: Padding(
+                    padding: EdgeInsets.only(right: 8),
+                    child: CoinBalancePill(),
                   ),
                 ),
               ],

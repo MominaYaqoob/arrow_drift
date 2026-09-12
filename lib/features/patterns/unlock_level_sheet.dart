@@ -9,8 +9,8 @@ import 'package:arrow_drift/data/repositories/progress_repository.dart';
 import 'package:arrow_drift/features/patterns/pattern_preview_screen.dart';
 import 'package:arrow_drift/services/ads_service.dart';
 
-const int kCustomUnlockCoinCost = 75;
-const int kCustomAdCoinReward = 25;
+const int kCustomUnlockCoinCost = 300;
+const int kCustomAdCoinReward = 100;
 
 Future<void> showUnlockLevelSheet(
   BuildContext context, {
@@ -264,24 +264,39 @@ class _BalancePill extends StatelessWidget {
     return ValueListenableBuilder<int>(
       valueListenable: ProgressRepository.coinBalanceTick,
       builder: (context, liveBalance, _) {
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-          decoration: BoxDecoration(
-            color: colors.surface,
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(
-              color: colors.accentTeal.withValues(alpha: 0.35),
-              width: 1,
+        return Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              decoration: BoxDecoration(
+                color: colors.surface,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: colors.accentTeal.withValues(alpha: 0.35),
+                  width: 1,
+                ),
+              ),
+              child: Text(
+                'Balance · $liveBalance',
+                style: AppTextStyles.label(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: colors.secondaryText,
+                ),
+              ),
             ),
-          ),
-          child: Text(
-            'Balance · $liveBalance',
-            style: AppTextStyles.label(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: colors.secondaryText,
-            ),
-          ),
+            if (liveBalance < kCustomUnlockCoinCost) ...[
+              const SizedBox(height: 8),
+              Text(
+                'You don\'t have enough coins to unlock this level',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.body(
+                  fontSize: 12,
+                  color: colors.secondaryText,
+                ),
+              ),
+            ],
+          ],
         );
       },
     );

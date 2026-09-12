@@ -25,6 +25,7 @@ import 'package:arrow_drift/features/gameplay/widgets/game_top_row.dart';
 import 'package:arrow_drift/features/gameplay/widgets/level_completed_overlay.dart';
 import 'package:arrow_drift/features/gameplay/widgets/out_of_lives_overlay.dart';
 import 'package:arrow_drift/features/gameplay/widgets/pause_sheet.dart';
+import 'package:arrow_drift/features/patterns/unlock_level_sheet.dart';
 import 'package:arrow_drift/services/ads_service.dart';
 
 /// Pattern preview. Levels 1–100 are real nested puzzles via GameController.
@@ -303,9 +304,9 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
       context.pushReplacement(PatternPreviewScreen.routePath, extra: next);
       return;
     }
-    // Next level is still locked — return to the grid so the player
-    // unlocks it via the coin sheet, instead of skipping straight in.
-    _leaveToPatterns();
+    // Next level is locked — show the unlock sheet right here instead of
+    // silently sending the player back to the grid.
+    showUnlockLevelSheet(context, level: next);
   }
 
   @override
@@ -533,6 +534,7 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
                 gridCols: level.gridCols,
                 heartsLeft: gameState.heartsLeft,
                 heartsAllowed: level.heartsAllowed,
+                coinsEarned: 30,
                 onNextGame: _onNextPattern,
                 onMain: _leaveToPatterns,
               ),
