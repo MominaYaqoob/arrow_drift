@@ -296,10 +296,16 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
       _leaveToPatterns();
       return;
     }
-    context.pushReplacement(
-      PatternPreviewScreen.routePath,
-      extra: widget.levelNumber + 1,
-    );
+    final next = widget.levelNumber + 1;
+    final repo = ref.read(progressRepositoryProvider).valueOrNull;
+    final unlocked = repo?.isPatternLevelUnlocked(next) ?? false;
+    if (unlocked) {
+      context.pushReplacement(PatternPreviewScreen.routePath, extra: next);
+      return;
+    }
+    // Next level is still locked — return to the grid so the player
+    // unlocks it via the coin sheet, instead of skipping straight in.
+    _leaveToPatterns();
   }
 
   @override

@@ -37,6 +37,8 @@ class ProgressRepository {
   /// Legacy key from the old rolling 24h timer — no longer written; kept so
   /// old installs don't crash if something still reads prefs.
   static const String _streakDeadlineKey = 'daily_streak_deadline_ms';
+  /// One-time copy of [_streakDeadlineKey] → [_streakLastDateKey] for updates.
+  static const String _migratedLegacyStreakKey = 'migrated_legacy_streak_v1';
   /// Hours left in the day when the countdown turns urgent (red).
   static const Duration streakUrgentWindow = Duration(hours: 4);
 
@@ -117,6 +119,11 @@ class ProgressRepository {
     if (level == 1) return true;
     if (level < 2 || level > 100) return false;
     return getUnlockedPatternLevels().contains(level);
+  }
+
+  bool isPatternLevelEligibleToUnlock(int level) {
+    if (level <= 1) return true;
+    return isPatternCompleted(level - 1);
   }
 
   Future<void> unlockPatternLevel(int level) async {
@@ -353,12 +360,31 @@ class ProgressRepository {
     final d = date.day.toString().padLeft(2, '0');
     return '$y-$m-$d';
   }
+
+  /// Restores calendar streak date from the old 24h deadline on app update.
+  /// No-op if the new date key already exists or there is no legacy streak.
+  Future<void> _migrateLegacyStreakIfNeeded() async {
+    if (_prefs.getBool(_migratedLegacyStreakKey) ?? false) return;
+    await _prefs.setBool(_migratedLegacyStreakKey, true);
+
+    final hasNewDateKey = _prefs.getString(_streakLastDateKey) != null;
+    final legacyDeadlineMs = _prefs.getInt(_streakDeadlineKey);
+    final storedStreak = _prefs.getInt(_streakKey) ?? 0;
+
+    if (!hasNewDateKey && legacyDeadlineMs != null && storedStreak > 0) {
+      final deadline = DateTime.fromMillisecondsSinceEpoch(legacyDeadlineMs);
+      final lastCountedDay = deadline.subtract(const Duration(days: 1));
+      await _prefs.setString(_streakLastDateKey, _dateKey(lastCountedDay));
+    }
+  }
 }
 
 final progressRepositoryProvider =
     FutureProvider<ProgressRepository>((ref) async {
   final prefs = await ref.watch(sharedPreferencesProvider.future);
-  return ProgressRepository(prefs);
+  final repo = ProgressRepository(prefs);
+  await repo._migrateLegacyStreakIfNeeded();
+  return repo;
 });
 
 /// Bumped after campaign progress is written so Home/Me re-read prefs.
