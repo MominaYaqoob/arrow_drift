@@ -375,14 +375,14 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
                 const SizedBox(height: 6),
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
                     child: GameBoard(
                       gameState: preview,
                       onArrowTap: (_) {},
                       boardZoomed: _boardZoomed,
-                      hideDots: true,
+                      hideDots: false,
                       patternBoardChrome: true,
-                      boldFactor: 1.65,
+                      boldFactor: 2.0,
                       boardBackgroundOverride: colors.background,
                       arrowColorResolver: (_, index) {
                         final palette = [
@@ -474,19 +474,18 @@ class _PatternPreviewScreenState extends ConsumerState<PatternPreviewScreen> {
                   const SizedBox(height: 6),
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
                       child: GameBoard(
                         gameState: gameState,
                         highlightedArrowId: _highlightedArrowId,
-                        tutorialArrowId: _highlightedArrowId,
                         showTutorialTip: false,
                         boardZoomed: _boardZoomed,
                         shakeTokens: Map<String, int>.from(_shakeTokens),
                         wrongBumpCells:
                             Map<String, double>.from(_wrongBumpCells),
-                        hideDots: true,
+                        hideDots: false,
                         patternBoardChrome: true,
-                        boldFactor: 1.65,
+                        boldFactor: 2.0,
                         boardBackgroundOverride: colors.background,
                         arrowColorResolver: (_, index) {
                           final palette = [

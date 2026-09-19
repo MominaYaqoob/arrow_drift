@@ -127,7 +127,8 @@ class GameBoard extends StatelessWidget {
                       cols: cols,
                       color: isDark
                           ? colors.border
-                          : const Color(0xFFB8B0A0),
+                          : const Color(0xFFCBC4B6),
+                      alpha: isDark ? 0.55 : 0.48,
                       shapeMask: gameState.level.shapeMask,
                       fillColor: boardBackgroundOverride,
                     ),
@@ -262,8 +263,8 @@ class GameBoard extends StatelessWidget {
           );
         }
 
-        // Card padding: 14 + ~8 = 22 so arrows aren't cramped at the edges.
-        const cardPad = 22.0;
+        // Shared card pad — Custom / Main / Daily fill similarly.
+        const cardPad = 12.0;
         final tealRim = colors.accentTeal.withValues(alpha: isDark ? 0.3 : 0.35);
         final cardChild = AnimatedScale(
           scale: zoom,
@@ -540,6 +541,7 @@ class _DotGridPainter extends CustomPainter {
     required this.rows,
     required this.cols,
     required this.color,
+    this.alpha = 0.55,
     this.shapeMask,
     this.fillColor,
   });
@@ -547,6 +549,7 @@ class _DotGridPainter extends CustomPainter {
   final int rows;
   final int cols;
   final Color color;
+  final double alpha;
   final List<List<bool>>? shapeMask;
   final Color? fillColor;
 
@@ -566,7 +569,7 @@ class _DotGridPainter extends CustomPainter {
       canvas.drawRect(Offset.zero & size, Paint()..color = fillColor!);
     }
 
-    final paint = Paint()..color = color.withValues(alpha: 0.55);
+    final paint = Paint()..color = color.withValues(alpha: alpha);
     const radius = 1.6;
     final cellW = size.width / cols;
     final cellH = size.height / rows;
@@ -598,6 +601,7 @@ class _DotGridPainter extends CustomPainter {
     return oldDelegate.rows != rows ||
         oldDelegate.cols != cols ||
         oldDelegate.color != color ||
+        oldDelegate.alpha != alpha ||
         oldDelegate.shapeMask != shapeMask ||
         oldDelegate.fillColor != fillColor;
   }

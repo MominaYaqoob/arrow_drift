@@ -771,7 +771,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
                   flex: inTutorial ? 3 : 1,
                   child: Padding(
                     padding: EdgeInsets.symmetric(
-                      horizontal: isNestedPlain ? 20 : 12,
+                      horizontal: isNestedPlain ? 20 : 4,
                       vertical: isNestedPlain ? 6 : 0,
                     ),
                     child: GameBoard(
@@ -787,6 +787,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
                       boardZoomed: _boardZoomed,
                       shakeTokens: Map<String, int>.from(_shakeTokens),
                       wrongBumpCells: Map<String, double>.from(_wrongBumpCells),
+                      boldFactor: widget.isDaily ? 1.65 : 1.0,
                       onArrowTap: _onArrowTap,
                     ),
                   ),

@@ -2,7 +2,7 @@ name: arrow_drift
 description: "Arrow Drift : Puzzle Game"
 publish_to: 'none'
 
-version: 1.0.10+11
+version: 1.0.12+13
 
 environment:
   sdk: ^3.12.1

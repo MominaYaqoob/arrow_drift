@@ -91,6 +91,7 @@ class _UnlockLevelSheetState extends ConsumerState<UnlockLevelSheet> {
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
+    final adsAvailable = ref.watch(connectivityProvider);
 
     return SafeArea(
       child: Column(
@@ -118,13 +119,16 @@ class _UnlockLevelSheetState extends ConsumerState<UnlockLevelSheet> {
                 const SizedBox(height: 10),
                 const _BalancePill(),
                 const SizedBox(height: 22),
-                _SheetActionButton(
-                  label: 'Watch ad · +$kCustomAdCoinReward coins',
-                  icon: Icons.play_circle_outline_rounded,
-                  filled: false,
-                  loading: _watchingAd,
-                  enabled: !_watchingAd && !_unlocking,
-                  onTap: _watchAd,
+                Opacity(
+                  opacity: adsAvailable ? 1 : 0.45,
+                  child: _SheetActionButton(
+                    label: 'Watch ad · +$kCustomAdCoinReward coins',
+                    icon: Icons.play_circle_outline_rounded,
+                    filled: false,
+                    loading: _watchingAd,
+                    enabled: !_watchingAd && !_unlocking,
+                    onTap: _watchAd,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 ValueListenableBuilder<int>(
