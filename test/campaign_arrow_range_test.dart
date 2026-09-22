@@ -1,20 +1,20 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arrow_drift/data/models/level_model.dart';
+import 'package:arrow_drift/data/repositories/campaign_shapes.dart';
 import 'package:arrow_drift/data/repositories/level_repository.dart';
 
 /// Asserts live boards stay inside the configured campaign arrow bands.
 void main() {
   (int min, int max) bandFor(int n) {
     if (n == 1) return (3, 3);
-    if (n <= 5) return (40, 50);
-    if (n <= 20) return (50, 80);
-    if (n <= 100) return (80, 100);
+    if (n <= 5) return (40, 44);
+    if (n <= 20) return (46, 60);
+    if (n <= 100) return (61, 100);
     if (n <= 199) return (100, 150);
-    if (n <= 500) return (150, 180);
-    if (n <= 650) return (180, 190);
-    if (n <= 800) return (190, 210);
-    return (210, 250);
+    if (n == 200) return (151, 151);
+    // L201-1000: exact wave count (151 → 250).
+    return (waveCount(n), waveCount(n));
   }
 
   LevelDifficulty difficultyFor(int n) {

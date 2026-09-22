@@ -9,6 +9,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:arrow_drift/data/models/arrow_model.dart';
 import 'package:arrow_drift/data/models/level_model.dart';
+import 'package:arrow_drift/data/repositories/campaign_shapes.dart';
+import 'package:arrow_drift/data/repositories/maze_levels_data.dart';
+import 'package:arrow_drift/data/repositories/shape_levels_data.dart';
+import 'package:arrow_drift/data/repositories/shape_levels_data_101_200.dart';
+import 'package:arrow_drift/data/repositories/shape_levels_data_201_300.dart';
+import 'package:arrow_drift/data/repositories/shape_levels_data_301_400.dart';
+import 'package:arrow_drift/data/repositories/shape_levels_data_401_500.dart';
+import 'package:arrow_drift/data/repositories/shape_levels_data_501_600.dart';
+import 'package:arrow_drift/data/repositories/shape_levels_data_601_700.dart';
+import 'package:arrow_drift/data/repositories/shape_levels_data_701_800.dart';
+import 'package:arrow_drift/data/repositories/shape_levels_data_801_900.dart';
+import 'package:arrow_drift/data/repositories/shape_levels_data_901_1000.dart';
 import 'package:arrow_drift/data/repositories/shape_masks.dart';
 import 'package:arrow_drift/features/gameplay/game_controller.dart';
 
@@ -57,7 +69,10 @@ LevelModel _applePatternPreviewIsolateEntry((int, int) args) {
 }
 
 LevelModel _crescentMoonPatternPreviewIsolateEntry((int, int) args) {
-  return buildCrescentMoonPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+  return buildCrescentMoonPatternPreviewLevel(
+    levelNumber: args.$1,
+    seed: args.$2,
+  );
 }
 
 LevelModel _airplanePatternPreviewIsolateEntry((int, int) args) {
@@ -89,11 +104,17 @@ LevelModel _bananaPatternPreviewIsolateEntry((int, int) args) {
 }
 
 LevelModel _sixPointStarPatternPreviewIsolateEntry((int, int) args) {
-  return buildSixPointStarPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+  return buildSixPointStarPatternPreviewLevel(
+    levelNumber: args.$1,
+    seed: args.$2,
+  );
 }
 
 LevelModel _paperPlanePatternPreviewIsolateEntry((int, int) args) {
-  return buildPaperPlanePatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+  return buildPaperPlanePatternPreviewLevel(
+    levelNumber: args.$1,
+    seed: args.$2,
+  );
 }
 
 LevelModel _elephantPatternPreviewIsolateEntry((int, int) args) {
@@ -112,7 +133,10 @@ LevelModel _lightningBoltPatternPreviewIsolateEntry((int, int) args) {
 }
 
 LevelModel _rightArrowPatternPreviewIsolateEntry((int, int) args) {
-  return buildRightArrowPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+  return buildRightArrowPatternPreviewLevel(
+    levelNumber: args.$1,
+    seed: args.$2,
+  );
 }
 
 LevelModel _wheelPatternPreviewIsolateEntry((int, int) args) {
@@ -158,7 +182,10 @@ LevelModel _shootingStarPatternPreviewIsolateEntry((int, int) args) {
 }
 
 LevelModel _helicopterPatternPreviewIsolateEntry((int, int) args) {
-  return buildHelicopterPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+  return buildHelicopterPatternPreviewLevel(
+    levelNumber: args.$1,
+    seed: args.$2,
+  );
 }
 
 LevelModel _lionPatternPreviewIsolateEntry((int, int) args) {
@@ -174,7 +201,10 @@ LevelModel _vanPatternPreviewIsolateEntry((int, int) args) {
 }
 
 LevelModel _sportsBikePatternPreviewIsolateEntry((int, int) args) {
-  return buildSportsBikePatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+  return buildSportsBikePatternPreviewLevel(
+    levelNumber: args.$1,
+    seed: args.$2,
+  );
 }
 
 LevelModel _plusPatternPreviewIsolateEntry((int, int) args) {
@@ -182,7 +212,10 @@ LevelModel _plusPatternPreviewIsolateEntry((int, int) args) {
 }
 
 LevelModel _strawberryPatternPreviewIsolateEntry((int, int) args) {
-  return buildStrawberryPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+  return buildStrawberryPatternPreviewLevel(
+    levelNumber: args.$1,
+    seed: args.$2,
+  );
 }
 
 LevelModel _starBurstPatternPreviewIsolateEntry((int, int) args) {
@@ -190,7 +223,10 @@ LevelModel _starBurstPatternPreviewIsolateEntry((int, int) args) {
 }
 
 LevelModel _jetFighterPatternPreviewIsolateEntry((int, int) args) {
-  return buildJetFighterPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+  return buildJetFighterPatternPreviewLevel(
+    levelNumber: args.$1,
+    seed: args.$2,
+  );
 }
 
 LevelModel _bearPatternPreviewIsolateEntry((int, int) args) {
@@ -217,7 +253,10 @@ LevelModel _shieldPatternPreviewIsolateEntry((int, int) args) {
 }
 
 LevelModel _watermelonPatternPreviewIsolateEntry((int, int) args) {
-  return buildWatermelonPatternPreviewLevel(levelNumber: args.$1, seed: args.$2);
+  return buildWatermelonPatternPreviewLevel(
+    levelNumber: args.$1,
+    seed: args.$2,
+  );
 }
 
 LevelModel _fullMoonPatternPreviewIsolateEntry((int, int) args) {
@@ -598,7 +637,8 @@ List<List<bool>> _patternPreviewHeartMask(int size) {
       }
       final gapEnd = c;
       final boundedLeft = gapStart > 0 && mask[r][gapStart - 1];
-      final boundedRight = gapEnd < size && gapEnd > gapStart && mask[r][gapEnd];
+      final boundedRight =
+          gapEnd < size && gapEnd > gapStart && mask[r][gapEnd];
       final width = gapEnd - gapStart;
       if (boundedLeft && boundedRight && width <= 7) {
         for (var i = gapStart; i < gapEnd; i++) {
@@ -643,8 +683,7 @@ LevelModel _fillPreviewHeartGaps(
       c < mask[r].length &&
       mask[r][c];
 
-  bool isEmpty(int r, int c) =>
-      inMask(r, c) && !occupied.contains('$r:$c');
+  bool isEmpty(int r, int c) => inMask(r, c) && !occupied.contains('$r:$c');
 
   List<GridCell> grow({
     required int startR,
@@ -657,8 +696,7 @@ LevelModel _fillPreviewHeartGaps(
     var c = startC;
     var dir = startDir;
 
-    bool free(int rr, int cc) =>
-        isEmpty(rr, cc) && !used.contains('$rr:$cc');
+    bool free(int rr, int cc) => isEmpty(rr, cc) && !used.contains('$rr:$cc');
 
     List<(ArrowDirection, int, int)> neighbors(ArrowDirection from) {
       final (dr, dc) = _dirDelta(from);
@@ -671,7 +709,8 @@ LevelModel _fillPreviewHeartGaps(
         if (free(tr, tc)) opts.add((d, tr, tc));
       }
 
-      final tryTurnFirst = preferTurns &&
+      final tryTurnFirst =
+          preferTurns &&
           path.length >= 2 &&
           (turnEvery <= 1 || path.length % turnEvery == 0);
       if (tryTurnFirst) {
@@ -762,7 +801,8 @@ LevelModel _fillPreviewHeartGaps(
     }
     if (best == null || bestDir == null) {
       if (requireMin > 1 &&
-          (minArrows == null || level.arrows.length + extra.length < minArrows)) {
+          (minArrows == null ||
+              level.arrows.length + extra.length < minArrows)) {
         requireMin = 1;
         continue;
       }
@@ -1139,8 +1179,7 @@ LevelModel _buildDenseNestedPatternLevel({
           return null;
         }
         consider(packed);
-        if (minFillRatio > 0 &&
-            _patternMaskFillRatio(packed) < minFillRatio) {
+        if (minFillRatio > 0 && _patternMaskFillRatio(packed) < minFillRatio) {
           return null;
         }
         return packed;
@@ -1289,9 +1328,7 @@ LevelModel _buildDenseNestedPatternLevel({
     }
 
     throw lastError ??
-        StateError(
-          'Failed to build nested pattern preview for $levelNumber',
-        );
+        StateError('Failed to build nested pattern preview for $levelNumber');
   }
 
   LevelModel denser(LevelModel a, LevelModel b) {
@@ -1337,9 +1374,7 @@ LevelModel _buildDenseNestedPatternLevel({
   }
 
   if (result != null) return finish(result);
-  throw StateError(
-    'Failed to build nested pattern preview for $levelNumber',
-  );
+  throw StateError('Failed to build nested pattern preview for $levelNumber');
 }
 
 double _patternMaskFillRatio(LevelModel level) {
@@ -2633,7 +2668,9 @@ SolvableLevelResult generateSolvableLevel(
   int? seed,
   List<List<bool>>? shapeMask,
 }) {
-  final random = Random(seed ?? levelNumber * 7919 + gridSize * 97 + arrowCount);
+  final random = Random(
+    seed ?? levelNumber * 7919 + gridSize * 97 + arrowCount,
+  );
   final occupied = <String>{};
   final arrows = <ArrowModel>[];
   final placementOrder = <String>[];
@@ -2684,14 +2721,7 @@ SolvableLevelResult generateSolvableLevel(
         : clearDirections[random.nextInt(clearDirections.length)];
 
     final id = '$levelNumber-${arrows.length}';
-    arrows.add(
-      ArrowModel(
-        id: id,
-        row: row,
-        col: col,
-        direction: direction,
-      ),
-    );
+    arrows.add(ArrowModel(id: id, row: row, col: col, direction: direction));
     occupied.add(cellKey);
     placementOrder.add(id);
   }
@@ -2845,8 +2875,7 @@ bool _pathIsConnectedPolyline(ArrowModel arrow) {
     if (i == 0) continue;
     final prev = path[i - 1];
     final cur = path[i];
-    final dist =
-        (cur.row - prev.row).abs() + (cur.col - prev.col).abs();
+    final dist = (cur.row - prev.row).abs() + (cur.col - prev.col).abs();
     if (dist != 1) return false;
   }
   final tip = path.last;
@@ -2916,7 +2945,11 @@ int _cupWrapBonus(List<GridCell> path, Set<String> occupied) {
     // Prefer the diagonal inward pocket from the bend.
     final pocketR = a.row + d2r;
     final pocketC = a.col + d2c;
-    for (final (pr, pc) in [(ir, ic), (pocketR, pocketC), (c.row - d1r, c.col - d1c)]) {
+    for (final (pr, pc) in [
+      (ir, ic),
+      (pocketR, pocketC),
+      (c.row - d1r, c.col - d1c),
+    ]) {
       if (occupied.contains('$pr:$pc')) bonus++;
     }
   }
@@ -2981,31 +3014,37 @@ SolvableLevelResult generateNestedSolvableLevel(
   int minPathLen = 3,
   int maxPathLen = 14,
   int minArrows = 28,
+
   /// Stop placing once this many arrows exist (daily caps at 100).
   int? maxArrows,
   List<List<bool>>? shapeMask,
+
   /// Escape-puzzle mode: prefer bends / U-hooks; allow own parallel arms.
   bool hardNest = false,
+
   /// Retry if too many tips are free at start (easy first moves).
   int? maxFreeAtStart,
+
   /// When true with [maxFreeAtStart], require free count == that value.
   bool exactFreeAtStart = false,
+
   /// Daily-style mix: long + medium + small arrow lengths interleaved.
   bool mixPathSizes = false,
+
   /// Multiplier on hardNest turn/contact/cup-wrap scoring — pushes harder
   /// toward multi-bend U/C hooks for the densest late-campaign levels.
   /// 1.0 = existing behavior; only raise for L16+ so L1–15 feel is untouched.
   double turnBias = 1.0,
+
   /// After nested long paths, pack leftover mask cells with short shafts
   /// so arrow count can still hit [minArrows]. Default false (campaign/Daily).
   bool fillLeftoverGaps = false,
+
   /// Daily-only: snake leftover empty mask cells with long nested paths
   /// first, then allow short crumbs. Campaign never sets this.
   bool fillGapsWithLongPaths = false,
 }) {
-  final random = Random(
-    seed ?? levelNumber * 9973 + rows * 131 + cols * 17,
-  );
+  final random = Random(seed ?? levelNumber * 9973 + rows * 131 + cols * 17);
   final occupied = <String>{};
   final arrows = <ArrowModel>[];
   final placementOrder = <String>[];
@@ -3014,15 +3053,11 @@ SolvableLevelResult generateNestedSolvableLevel(
 
   String cellKey(int r, int c) => '$r:$c';
 
-  bool inBounds(int r, int c) =>
-      r >= 0 && c >= 0 && r < rows && c < cols;
+  bool inBounds(int r, int c) => r >= 0 && c >= 0 && r < rows && c < cols;
 
   bool inMask(int r, int c) {
     if (shapeMask == null) return true;
-    if (r < 0 ||
-        c < 0 ||
-        r >= shapeMask.length ||
-        c >= shapeMask[r].length) {
+    if (r < 0 || c < 0 || r >= shapeMask.length || c >= shapeMask[r].length) {
       return false;
     }
     return shapeMask[r][c];
@@ -3123,12 +3158,7 @@ SolvableLevelResult generateNestedSolvableLevel(
       final parts = keys[(start + i) % keys.length].split(':');
       final or = int.parse(parts[0]);
       final oc = int.parse(parts[1]);
-      final dirs = [
-        (0, 1),
-        (0, -1),
-        (1, 0),
-        (-1, 0),
-      ]..shuffle(random);
+      final dirs = [(0, 1), (0, -1), (1, 0), (-1, 0)]..shuffle(random);
       for (final (dr, dc) in dirs) {
         final nr = or + dr;
         final nc = oc + dc;
@@ -3265,8 +3295,7 @@ SolvableLevelResult generateNestedSolvableLevel(
       } else {
         // Prefer straight runs — fewer sharp folds.
         final straight = candidates.first;
-        final isStraight =
-            straight.$3 == growDr && straight.$4 == growDc;
+        final isStraight = straight.$3 == growDr && straight.$4 == growDc;
         if (isStraight && random.nextDouble() < 0.82) {
           pick = straight;
         } else {
@@ -3461,7 +3490,8 @@ SolvableLevelResult generateNestedSolvableLevel(
         if (empties < 5) continue;
       }
 
-      var score = sealedFrees * (exactFreeAtStart && maxFreeAtStart == 1 ? 40 : 14);
+      var score =
+          sealedFrees * (exactFreeAtStart && maxFreeAtStart == 1 ? 40 : 14);
       if (preferInward) {
         if (pointsInward(tipR, tipC, direction)) score += 8;
         if (easyOutwardRim(tipR, tipC, direction)) {
@@ -3495,7 +3525,8 @@ SolvableLevelResult generateNestedSolvableLevel(
           }
           score += (turns * 7 * turnBias).round();
           if (turns >= 2) {
-            score += (10 * turnBias).round(); // real hook / zigzag, not a single L
+            score += (10 * turnBias)
+                .round(); // real hook / zigzag, not a single L
           }
           if (turns >= 3) score += (6 * turnBias).round();
           if (path.length >= 5 && turns == 0) score -= 14;
@@ -3565,8 +3596,7 @@ SolvableLevelResult generateNestedSolvableLevel(
     return true;
   }
 
-  bool underArrowCap() =>
-      maxArrows == null || arrows.length < maxArrows;
+  bool underArrowCap() => maxArrows == null || arrows.length < maxArrows;
 
   int pickPathLen() {
     if (!mixPathSizes) {
@@ -3583,8 +3613,10 @@ SolvableLevelResult generateNestedSolvableLevel(
             random.nextInt((maxPathLen - tallMin).clamp(0, 99) + 1);
       }
       if (roll < 0.88) {
-        final mid =
-            ((minPathLen + maxPathLen) / 2).round().clamp(minPathLen, maxPathLen);
+        final mid = ((minPathLen + maxPathLen) / 2).round().clamp(
+          minPathLen,
+          maxPathLen,
+        );
         final lo = max(minPathLen, mid - 1);
         final hi = min(maxPathLen, mid + 2);
         return lo + random.nextInt((hi - lo).clamp(0, 99) + 1);
@@ -3602,8 +3634,10 @@ SolvableLevelResult generateNestedSolvableLevel(
             random.nextInt((maxPathLen - tallMin).clamp(0, 99) + 1);
       }
       if (roll < 0.90) {
-        final mid =
-            ((minPathLen + maxPathLen) / 2).round().clamp(minPathLen, maxPathLen);
+        final mid = ((minPathLen + maxPathLen) / 2).round().clamp(
+          minPathLen,
+          maxPathLen,
+        );
         final lo = (mid - 1).clamp(minPathLen, maxPathLen);
         final hi = (mid + 2).clamp(minPathLen, maxPathLen);
         return lo + random.nextInt((hi - lo).clamp(0, 99) + 1);
@@ -3620,8 +3654,10 @@ SolvableLevelResult generateNestedSolvableLevel(
     if (roll < 0.70) {
       // midLow must not exceed maxPathLen (short-path dense packs use max≤3).
       final midLow = min(4, maxPathLen);
-      final mid =
-          ((minPathLen + maxPathLen) / 2).round().clamp(midLow, maxPathLen);
+      final mid = ((minPathLen + maxPathLen) / 2).round().clamp(
+        midLow,
+        maxPathLen,
+      );
       final lo = (mid - 1).clamp(midLow, maxPathLen);
       final hi = (mid + 2).clamp(midLow, maxPathLen);
       return lo + random.nextInt((hi - lo).clamp(0, 99) + 1);
@@ -3632,6 +3668,7 @@ SolvableLevelResult generateNestedSolvableLevel(
   final growFloor = hardNest && minPathLen >= 4 ? minPathLen : 2;
   // L11+ strict: never place stub fragments below minPathLen.
   final strictMin = minPathLen >= 5 ? minPathLen : growFloor;
+
   /// Dedicated seal: tip on a free escape ray (guarantees sealedFrees ≥ 1).
   bool tryForceSealPlacement() {
     if (!(exactFreeAtStart && maxFreeAtStart == 1) || arrows.isEmpty) {
@@ -3665,9 +3702,7 @@ SolvableLevelResult generateNestedSolvableLevel(
         final (tr, tc) = cells[tipIndex];
         if (!escapeClear(tr, tc, free.direction)) continue;
         final segment = cells.sublist(tipIndex - 4, tipIndex + 1);
-        final path = [
-          for (final cell in segment) GridCell(cell.$1, cell.$2),
-        ];
+        final path = [for (final cell in segment) GridCell(cell.$1, cell.$2)];
         placeArrow(
           ArrowModel(
             id: allocArrowId(),
@@ -3683,9 +3718,7 @@ SolvableLevelResult generateNestedSolvableLevel(
         final (tr, tc) = cells[tipIndex];
         if (!escapeClear(tr, tc, free.direction)) continue;
         final segment = cells.sublist(tipIndex - 2, tipIndex + 1);
-        final path = [
-          for (final cell in segment) GridCell(cell.$1, cell.$2),
-        ];
+        final path = [for (final cell in segment) GridCell(cell.$1, cell.$2)];
         placeArrow(
           ArrowModel(
             id: allocArrowId(),
@@ -3744,25 +3777,11 @@ SolvableLevelResult generateNestedSolvableLevel(
       final tipC = cols ~/ 2;
       // Walk tip toward opposite of direction so shaft fits + ray is long.
       for (var back = 4; back <= 10 && !keeperOk; back++) {
-        final tr = tipR + (-dr) * 0; // keep center tip, check shaft/ray
-        final tc = tipC;
         // Try tip positions along the center line.
         for (var shift = -3; shift <= 3 && !keeperOk; shift++) {
           final pr = (tipR + (dr == 0 ? shift : 0)).clamp(0, rows - 1);
           final pc = (tipC + (dc == 0 ? shift : 0)).clamp(0, cols - 1);
-          // Tip inset `back` cells from the far rim along -direction.
-          final farR = dr > 0
-              ? rows - 1
-              : dr < 0
-                  ? 0
-                  : pr;
-          final farC = dc > 0
-              ? cols - 1
-              : dc < 0
-                  ? 0
-                  : pc;
-          // Place tip `back` cells before the rim along direction... 
-          // Simpler: tip at center-ish, require ahead>=5 and shaft 4.
+          // Tip at center-ish, require ahead>=5 and shaft 4.
           if (!isEmpty(pr, pc)) continue;
           var ahead = 0;
           var r = pr + dr;
@@ -3858,7 +3877,9 @@ SolvableLevelResult generateNestedSolvableLevel(
 
     var safety = 0;
     var stall = 0;
-    while (arrows.length < max(minArrows, 15) && underArrowCap() && safety < 2500) {
+    while (arrows.length < max(minArrows, 15) &&
+        underArrowCap() &&
+        safety < 2500) {
       safety++;
       final before = arrows.length;
       if (!tryForceSealPlacement()) {
@@ -3903,169 +3924,169 @@ SolvableLevelResult generateNestedSolvableLevel(
       }
     }
   } else {
-  // Phase 1: woven snakes — tips biased into nesting pockets.
-  var safety = 0;
-  var stall = 0;
-  while (occupied.length < targetCells && underArrowCap() && safety < 2000) {
-    safety++;
-    final before = occupied.length;
-    if (exactFreeAtStart && maxFreeAtStart == 1 && arrows.isNotEmpty) {
-      tryForceSealPlacement();
-    }
-    if (occupied.length == before) {
-      final tip = pickTip();
-      final len = pickPathLen();
-      tryPlaceAt(
-        tipR: tip.$1,
-        tipC: tip.$2,
-        targetLen: len < strictMin ? strictMin : len,
-        minLen: strictMin < 2 ? 2 : strictMin,
-        preferInward: true,
-      );
-    }
-    if (occupied.length == before) {
-      stall++;
-      if (exactFreeAtStart &&
-          maxFreeAtStart == 1 &&
-          stall > 20 &&
-          stall % 10 == 0) {
-        tryRetractAFreeTip();
+    // Phase 1: woven snakes — tips biased into nesting pockets.
+    var safety = 0;
+    var stall = 0;
+    while (occupied.length < targetCells && underArrowCap() && safety < 2000) {
+      safety++;
+      final before = occupied.length;
+      if (exactFreeAtStart && maxFreeAtStart == 1 && arrows.isNotEmpty) {
+        tryForceSealPlacement();
       }
-      if (stall > 150) break;
-    } else {
-      stall = 0;
-    }
-  }
-
-  // Phase 2: mop up — keep size mix; fill gaps tightly for daily.
-  safety = 0;
-  stall = 0;
-  while (occupied.length < targetCells && underArrowCap() && safety < 1200) {
-    safety++;
-    final before = occupied.length;
-    if (exactFreeAtStart && maxFreeAtStart == 1 && arrows.isNotEmpty) {
-      tryForceSealPlacement();
-    }
-    if (occupied.length == before) {
-      final tip = pickTip();
-      final len = mixPathSizes ? pickPathLen() : (strictMin + random.nextInt(3));
-      tryPlaceAt(
-        tipR: tip.$1,
-        tipC: tip.$2,
-        targetLen: len < strictMin ? strictMin : len,
-        minLen: strictMin < 2 ? 2 : strictMin,
-        preferInward: true,
-      );
-    }
-    if (occupied.length == before) {
-      stall++;
-      if (exactFreeAtStart &&
-          maxFreeAtStart == 1 &&
-          stall > 20 &&
-          stall % 10 == 0) {
-        tryRetractAFreeTip();
+      if (occupied.length == before) {
+        final tip = pickTip();
+        final len = pickPathLen();
+        tryPlaceAt(
+          tipR: tip.$1,
+          tipC: tip.$2,
+          targetLen: len < strictMin ? strictMin : len,
+          minLen: strictMin < 2 ? 2 : strictMin,
+          preferInward: true,
+        );
       }
-      if (stall > 120) break;
-    } else {
-      stall = 0;
+      if (occupied.length == before) {
+        stall++;
+        if (exactFreeAtStart &&
+            maxFreeAtStart == 1 &&
+            stall > 20 &&
+            stall % 10 == 0) {
+          tryRetractAFreeTip();
+        }
+        if (stall > 150) break;
+      } else {
+        stall = 0;
+      }
     }
-  }
 
-  // Phase 3: leftovers — hard nests still bury tips (refs); soft allow any tip.
-  // Never place stub fragments when minPathLen is strict (L11+).
-  final mopMin = hardNest && minPathLen >= 5 ? minPathLen : 2;
-  for (var r = 0; r < rows && underArrowCap(); r++) {
-    for (var c = 0; c < cols && underArrowCap(); c++) {
-      if (!isEmpty(r, c)) continue;
-      tryPlaceAt(
-        tipR: r,
-        tipC: c,
-        targetLen: mixPathSizes
+    // Phase 2: mop up — keep size mix; fill gaps tightly for daily.
+    safety = 0;
+    stall = 0;
+    while (occupied.length < targetCells && underArrowCap() && safety < 1200) {
+      safety++;
+      final before = occupied.length;
+      if (exactFreeAtStart && maxFreeAtStart == 1 && arrows.isNotEmpty) {
+        tryForceSealPlacement();
+      }
+      if (occupied.length == before) {
+        final tip = pickTip();
+        final len = mixPathSizes
             ? pickPathLen()
-            : (hardNest ? max(4, mopMin) : 3),
-        minLen: mopMin,
-        preferInward: hardNest || mixPathSizes,
-      );
+            : (strictMin + random.nextInt(3));
+        tryPlaceAt(
+          tipR: tip.$1,
+          tipC: tip.$2,
+          targetLen: len < strictMin ? strictMin : len,
+          minLen: strictMin < 2 ? 2 : strictMin,
+          preferInward: true,
+        );
+      }
+      if (occupied.length == before) {
+        stall++;
+        if (exactFreeAtStart &&
+            maxFreeAtStart == 1 &&
+            stall > 20 &&
+            stall % 10 == 0) {
+          tryRetractAFreeTip();
+        }
+        if (stall > 120) break;
+      } else {
+        stall = 0;
+      }
     }
-  }
 
-  // Phase 4: hard nests mop remaining corridors — keep inward bias.
-  // Skip ultra-short (2–3) fills when minPathLen >= 5 — those look like
-  // broken floating fragments on the board.
-  if (hardNest) {
-    for (var pass = 0; pass < 5 && underArrowCap(); pass++) {
-      var placed = false;
-      for (var r = 0; r < rows && underArrowCap(); r++) {
-        for (var c = 0; c < cols && underArrowCap(); c++) {
-          if (!isEmpty(r, c)) continue;
-          final len =
-              mopMin >= 5 ? mopMin + (pass % 3) : 2 + (pass % 3);
-          if (tryPlaceAt(
-            tipR: r,
-            tipC: c,
-            targetLen: len,
-            minLen: mopMin,
-            preferInward: true,
-            allowFacingTips: pass >= 3,
-          )) {
-            placed = true;
+    // Phase 3: leftovers — hard nests still bury tips (refs); soft allow any tip.
+    // Never place stub fragments when minPathLen is strict (L11+).
+    final mopMin = hardNest && minPathLen >= 5 ? minPathLen : 2;
+    for (var r = 0; r < rows && underArrowCap(); r++) {
+      for (var c = 0; c < cols && underArrowCap(); c++) {
+        if (!isEmpty(r, c)) continue;
+        tryPlaceAt(
+          tipR: r,
+          tipC: c,
+          targetLen: mixPathSizes
+              ? pickPathLen()
+              : (hardNest ? max(4, mopMin) : 3),
+          minLen: mopMin,
+          preferInward: hardNest || mixPathSizes,
+        );
+      }
+    }
+
+    // Phase 4: hard nests mop remaining corridors — keep inward bias.
+    // Skip ultra-short (2–3) fills when minPathLen >= 5 — those look like
+    // broken floating fragments on the board.
+    if (hardNest) {
+      for (var pass = 0; pass < 5 && underArrowCap(); pass++) {
+        var placed = false;
+        for (var r = 0; r < rows && underArrowCap(); r++) {
+          for (var c = 0; c < cols && underArrowCap(); c++) {
+            if (!isEmpty(r, c)) continue;
+            final len = mopMin >= 5 ? mopMin + (pass % 3) : 2 + (pass % 3);
+            if (tryPlaceAt(
+              tipR: r,
+              tipC: c,
+              targetLen: len,
+              minLen: mopMin,
+              preferInward: true,
+              allowFacingTips: pass >= 3,
+            )) {
+              placed = true;
+            }
           }
         }
+        if (!placed) break;
       }
-      if (!placed) break;
     }
-  }
 
-  // Daily / Custom: eat leftover corridors with long nested snakes first.
-  if (fillGapsWithLongPaths && maxPathLen >= 8) {
-    for (var pass = 0; pass < 4 && underArrowCap(); pass++) {
-      var placed = false;
-      final target = max(4, maxPathLen - pass);
-      for (var r = 0; r < rows && underArrowCap(); r++) {
-        for (var c = 0; c < cols && underArrowCap(); c++) {
-          if (!isEmpty(r, c)) continue;
-          if (tryPlaceAt(
-            tipR: r,
-            tipC: c,
-            targetLen: target,
-            minLen: 4,
-            preferInward: true,
-            allowFacingTips: pass >= 2,
-          )) {
-            placed = true;
+    // Daily / Custom: eat leftover corridors with long nested snakes first.
+    if (fillGapsWithLongPaths && maxPathLen >= 8) {
+      for (var pass = 0; pass < 4 && underArrowCap(); pass++) {
+        var placed = false;
+        final target = max(4, maxPathLen - pass);
+        for (var r = 0; r < rows && underArrowCap(); r++) {
+          for (var c = 0; c < cols && underArrowCap(); c++) {
+            if (!isEmpty(r, c)) continue;
+            if (tryPlaceAt(
+              tipR: r,
+              tipC: c,
+              targetLen: target,
+              minLen: 4,
+              preferInward: true,
+              allowFacingTips: pass >= 2,
+            )) {
+              placed = true;
+            }
           }
         }
+        if (!placed) break;
       }
-      if (!placed) break;
     }
-  }
 
-  // Phase 5: pack leftover gaps with short shafts (esp. daily size-mix packs).
-  // Disabled for strict hard nests — short stubs are the broken-arrow look
-  // unless [fillLeftoverGaps] is set (Patterns count floor).
-  if (fillLeftoverGaps ||
-      ((mixPathSizes || maxArrows != null) && mopMin < 5)) {
-    for (var pass = 0; pass < 20 && underArrowCap(); pass++) {
-      var placed = false;
-      for (var r = 0; r < rows && underArrowCap(); r++) {
-        for (var c = 0; c < cols && underArrowCap(); c++) {
-          if (!isEmpty(r, c)) continue;
-          if (tryPlaceAt(
-            tipR: r,
-            tipC: c,
-            targetLen: 2 + (pass % 4),
-            minLen: 2,
-            preferInward: false,
-            allowFacingTips: true,
-          )) {
-            placed = true;
+    // Phase 5: pack leftover gaps with short shafts (esp. daily size-mix packs).
+    // Disabled for strict hard nests — short stubs are the broken-arrow look
+    // unless [fillLeftoverGaps] is set (Patterns count floor).
+    if (fillLeftoverGaps ||
+        ((mixPathSizes || maxArrows != null) && mopMin < 5)) {
+      for (var pass = 0; pass < 20 && underArrowCap(); pass++) {
+        var placed = false;
+        for (var r = 0; r < rows && underArrowCap(); r++) {
+          for (var c = 0; c < cols && underArrowCap(); c++) {
+            if (!isEmpty(r, c)) continue;
+            if (tryPlaceAt(
+              tipR: r,
+              tipC: c,
+              targetLen: 2 + (pass % 4),
+              minLen: 2,
+              preferInward: false,
+              allowFacingTips: true,
+            )) {
+              placed = true;
+            }
           }
         }
+        if (!placed) break;
       }
-      if (!placed) break;
     }
-  }
-
   } // end non-exactOne reverse pack
 
   // Daily / Custom: leftover mask dots are absorbed into a neighbor shaft
@@ -4299,12 +4320,13 @@ List<List<bool>> starMask(int rows, int cols) {
 /// Campaign levels 1–20. Daily / endless helpers stay separate.
 class LevelRepository {
   LevelRepository({List<SolvableLevelResult>? prebuilt})
-      : _prebuilt = prebuilt,
-        _lazy = List<SolvableLevelResult?>.filled(campaignLevelCount, null);
+    : _prebuilt = prebuilt,
+      _lazy = List<SolvableLevelResult?>.filled(campaignLevelCount, null);
 
   final List<SolvableLevelResult>? _prebuilt;
   final List<SolvableLevelResult?> _lazy;
   final Map<int, LevelModel> _dailyCache = {};
+
   /// Prevents duplicate concurrent generation of the same level (prefetch + open).
   final Map<int, Future<LevelModel>> _inflightCampaign = {};
   final Map<int, Future<LevelModel>> _inflightDaily = {};
@@ -4320,14 +4342,14 @@ class LevelRepository {
     if (index < 0 || index >= campaignLevelCount) {
       throw RangeError('No campaign level at index $index');
     }
-    if (_prebuilt != null) return _prebuilt![index];
+    if (_prebuilt != null) return _prebuilt[index];
     return _lazy[index] ??= _buildCampaignLevel(index + 1);
   }
 
   /// Prefer [getLevel] — ships [campaignLevelCount] campaign levels.
   List<LevelModel> get levels => [
-        for (var i = 0; i < campaignLevelCount; i++) _resultAt(i).level,
-      ];
+    for (var i = 0; i < campaignLevelCount; i++) _resultAt(i).level,
+  ];
 
   int get levelCount => campaignLevelCount;
 
@@ -4371,7 +4393,7 @@ class LevelRepository {
     final key = levelNumber < 1 ? 1 : levelNumber;
     final clamped = key > campaignLevelCount ? campaignLevelCount : key;
     final index = clamped - 1;
-    if (_prebuilt != null) return _prebuilt![index].level;
+    if (_prebuilt != null) return _prebuilt[index].level;
     final cached = _lazy[index];
     if (cached != null) return cached.level;
     final inflight = _inflightCampaign[clamped];
@@ -4437,8 +4459,7 @@ class LevelRepository {
         // the loader is already on screen. Android uses a real isolate.
         level = _dailyChallengeIsolateEntry((day, levelNumber));
       } else {
-        level =
-            await compute(_dailyChallengeIsolateEntry, (day, levelNumber));
+        level = await compute(_dailyChallengeIsolateEntry, (day, levelNumber));
       }
       _dailyCache[levelNumber] = level;
       return level;
@@ -4506,8 +4527,8 @@ class LevelRepository {
       final level = LevelModel.fromJson(Map<String, dynamic>.from(decoded));
       final ok = galleryLevel == 1
           ? level.arrows.length >= 90 &&
-              level.gridRows >= 32 &&
-              level.gridRows <= 56
+                level.gridRows >= 32 &&
+                level.gridRows <= 56
           : _galleryDenseCacheOk(level);
       if (!ok) {
         unawaited(prefs.remove(_galleryDiskKey(galleryLevel)));
@@ -4541,9 +4562,7 @@ class LevelRepository {
         _takeGalleryFromDisk(galleryLevel);
   }
 
-  static Future<T> _enqueuePatternCompute<T>(
-    Future<T> Function() job,
-  ) {
+  static Future<T> _enqueuePatternCompute<T>(Future<T> Function() job) {
     final previous = _patternComputeTail;
     final released = Completer<void>();
     _patternComputeTail = released.future;
@@ -4575,7 +4594,8 @@ class LevelRepository {
     if (fromDisk != null) return fromDisk;
 
     final cached = _heartPreviewCache;
-    final cachedHasHint = cached != null &&
+    final cachedHasHint =
+        cached != null &&
         findFirstFreeArrow(
               arrows: cached.arrows,
               gridRows: cached.gridRows,
@@ -4609,10 +4629,7 @@ class LevelRepository {
         );
       } else {
         level = await _enqueuePatternCompute(
-          () => compute(
-            _heartPatternPreviewIsolateEntry,
-            (levelNumber, seed),
-          ),
+          () => compute(_heartPatternPreviewIsolateEntry, (levelNumber, seed)),
         );
       }
       _storeGalleryMemory(1, level);
@@ -4640,7 +4657,8 @@ class LevelRepository {
     if (fromDisk != null) return fromDisk;
 
     final cached = _carPreviewCache;
-    final cachedHasHint = cached != null &&
+    final cachedHasHint =
+        cached != null &&
         findFirstFreeArrow(
               arrows: cached.arrows,
               gridRows: cached.gridRows,
@@ -4675,10 +4693,7 @@ class LevelRepository {
         );
       } else {
         level = await _enqueuePatternCompute(
-          () => compute(
-            _carPatternPreviewIsolateEntry,
-            (levelNumber, seed),
-          ),
+          () => compute(_carPatternPreviewIsolateEntry, (levelNumber, seed)),
         );
       }
       _storeGalleryMemory(2, level);
@@ -6114,8 +6129,8 @@ class LevelRepository {
       99 => loadHotAirBalloonPatternPreviewLevel(),
       100 => loadRocketPatternPreviewLevel(),
       _ => Future.error(
-          StateError('No Patterns preview for gallery level $galleryLevel'),
-        ),
+        StateError('No Patterns preview for gallery level $galleryLevel'),
+      ),
     };
   }
 
@@ -6124,11 +6139,13 @@ class LevelRepository {
     if (memory != null) return memory;
     final fromDisk = _takeGalleryFromDisk(galleryLevel);
     if (fromDisk != null) return fromDisk;
-    unawaited(_ensureGalleryPrefs().then((_) {
-      if (_takeGalleryFromDisk(galleryLevel) != null) {
-        galleryPreviewEpoch.value++;
-      }
-    }));
+    unawaited(
+      _ensureGalleryPrefs().then((_) {
+        if (_takeGalleryFromDisk(galleryLevel) != null) {
+          galleryPreviewEpoch.value++;
+        }
+      }),
+    );
     return null;
   }
 
@@ -6193,101 +6210,101 @@ class LevelRepository {
     // Large primary boards so 120–150 mixed arrows pack tightly.
     final config = switch (shapeIndex) {
       0 => (
-          rows: 26,
-          cols: 26,
-          mask: generateHeartShapeMask(26),
-          fbRows: 24,
-          fbCols: 24,
-          fbMask: generateHeartShapeMask(24),
-        ),
+        rows: 26,
+        cols: 26,
+        mask: generateHeartShapeMask(26),
+        fbRows: 24,
+        fbCols: 24,
+        fbMask: generateHeartShapeMask(24),
+      ),
       1 => (
-          rows: 26,
-          cols: 26,
-          mask: ovalMask(26, 26),
-          fbRows: 24,
-          fbCols: 24,
-          fbMask: ovalMask(24, 24),
-        ),
+        rows: 26,
+        cols: 26,
+        mask: ovalMask(26, 26),
+        fbRows: 24,
+        fbCols: 24,
+        fbMask: ovalMask(24, 24),
+      ),
       2 => (
-          rows: 26,
-          cols: 26,
-          mask: starMask(26, 26),
-          fbRows: 24,
-          fbCols: 24,
-          fbMask: cloverMask(24, 24),
-        ),
+        rows: 26,
+        cols: 26,
+        mask: starMask(26, 26),
+        fbRows: 24,
+        fbCols: 24,
+        fbMask: cloverMask(24, 24),
+      ),
       3 => (
-          rows: 26,
-          cols: 26,
-          mask: crescentMask(26, 26),
-          fbRows: 24,
-          fbCols: 24,
-          fbMask: circleMask(24, 24),
-        ),
+        rows: 26,
+        cols: 26,
+        mask: crescentMask(26, 26),
+        fbRows: 24,
+        fbCols: 24,
+        fbMask: circleMask(24, 24),
+      ),
       4 => (
-          rows: 26,
-          cols: 26,
-          mask: cloverMask(26, 26),
-          fbRows: 24,
-          fbCols: 24,
-          fbMask: octagonMask(24, 24),
-        ),
+        rows: 26,
+        cols: 26,
+        mask: cloverMask(26, 26),
+        fbRows: 24,
+        fbCols: 24,
+        fbMask: octagonMask(24, 24),
+      ),
       5 => (
-          rows: 27,
-          cols: 25,
-          mask: shieldMask(27, 25),
-          fbRows: 24,
-          fbCols: 22,
-          fbMask: shieldMask(24, 22),
-        ),
+        rows: 27,
+        cols: 25,
+        mask: shieldMask(27, 25),
+        fbRows: 24,
+        fbCols: 22,
+        fbMask: shieldMask(24, 22),
+      ),
       6 => (
-          rows: 24,
-          cols: 28,
-          mask: fishMask(24, 28),
-          fbRows: 22,
-          fbCols: 26,
-          fbMask: fishMask(22, 26),
-        ),
+        rows: 24,
+        cols: 28,
+        mask: fishMask(24, 28),
+        fbRows: 22,
+        fbCols: 26,
+        fbMask: fishMask(22, 26),
+      ),
       7 => (
-          rows: 26,
-          cols: 26,
-          mask: butterflyMask(26, 26),
-          fbRows: 24,
-          fbCols: 24,
-          fbMask: flowerMask(24, 24),
-        ),
+        rows: 26,
+        cols: 26,
+        mask: butterflyMask(26, 26),
+        fbRows: 24,
+        fbCols: 24,
+        fbMask: flowerMask(24, 24),
+      ),
       8 => (
-          rows: 25,
-          cols: 27,
-          mask: birdOutlineMask(25, 27),
-          fbRows: 23,
-          fbCols: 25,
-          fbMask: birdOutlineMask(23, 25),
-        ),
+        rows: 25,
+        cols: 27,
+        mask: birdOutlineMask(25, 27),
+        fbRows: 23,
+        fbCols: 25,
+        fbMask: birdOutlineMask(23, 25),
+      ),
       9 => (
-          rows: 26,
-          cols: 26,
-          mask: catFaceMask(26, 26),
-          fbRows: 24,
-          fbCols: 24,
-          fbMask: catFaceMask(24, 24),
-        ),
+        rows: 26,
+        cols: 26,
+        mask: catFaceMask(26, 26),
+        fbRows: 24,
+        fbCols: 24,
+        fbMask: catFaceMask(24, 24),
+      ),
       10 => (
-          rows: 26,
-          cols: 28,
-          mask: stadiumMask(26, 28),
-          fbRows: 24,
-          fbCols: 26,
-          fbMask: stadiumMask(24, 26),
-        ),
+        rows: 26,
+        cols: 28,
+        mask: stadiumMask(26, 28),
+        fbRows: 24,
+        fbCols: 26,
+        fbMask: stadiumMask(24, 26),
+      ),
       _ => (
-          rows: 27,
-          cols: 27,
-          mask: octagonMask(27, 27),
-          fbRows: 24,
-          fbCols: 24,
-          fbMask: diamondMask(24, 24),
-        ),
+        rows: 27,
+        cols: 27,
+        mask: octagonMask(27, 27),
+        fbRows: 24,
+        fbCols: 24,
+        fbMask: diamondMask(24, 24),
+      ),
     };
 
     const minArrows = 100;
@@ -6426,7 +6443,9 @@ class LevelRepository {
     );
     if (last != null) return last;
     throw lastError ??
-        StateError('Failed to build dense daily (≥$minArrows) for $levelNumber');
+        StateError(
+          'Failed to build dense daily (≥$minArrows) for $levelNumber',
+        );
   }
 
   /// L1 tutorial → L2–5 Easy → L6–20 Medium → L21–100 Hard → L101–199
@@ -6435,12 +6454,31 @@ class LevelRepository {
   /// phone-friendly and late tiers carry the density.
   static SolvableLevelResult _buildCampaignLevel(int levelNumber) {
     if (levelNumber == 1) return _tutorialLevel1();
-    // Easy: L2–5, 40–50 arrows (L1 stays the fixed tutorial).
-    if (levelNumber <= 5) return _easyPuzzleLevel(levelNumber);
-    // Medium: L6–20, 50–80 arrows.
-    if (levelNumber <= 20) return _mediumPuzzleLevel(levelNumber);
+    // L2–20: pre-built square maze boards (long arrows, 40–60 arrows).
+    if (levelNumber <= 20) return _mazeCampaignLevel(levelNumber);
+    // L21–100: pre-built maze boards in 9 rotating shapes (61–100 arrows).
+    // L101–200: same, 6 shapes (101–151 arrows).
+    if (levelNumber <= 200) return _shapeCampaignLevel(levelNumber);
     // Hard / Hard+: L21–100 (80–100), L101–199 (100–150).
     if (levelNumber <= 199) return _hardPuzzleLevel(levelNumber);
+    // L201–1000: pre-built shaped boards; any level the offline tool skipped
+    // is built on the device with the same count and shape.
+    if (levelNumber <= 1000) {
+      final data = switch (levelNumber) {
+        <= 300 => kShapeLevelData201[levelNumber],
+        <= 400 => kShapeLevelData301[levelNumber],
+        <= 500 => kShapeLevelData401[levelNumber],
+        <= 600 => kShapeLevelData501[levelNumber],
+        <= 700 => kShapeLevelData601[levelNumber],
+        <= 800 => kShapeLevelData701[levelNumber],
+        <= 900 => kShapeLevelData801[levelNumber],
+        _ => kShapeLevelData901[levelNumber],
+      };
+      if (data != null) return _compactShapeLevel(levelNumber, data);
+      return _runtimeShapeLevel(levelNumber);
+    }
+    // L401–1000: shaped boards built on the device (151–250 arrows).
+    if (levelNumber >= 401) return _runtimeShapeLevel(levelNumber);
     // Expert → Grandmaster: L200–1000 dense tiers (150–250).
     return _densePuzzleLevel(levelNumber);
   }
@@ -6503,14 +6541,13 @@ class LevelRepository {
     required double fill,
     int floor = 2,
     int ceiling = 16,
-  }) =>
-      _pathBoundsForCoverage(
-        arrows: arrows,
-        cells: side * side,
-        fill: fill,
-        floor: floor,
-        ceiling: ceiling,
-      );
+  }) => _pathBoundsForCoverage(
+    arrows: arrows,
+    cells: side * side,
+    fill: fill,
+    floor: floor,
+    ceiling: ceiling,
+  );
 
   /// Seeded pick in [min, max] — stable per level, mixed across the band.
   static int _seededArrowTarget(int levelNumber, int min, int max) {
@@ -6618,8 +6655,244 @@ class LevelRepository {
     };
   }
 
+  /// L2–L20: square boards with long maze-like arrows, decoded from
+  /// [kMazeLevelData] (built offline by tool/generate_maze_levels.dart).
+  static SolvableLevelResult _mazeCampaignLevel(int levelNumber) {
+    final data = kMazeLevelData[levelNumber]!;
+    final size = int.parse(data.first);
+    final arrows = <ArrowModel>[
+      for (var i = 1; i < data.length; i++)
+        _decodeMazeArrow(data[i], id: '$levelNumber-${i - 1}', size: size),
+    ];
+    return SolvableLevelResult(
+      level: LevelModel(
+        levelNumber: levelNumber,
+        gridRows: size,
+        gridCols: size,
+        arrows: arrows,
+        heartsAllowed: 3,
+        hintsAllowed: 2,
+        difficulty: levelNumber <= 5
+            ? LevelDifficulty.easy
+            : LevelDifficulty.medium,
+      ),
+      placementOrder: [for (final arrow in arrows) arrow.id],
+    );
+  }
+
+  /// L21–L200: maze boards packed into simple shapes, decoded from
+  /// [kShapeLevelData] / [kShapeLevelData101] (built offline by
+  /// tool/generate_shape_levels.dart).
+  static SolvableLevelResult _shapeCampaignLevel(int levelNumber) {
+    final data = levelNumber <= 100
+        ? kShapeLevelData[levelNumber]!
+        : kShapeLevelData101[levelNumber]!;
+    final difficulty = levelNumber <= 100
+        ? LevelDifficulty.hard
+        : levelNumber <= 199
+        ? LevelDifficulty.hardPlus
+        : LevelDifficulty.expert;
+    final header = data[0].split(',');
+    final rows = int.parse(header[0]);
+    final cols = int.parse(header[1]);
+    final rawMask = data[1];
+    final shapeMask = rawMask.isEmpty
+        ? null
+        : [
+            for (final row in rawMask.split('/'))
+              [for (var c = 0; c < row.length; c++) row[c] == '1'],
+          ];
+    final arrows = <ArrowModel>[
+      for (var i = 2; i < data.length; i++)
+        _decodeMazeArrow(data[i], id: '$levelNumber-${i - 2}', size: cols),
+    ];
+    return SolvableLevelResult(
+      level: LevelModel(
+        levelNumber: levelNumber,
+        gridRows: rows,
+        gridCols: cols,
+        arrows: arrows,
+        heartsAllowed: 3,
+        hintsAllowed: 2,
+        difficulty: difficulty,
+        shapeMask: shapeMask,
+      ),
+      placementOrder: [for (final arrow in arrows) arrow.id],
+    );
+  }
+
+  /// L401–L1000: built on the device from a fixed seed (same board on every
+  /// phone). Arrow count and shape come from [waveCount] / [shapeForLevel]
+  /// so they follow the same rules as the pre-built L201–400 boards.
+  static SolvableLevelResult _runtimeShapeLevel(int levelNumber) {
+    final count = waveCount(levelNumber);
+    final shape = shapeForLevel(levelNumber);
+    final difficulty = _denseTierMeta(levelNumber).$1;
+    StateError? lastError;
+
+    SolvableLevelResult? tryShape(String shapeName, double cellsPerArrow) {
+      // Smallest board with enough playable cells for the target density.
+      var side = 16;
+      late int rows, cols;
+      late List<List<bool>> mask;
+      late int cells;
+      while (true) {
+        (rows, cols) = shapeDims(shapeName, side);
+        mask = campaignShapeMask(shapeName, rows, cols);
+        cells = mask.fold(0, (a, row) => a + row.where((v) => v).length);
+        if (cells >= count * cellsPerArrow || side >= 44) break;
+        side++;
+      }
+      final (lo, hi) = _pathBoundsForCoverage(
+        arrows: count,
+        cells: cells,
+        fill: 0.94,
+        floor: 2,
+        ceiling: 10,
+      );
+      for (var attempt = 0; attempt < 16; attempt++) {
+        try {
+          return generateNestedSolvableLevel(
+            levelNumber,
+            rows,
+            cols,
+            3,
+            2,
+            difficulty: difficulty,
+            seed: levelNumber * 15013 + attempt * 251 + side * 31,
+            shapeMask: mask,
+            fillTarget: (0.98 - attempt * 0.01).clamp(0.88, 0.98),
+            minPathLen: (lo - attempt ~/ 3).clamp(2, 10),
+            maxPathLen: attempt < 6 ? hi : (hi - 1).clamp(3, 10),
+            minArrows: count,
+            maxArrows: count,
+            hardNest: true,
+            maxFreeAtStart: attempt < 2 ? 1 : null,
+            exactFreeAtStart: attempt == 0,
+            turnBias: 2.2,
+          );
+        } on StateError catch (e) {
+          lastError = e;
+        }
+      }
+      return null;
+    }
+
+    for (final cellsPerArrow in [3.5, 3.8, 4.2]) {
+      final result = tryShape(shape, cellsPerArrow);
+      if (result != null) return result;
+    }
+    // Last resort only (keeps the exact arrow count): plain square board.
+    for (final cellsPerArrow in [3.6, 4.0]) {
+      final result = tryShape('square', cellsPerArrow);
+      if (result != null) return result;
+    }
+    throw lastError ?? StateError('Failed to build level $levelNumber');
+  }
+
+  /// L201–L400 pre-built board in the compact data format.
+  static SolvableLevelResult _compactShapeLevel(
+    int levelNumber,
+    List<String> data,
+  ) {
+    final header = data[0].split(',');
+    final rows = int.parse(header[0]);
+    final cols = int.parse(header[1]);
+    final arrows = <ArrowModel>[
+      for (var i = 2; i < data.length; i++)
+        _decodeCompactArrow(data[i], id: '$levelNumber-${i - 2}', cols: cols),
+    ];
+    return SolvableLevelResult(
+      level: LevelModel(
+        levelNumber: levelNumber,
+        gridRows: rows,
+        gridCols: cols,
+        arrows: arrows,
+        heartsAllowed: 3,
+        hintsAllowed: 2,
+        difficulty: _denseTierMeta(levelNumber).$1,
+        shapeMask: data[1].isEmpty ? null : _decodeCompactMask(data[1]),
+      ),
+      placementOrder: [for (final arrow in arrows) arrow.id],
+    );
+  }
+
+  /// Compact arrow entry `D:<start>:<moves>` (L201+ data): tail cell index,
+  /// then one U/D/L/R step per body cell towards the tip.
+  static ArrowModel _decodeCompactArrow(
+    String entry, {
+    required String id,
+    required int cols,
+  }) {
+    final parts = entry.split(':');
+    final direction = switch (parts[0]) {
+      'U' => ArrowDirection.up,
+      'D' => ArrowDirection.down,
+      'L' => ArrowDirection.left,
+      _ => ArrowDirection.right,
+    };
+    final start = int.parse(parts[1]);
+    var row = start ~/ cols, col = start % cols;
+    final path = [GridCell(row, col)];
+    for (final step in parts[2].split('')) {
+      switch (step) {
+        case 'U':
+          row--;
+        case 'D':
+          row++;
+        case 'L':
+          col--;
+        default:
+          col++;
+      }
+      path.add(GridCell(row, col));
+    }
+    return ArrowModel(
+      id: id,
+      row: path.last.row,
+      col: path.last.col,
+      direction: direction,
+      path: path,
+    );
+  }
+
+  /// Run-length mask rows ("3.30.3/…"), each starting with an outside run.
+  static List<List<bool>> _decodeCompactMask(String raw) => [
+    for (final row in raw.split('/'))
+      [
+        for (final (i, run) in row.split('.').indexed)
+          for (var k = 0; k < int.parse(run); k++) i.isOdd,
+      ],
+  ];
+
+  static ArrowModel _decodeMazeArrow(
+    String entry, {
+    required String id,
+    required int size,
+  }) {
+    final direction = switch (entry[0]) {
+      'U' => ArrowDirection.up,
+      'D' => ArrowDirection.down,
+      'L' => ArrowDirection.left,
+      _ => ArrowDirection.right,
+    };
+    final path = [
+      for (final raw in entry.substring(2).split(','))
+        GridCell(int.parse(raw) ~/ size, int.parse(raw) % size),
+    ];
+    return ArrowModel(
+      id: id,
+      row: path.last.row,
+      col: path.last.col,
+      direction: direction,
+      path: path,
+    );
+  }
+
   /// L2–L5: Easy tier — distinct silhouettes per level, exact seeded
   /// arrow counts (40–50 band). Shape is preferred before any square fallback.
+  /// Superseded by [_mazeCampaignLevel]; kept for reference.
+  // ignore: unused_element
   static SolvableLevelResult _easyPuzzleLevel(int levelNumber) {
     final t = _tierT(levelNumber, 2, 5);
     final (tierMin, _, targetArrows) = _campaignArrowSpec(levelNumber);
@@ -6779,6 +7052,8 @@ class LevelRepository {
   /// L6–L20: Medium tier — shaped silhouettes, growing density + nesting,
   /// free-tile cap shrinks toward the end but stays non-exact (no forced
   /// single-key sequencing yet — that starts at L21). Arrow band: 50–80.
+  /// Superseded by [_mazeCampaignLevel]; kept for reference.
+  // ignore: unused_element
   static SolvableLevelResult _mediumPuzzleLevel(int levelNumber) {
     final t = _tierT(levelNumber, 6, 20);
     final (_, __, targetArrows) = _campaignArrowSpec(levelNumber);
@@ -7020,23 +7295,26 @@ class LevelRepository {
 
   /// L21–L199: Hard / Hard+ — arrow target ramps inside each band.
   /// Structural difficulty also ramps (fill / free-cap / turnBias / hints).
+  /// Superseded by [_shapeCampaignLevel]; kept for reference.
+  // ignore: unused_element
   static SolvableLevelResult _hardPuzzleLevel(int levelNumber) {
     final lowHard = levelNumber <= 100;
     final (tierMin, _, targetArrows) = _campaignArrowSpec(levelNumber);
-    final difficulty =
-        lowHard ? LevelDifficulty.hard : LevelDifficulty.hardPlus;
+    final difficulty = lowHard
+        ? LevelDifficulty.hard
+        : LevelDifficulty.hardPlus;
     final t = _tierT(levelNumber, 21, 199);
     final fillTarget = _lerp(0.94, 0.98, t);
     // Grid sized so exact arrow targets still pack without crashing.
     final size = targetArrows <= 90
         ? 22
         : targetArrows <= 100
-            ? 23
-            : targetArrows <= 120
-                ? 24
-                : targetArrows <= 140
-                    ? 26
-                    : 28;
+        ? 23
+        : targetArrows <= 120
+        ? 24
+        : targetArrows <= 140
+        ? 26
+        : 28;
     // L21–100: fuller silhouettes only (no thin diamond/oval/stadium) so
     // the playable nest reaches nearer the board edges.
     final mask = lowHard
@@ -7169,8 +7447,10 @@ class LevelRepository {
       floor: 4,
       ceiling: 12,
     );
-    final lastSquare =
-        List.generate(size, (_) => List<bool>.filled(size, true));
+    final lastSquare = List.generate(
+      size,
+      (_) => List<bool>.filled(size, true),
+    );
     final last = tryOnce(
       r: size,
       c: size,
@@ -7512,24 +7792,9 @@ class LevelRepository {
   static SolvableLevelResult _tutorialLevel1() {
     // Middle listed first so findFreeArrow() highlights it initially.
     final arrows = [
-      ArrowModel(
-        id: '1-0',
-        row: 1,
-        col: 1,
-        direction: ArrowDirection.up,
-      ),
-      ArrowModel(
-        id: '1-1',
-        row: 1,
-        col: 0,
-        direction: ArrowDirection.up,
-      ),
-      ArrowModel(
-        id: '1-2',
-        row: 1,
-        col: 2,
-        direction: ArrowDirection.down,
-      ),
+      ArrowModel(id: '1-0', row: 1, col: 1, direction: ArrowDirection.up),
+      ArrowModel(id: '1-1', row: 1, col: 0, direction: ArrowDirection.up),
+      ArrowModel(id: '1-2', row: 1, col: 2, direction: ArrowDirection.down),
     ];
 
     return SolvableLevelResult(
@@ -7538,7 +7803,7 @@ class LevelRepository {
         gridRows: 3,
         gridCols: 3,
         arrows: arrows,
-        heartsAllowed: 5,
+        heartsAllowed: 3,
         hintsAllowed: 3,
         difficulty: LevelDifficulty.easy,
       ),
@@ -7546,8 +7811,6 @@ class LevelRepository {
       placementOrder: const ['1-1', '1-2', '1-0'],
     );
   }
-
-
 }
 
 final _sharedLevelRepository = LevelRepository();
@@ -7558,7 +7821,10 @@ final levelRepositoryProvider = Provider<LevelRepository>((ref) {
 
 final levelsRepositoryProvider = levelRepositoryProvider;
 
-final levelByNumberProvider = Provider.family<LevelModel, int>((ref, levelNumber) {
+final levelByNumberProvider = Provider.family<LevelModel, int>((
+  ref,
+  levelNumber,
+) {
   return ref.watch(levelRepositoryProvider).getLevel(levelNumber);
 });
 
@@ -7568,8 +7834,10 @@ final levelByNumberProvider = Provider.family<LevelModel, int>((ref, levelNumber
 /// built. Once this resolves, the level is cached on the repo, so any
 /// later sync read via [levelByNumberProvider] / `getLevel` for the same
 /// level number is instant.
-final levelByNumberAsyncProvider =
-    FutureProvider.family<LevelModel, int>((ref, levelNumber) {
+final levelByNumberAsyncProvider = FutureProvider.family<LevelModel, int>((
+  ref,
+  levelNumber,
+) {
   return ref.watch(levelRepositoryProvider).getLevelAsync(levelNumber);
 });
 
@@ -7578,8 +7846,10 @@ final dailyLevelProvider = Provider<LevelModel>((ref) {
 });
 
 /// Daily puzzle for a calendar day key `yyyy-MM-dd`.
-final dailyLevelForDateProvider =
-    Provider.family<LevelModel, String>((ref, dateKey) {
+final dailyLevelForDateProvider = Provider.family<LevelModel, String>((
+  ref,
+  dateKey,
+) {
   final parts = dateKey.split('-');
   final date = DateTime(
     int.parse(parts[0]),
@@ -7593,14 +7863,14 @@ final dailyLevelForDateProvider =
 /// isolate treatment, since daily boards are the heaviest generation case.
 final dailyLevelForDateAsyncProvider =
     FutureProvider.family<LevelModel, String>((ref, dateKey) {
-  final parts = dateKey.split('-');
-  final date = DateTime(
-    int.parse(parts[0]),
-    int.parse(parts[1]),
-    int.parse(parts[2]),
-  );
-  return ref.watch(levelRepositoryProvider).getDailyLevelAsync(date);
-});
+      final parts = dateKey.split('-');
+      final date = DateTime(
+        int.parse(parts[0]),
+        int.parse(parts[1]),
+        int.parse(parts[2]),
+      );
+      return ref.watch(levelRepositoryProvider).getDailyLevelAsync(date);
+    });
 
 String dailyDateKey(DateTime date) {
   final y = date.year.toString().padLeft(4, '0');

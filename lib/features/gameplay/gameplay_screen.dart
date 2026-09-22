@@ -263,8 +263,8 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
   }
 
   void _maybeShowHalfwayToast(GameState gameState) {
-    // Mid-level "50% complete" toast starts from Level 11 only.
-    if (widget.isDaily || widget.levelNumber < 11) return;
+    // Mid-level "50% complete" toast on Daily and campaign Levels 2–1000.
+    if (!widget.isDaily && widget.levelNumber < 2) return;
     if (_halfwayToastShown || gameState.isWon || gameState.isLost) return;
     final total = gameState.arrows.length;
     if (total < 2) return;
@@ -787,7 +787,12 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
                       boardZoomed: _boardZoomed,
                       shakeTokens: Map<String, int>.from(_shakeTokens),
                       wrongBumpCells: Map<String, double>.from(_wrongBumpCells),
-                      boldFactor: widget.isDaily ? 1.65 : 1.0,
+                      // L2–1000 maze boards are denser — slightly bolder arrows.
+                      boldFactor: widget.isDaily
+                          ? 1.65
+                          : (widget.levelNumber >= 2 && widget.levelNumber <= 1000)
+                              ? 1.5
+                              : 1.0,
                       onArrowTap: _onArrowTap,
                     ),
                   ),

@@ -42,6 +42,32 @@ void main() {
     expect(repo.getCurrentLevel(), 3);
   });
 
+  test('replaying an older level never moves progress backwards', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final repo = ProgressRepository(prefs);
+
+    await repo.saveProgress(49); // currentLevel -> 50
+    await repo.saveProgress(1);
+    expect(repo.getCurrentLevel(), 50);
+    expect(repo.getLastCompletedLevel(), 49);
+  });
+
+  test('existing player data from an older build is kept', () async {
+    SharedPreferences.setMockInitialValues({
+      ProgressRepository.currentLevelKey: 37,
+      'last_completed_level': 36,
+      'coin_balance': 420,
+    });
+    final prefs = await SharedPreferences.getInstance();
+    final repo = ProgressRepository(prefs);
+
+    expect(repo.getCurrentLevel(), 37);
+    expect(repo.getCoinBalance(), 420);
+    await repo.saveProgress(37);
+    expect(repo.getCurrentLevel(), 38);
+    expect(repo.getLastCompletedLevel(), 37);
+  });
+
   test('retry resets board state without changing stored currentLevel', () async {
     final prefs = await SharedPreferences.getInstance();
     final repo = ProgressRepository(prefs);

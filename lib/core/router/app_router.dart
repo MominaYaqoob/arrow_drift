@@ -148,12 +148,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             DateTime? dailyDate;
             if (dateParam != null && dateParam.isNotEmpty) {
               final parts = dateParam.split('-');
-              if (parts.length == 3) {
-                dailyDate = DateTime(
-                  int.parse(parts[0]),
-                  int.parse(parts[1]),
-                  int.parse(parts[2]),
-                );
+              final y = parts.length == 3 ? int.tryParse(parts[0]) : null;
+              final m = parts.length == 3 ? int.tryParse(parts[1]) : null;
+              final d = parts.length == 3 ? int.tryParse(parts[2]) : null;
+              if (y != null && m != null && d != null) {
+                dailyDate = DateTime(y, m, d);
               }
             }
             return GameplayScreen(
@@ -193,9 +192,34 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const PrivacyPolicyScreen(),
       ),
     ],
-    errorBuilder: (context, state) => const Scaffold(
-      backgroundColor: AppColors.lightBackground,
-      body: SizedBox.shrink(),
-    ),
+    // Unknown route (bad deep link) → restart through splash instead of
+    // leaving the player on a blank screen.
+    errorBuilder: (context, state) => const _UnknownRouteRedirect(),
   );
 });
+
+class _UnknownRouteRedirect extends StatefulWidget {
+  const _UnknownRouteRedirect();
+
+  @override
+  State<_UnknownRouteRedirect> createState() => _UnknownRouteRedirectState();
+}
+
+class _UnknownRouteRedirectState extends State<_UnknownRouteRedirect> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.go(SplashLogoScreen.routePath);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      backgroundColor: AppColors.lightBackground,
+      body: SizedBox.shrink(),
+    );
+  }
+}
