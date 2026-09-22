@@ -65,6 +65,20 @@ android {
     }
 }
 
+// Never ship a release signed with the debug key: Play rejects it. Debug
+// builds still work without key.properties.
+gradle.taskGraph.whenReady {
+    val buildsRelease = allTasks.any {
+        it.project == project && it.name.contains("Release")
+    }
+    if (buildsRelease && !keystorePropertiesFile.exists()) {
+        throw GradleException(
+            "android/key.properties missing — release builds must be signed " +
+                "with the upload keystore.",
+        )
+    }
+}
+
 kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17

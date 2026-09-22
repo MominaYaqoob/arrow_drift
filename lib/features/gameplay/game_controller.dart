@@ -409,8 +409,19 @@ class GameController extends StateNotifier<GameState> {
   }
 }
 
+/// How many recently opened boards keep their in-progress state in memory.
+/// Leaving a level and coming back still resumes it; older boards are freed.
+const int _keepRecentBoards = 3;
+final List<KeepAliveLink> _recentBoardLinks = [];
+
 /// Provides a [GameController] scoped to a specific [LevelModel].
-final gameControllerProvider =
-    StateNotifierProvider.family<GameController, GameState, LevelModel>(
-  (ref, level) => GameController(level),
-);
+final gameControllerProvider = StateNotifierProvider.autoDispose
+    .family<GameController, GameState, LevelModel>((ref, level) {
+  final link = ref.keepAlive();
+  _recentBoardLinks.add(link);
+  ref.onDispose(() => _recentBoardLinks.remove(link));
+  while (_recentBoardLinks.length > _keepRecentBoards) {
+    _recentBoardLinks.removeAt(0).close();
+  }
+  return GameController(level);
+});

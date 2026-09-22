@@ -152,9 +152,19 @@ class ProgressRepository {
   }
 
   /// Marks [completedLevel] done and sets [currentLevel] to the next number.
+  /// Never moves progress backwards: replaying an older level keeps the
+  /// player's furthest level.
   Future<void> saveProgress(int completedLevel) async {
-    await _prefs.setInt(_lastCompletedLevelKey, completedLevel);
-    await _prefs.setInt(currentLevelKey, completedLevel + 1);
+    final lastCompleted = getLastCompletedLevel();
+    final current = getCurrentLevel();
+    await _prefs.setInt(
+      _lastCompletedLevelKey,
+      completedLevel > lastCompleted ? completedLevel : lastCompleted,
+    );
+    await _prefs.setInt(
+      currentLevelKey,
+      completedLevel + 1 > current ? completedLevel + 1 : current,
+    );
     await _prefs.remove(_legacyCurrentLevelKey);
   }
 

@@ -48,3 +48,10 @@ app.*.map.json
 /android/key.properties
 /android/*.jks
 /android/*.keystore
+
+# Local scratch / logs / Windows shortcuts
+/android/build/
+/tmp_*.dart
+/_daily_fn.txt
+/admob_log.txt
+*.lnk
