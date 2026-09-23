@@ -306,6 +306,29 @@ class ProgressRepository {
     return DateTime(y, m, d);
   }
 
+  /// Last calendar day the Daily Spin wheel was claimed (`yyyy-MM-dd`).
+  static const String _spinLastDateKey = 'daily_spin_last_date';
+
+  /// True once today's spin has already been claimed (resets at midnight).
+  bool hasSpunToday({DateTime? now}) {
+    final clock = now ?? DateTime.now();
+    final lastKey = _prefs.getString(_spinLastDateKey);
+    if (lastKey == null || lastKey.isEmpty) return false;
+    final last = _parseDateKey(lastKey);
+    if (last == null) return false;
+    return _sameDay(last, _dayOnly(clock));
+  }
+
+  /// Marks today's Daily Spin as claimed.
+  Future<void> markSpunToday({DateTime? now}) async {
+    final clock = now ?? DateTime.now();
+    await _prefs.setString(_spinLastDateKey, _dateKey(_dayOnly(clock)));
+    spinAvailableTick.value++;
+  }
+
+  /// Bumped after a spin is claimed so the Home badge dot refreshes.
+  static final ValueNotifier<int> spinAvailableTick = ValueNotifier<int>(0);
+
   static const String _ratePromptKey = 'has_shown_rate_prompt';
   static const String _ratePromptL5Key = 'has_shown_rate_prompt_l5';
   static const String _ratePromptL10Key = 'has_shown_rate_prompt_l10';
@@ -529,4 +552,14 @@ final playerNicknameProvider = FutureProvider<String>((ref) async {
 final playerAvatarIdProvider = FutureProvider<String>((ref) async {
   final repo = await ref.watch(progressRepositoryProvider.future);
   return repo.getAvatarId();
+});
+
+/// Bumped after a Daily Spin claim so the Home badge dot refreshes.
+final spinAvailableTickProvider = StateProvider<int>((ref) => 0);
+
+/// Whether the Daily Spin wheel still has an unclaimed prize today.
+final canSpinTodayProvider = FutureProvider<bool>((ref) async {
+  ref.watch(spinAvailableTickProvider);
+  final repo = await ref.watch(progressRepositoryProvider.future);
+  return !repo.hasSpunToday();
 });

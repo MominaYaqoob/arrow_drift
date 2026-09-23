@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:arrow_drift/core/theme/app_theme.dart';
 import 'package:arrow_drift/core/widgets/app_logo.dart';
 import 'package:arrow_drift/core/widgets/coin_balance_pill.dart';
+import 'package:arrow_drift/features/home/daily_spin_wheel.dart';
 import 'package:arrow_drift/data/repositories/level_repository.dart';
 import 'package:arrow_drift/data/repositories/progress_repository.dart';
 import 'package:arrow_drift/data/repositories/settings_repository.dart';
@@ -99,7 +100,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               return SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
                 child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: constraints.maxHeight - 24),
+                  constraints: BoxConstraints(
+                    // -1 avoids sub-pixel IntrinsicHeight/Column overflow
+                    // (e.g. 0.6px) on some Chrome / dense layouts.
+                    minHeight: constraints.maxHeight - 25,
+                  ),
                   child: IntrinsicHeight(
                     child: Column(
                       children: [
@@ -125,10 +130,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           skipLoadingOnReload: true,
                           skipLoadingOnRefresh: true,
                           data: (level) {
-                            final levelCount =
-                                ref.watch(levelRepositoryProvider).levelCount;
-                            final resumeLevel =
-                                level > levelCount ? levelCount : level;
+                            final levelCount = ref
+                                .watch(levelRepositoryProvider)
+                                .levelCount;
+                            final resumeLevel = level > levelCount
+                                ? levelCount
+                                : level;
                             return _ContinueButton(
                               level: resumeLevel,
                               onPressed: () => context.push(
@@ -183,10 +190,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 }
 
 class _TopBar extends StatelessWidget {
-  const _TopBar({
-    required this.isDark,
-    required this.onToggleTheme,
-  });
+  const _TopBar({required this.isDark, required this.onToggleTheme});
+
+  final bool isDark;
+  final VoidCallback onToggleTheme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Row(
+          children: [
+            const AppLogoMark(size: 36),
+            const Spacer(),
+            const CoinBalancePill(),
+            const SizedBox(width: 8),
+            _ThemeToggle(isDark: isDark, onToggleTheme: onToggleTheme),
+          ],
+        ),
+        const SizedBox(height: 8),
+        const DailySpinButton(),
+      ],
+    );
+  }
+}
+
+class _ThemeToggle extends StatelessWidget {
+  const _ThemeToggle({required this.isDark, required this.onToggleTheme});
 
   final bool isDark;
   final VoidCallback onToggleTheme;
@@ -195,49 +226,41 @@ class _TopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.appColors;
 
-    return Row(
-      children: [
-        const AppLogoMark(size: 36),
-        const Spacer(),
-        const CoinBalancePill(),
-        const SizedBox(width: 8),
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onToggleTheme,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onToggleTheme,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: isDark
+                ? colors.surface2
+                : Colors.white.withValues(alpha: 0.75),
             borderRadius: BorderRadius.circular(20),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? colors.surface2
-                    : Colors.white.withValues(alpha: 0.75),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: colors.border, width: 0.5),
+            border: Border.all(color: colors.border, width: 0.5),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                size: 16,
+                color: colors.secondaryText,
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
-                    size: 16,
-                    color: colors.secondaryText,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    isDark ? 'Dark' : 'Light',
-                    style: AppTextStyles.label(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: colors.primaryText,
-                    ),
-                  ),
-                ],
+              const SizedBox(width: 6),
+              Text(
+                isDark ? 'Dark' : 'Light',
+                style: AppTextStyles.label(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: colors.primaryText,
+                ),
               ),
-            ),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 }
@@ -257,7 +280,9 @@ class _BrandBlock extends StatelessWidget {
             borderRadius: BorderRadius.circular(28),
             boxShadow: [
               BoxShadow(
-                color: colors.accentTeal.withValues(alpha: isDark ? 0.22 : 0.14),
+                color: colors.accentTeal.withValues(
+                  alpha: isDark ? 0.22 : 0.14,
+                ),
                 blurRadius: 24,
                 spreadRadius: 1,
               ),
@@ -312,11 +337,11 @@ class _DailyChallengeCard extends ConsumerWidget {
     final streak = ref.watch(currentStreakProvider).valueOrNull ?? 0;
     final remaining =
         ref.watch(streakRemainingProvider).valueOrNull ?? Duration.zero;
-    final timerLabel =
-        streak > 0 && remaining > Duration.zero
-            ? formatStreakRemaining(remaining)
-            : null;
-    final timerUrgent = remaining > Duration.zero &&
+    final timerLabel = streak > 0 && remaining > Duration.zero
+        ? formatStreakRemaining(remaining)
+        : null;
+    final timerUrgent =
+        remaining > Duration.zero &&
         remaining <= ProgressRepository.streakUrgentWindow;
     final todayCleared = streak > 0 && remaining == Duration.zero;
 
@@ -335,9 +360,7 @@ class _DailyChallengeCard extends ConsumerWidget {
               end: Alignment.bottomRight,
               colors: [Color(0xFF14A08A), Color(0xFF0B5E52)],
             ),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.12),
-            ),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
             boxShadow: [
               BoxShadow(
                 color: const Color(0xFF0B5E52).withValues(alpha: 0.3),
@@ -451,8 +474,9 @@ class _DailyChallengeCard extends ConsumerWidget {
                             ),
                             decoration: BoxDecoration(
                               color: timerUrgent
-                                  ? const Color(0xFFE85D4C)
-                                      .withValues(alpha: 0.92)
+                                  ? const Color(
+                                      0xFFE85D4C,
+                                    ).withValues(alpha: 0.92)
                                   : Colors.white.withValues(alpha: 0.14),
                               borderRadius: BorderRadius.circular(999),
                               border: Border.all(
@@ -478,8 +502,10 @@ class _DailyChallengeCard extends ConsumerWidget {
                 ),
               ),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 11,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(999),
@@ -523,10 +549,7 @@ class _DailyChallengeCard extends ConsumerWidget {
 }
 
 class _ContinueButton extends StatelessWidget {
-  const _ContinueButton({
-    required this.level,
-    required this.onPressed,
-  });
+  const _ContinueButton({required this.level, required this.onPressed});
 
   final int level;
   final VoidCallback onPressed;
@@ -558,10 +581,11 @@ class _ContinueButton extends StatelessWidget {
                   : null,
               boxShadow: [
                 BoxShadow(
-                  color: (isDark
-                          ? AppColors.accentTealDeep
-                          : AppColors.lightPrimaryText)
-                      .withValues(alpha: isDark ? 0.3 : 0.16),
+                  color:
+                      (isDark
+                              ? AppColors.accentTealDeep
+                              : AppColors.lightPrimaryText)
+                          .withValues(alpha: isDark ? 0.3 : 0.16),
                   blurRadius: 16,
                   offset: const Offset(0, 8),
                 ),
