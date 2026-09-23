@@ -60,8 +60,7 @@ List<String> _buildShapes201() {
     String? pick;
     var pickAge = -1;
     for (var step = 0; step < kShapeCycle201.length; step++) {
-      final candidate =
-          kShapeCycle201[(cursor + step) % kShapeCycle201.length];
+      final candidate = kShapeCycle201[(cursor + step) % kShapeCycle201.length];
       if (candidate == previous) continue;
       final age = uses.containsKey(candidate)
           ? level - uses[candidate]!
@@ -85,6 +84,29 @@ List<String> _buildShapes201() {
 
 /// Shape name for a level in 201–1000.
 String shapeForLevel(int level) => assignShapes201()[level - 201];
+
+/// Four wide shapes used by the Daily challenge (circle/oval dropped —
+/// their round corners made them too slow to build reliably on device).
+const List<String> kDailyShapes = ['square', 'rectangle', 'hexagon', 'octagon'];
+
+/// Days since 2026-01-01 — the Daily plan runs off this number.
+int dailyIndex(DateTime day) =>
+    DateTime(day.year, day.month, day.day).difference(DateTime(2026)).inDays;
+
+/// Daily arrow count: 100 → 140 in the same 10-day wave, so two days in a
+/// row never feel identical. Kept lower than campaign so each arrow can
+/// stay long inside the time budget the board is built in.
+int dailyArrowCount(DateTime day) {
+  final i = dailyIndex(day);
+  var v = 120 + _wave[i % 10] * 3; // 105 … 138
+  if (v < 100) v = 100 + (100 - v);
+  if (v > 140) v = 140 - (v - 140);
+  return v;
+}
+
+/// Daily shape: cycles the six shapes, so two days in a row always differ.
+String dailyShape(DateTime day) =>
+    kDailyShapes[dailyIndex(day) % kDailyShapes.length];
 
 /// Tall shapes use a portrait board (rows ≈ 1.35 × cols).
 bool isPortraitShape(String shape) =>
@@ -111,8 +133,7 @@ List<List<bool>> campaignShapeMask(String shape, int rows, int cols) {
       'hexagon' => dx <= w / 2 && dy + dx * (h / 4) / (w / 2) <= h / 2 + 0.2,
       'octagon' => dx + dy <= 1.414 * (w / 2) * 1.0 + 0.2,
       'roundedSquare' ||
-      'roundedRectangle' =>
-        _roundedRect(dx, dy, w / 2, h / 2, 0.3 * min(w, h)),
+      'roundedRectangle' => _roundedRect(dx, dy, w / 2, h / 2, 0.3 * min(w, h)),
       'stadium' => _roundedRect(dx, dy, w / 2, h / 2, w / 2),
       'tallOctagon' => _chamferedRect(dx, dy, w / 2, h / 2, 0.3 * min(w, h)),
       _ => true, // square, rectangle

@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:arrow_drift/data/models/arrow_model.dart';
 import 'package:arrow_drift/data/models/level_model.dart';
 import 'package:arrow_drift/data/repositories/campaign_shapes.dart';
+import 'package:arrow_drift/data/repositories/maze_builder.dart';
 import 'package:arrow_drift/data/repositories/maze_levels_data.dart';
 import 'package:arrow_drift/data/repositories/shape_levels_data.dart';
 import 'package:arrow_drift/data/repositories/shape_levels_data_101_200.dart';
@@ -6203,7 +6204,50 @@ class LevelRepository {
 
   /// Daily puzzles are calendar-seeded (one unique board per day).
   /// Large nested silhouette (~120–150 arrows), mixed sizes, hardNest.
+  /// Daily board: long maze arrows in one of six shapes, 140–180 arrows —
+  /// the same look as the campaign boards. Built fresh for the date (a few
+  /// seconds on a background isolate); falls back to [_legacyDailyLevel]
+  /// when no maze board comes together in the time budget.
   static LevelModel _buildDailyChallengeLevel(DateTime day, int levelNumber) {
+    final count = dailyArrowCount(day);
+    final shape = dailyShape(day);
+    // Board sized for ~7-cell arrows, like the campaign boards.
+    var side = 20;
+    late int rows, cols;
+    late List<List<bool>> mask;
+    while (true) {
+      (rows, cols) = shapeDims(shape, side);
+      mask = campaignShapeMask(shape, rows, cols);
+      final cells = mask.fold(0, (a, row) => a + row.where((v) => v).length);
+      final maxSide = isPortraitShape(shape) ? 38 : 40;
+      if (cells >= count * 7.4 || side >= maxSide) break;
+      side++;
+    }
+    final board = buildMazeBoard(
+      rows: rows,
+      cols: cols,
+      mask: mask,
+      arrowCount: count,
+      seed: levelNumber,
+      idPrefix: '$levelNumber',
+      budget: const Duration(seconds: 8),
+    );
+    if (board != null) {
+      return LevelModel(
+        levelNumber: levelNumber,
+        gridRows: rows,
+        gridCols: cols,
+        arrows: board.arrows,
+        heartsAllowed: 3,
+        hintsAllowed: 2,
+        difficulty: LevelDifficulty.expert,
+        shapeMask: mask,
+      );
+    }
+    return _legacyDailyLevel(day, levelNumber);
+  }
+
+  static LevelModel _legacyDailyLevel(DateTime day, int levelNumber) {
     final dayOfYear = day.difference(DateTime(day.year)).inDays;
     final shapeIndex = (dayOfYear + day.year * 5 + day.month * 3) % 12;
 
